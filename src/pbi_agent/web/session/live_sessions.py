@@ -39,6 +39,8 @@ from pbi_agent.web.session.serializers import (
     _snapshot_item_id,
 )
 from pbi_agent.web.session.events import TRANSIENT_WEB_EVENT_KEY
+from pbi_agent.web.session.follow_ups import FollowUpDelivery, FollowUpsMixin
+from pbi_agent.web.session.image_uploads import ImageUploadsMixin
 from pbi_agent.web.session.state import (
     EventStream,
     LiveSessionSnapshot,
@@ -49,13 +51,12 @@ from pbi_agent.web.uploads import (
     load_uploaded_image,
     load_uploaded_image_record,
     store_image_attachment,
-    store_uploaded_image_bytes,
 )
 
 _LOCAL_COMMANDS = TEMPORARY_LOCAL_COMMANDS | {COMPACT_COMMAND}
 
 
-class LiveSessionsMixin:
+class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
     _app_stream: EventStream
     _directory_key: str
     _ensure_worker_creation_allowed_locked: Any
@@ -139,6 +140,9 @@ class LiveSessionsMixin:
                         next_bound_session_id,
                     )
                 ),
+                accept_checkpoint_follow_up=lambda follow_up_id, current=new_live_session_id: (
+                    self.mark_checkpoint_follow_up_delivered(current, follow_up_id)
+                ),
             )
             worker = threading.Thread(
                 target=self._run_session_worker,
@@ -194,67 +198,6 @@ class LiveSessionsMixin:
                 raise
             return self._serialize_live_session(live_session)
 
-    def _message_attachments_for_upload_ids(
-        self,
-        upload_ids: list[str],
-    ) -> list[MessageImageAttachment]:
-        return [
-            _message_image_attachment(load_uploaded_image_record(upload_id))
-            for upload_id in upload_ids
-        ]
-
-    def upload_task_images(
-        self,
-        *,
-        files: list[tuple[str, bytes]],
-    ) -> list[dict[str, Any]]:
-        attachments: list[dict[str, Any]] = []
-        for original_name, raw_bytes in files:
-            safe_name = (original_name or "task-image.png").strip() or "task-image.png"
-            record = store_uploaded_image_bytes(raw_bytes=raw_bytes, name=safe_name)
-            attachments.append(
-                _message_image_payload(_message_image_attachment(record))
-            )
-        return attachments
-
-    def upload_session_images(
-        self,
-        live_session_id: str,
-        *,
-        files: list[tuple[str, bytes]],
-    ) -> list[dict[str, Any]]:
-        live_session = self._require_live_session(live_session_id)
-        if live_session.status == "ended":
-            raise RuntimeError("Live session has already ended.")
-        return self._store_session_image_uploads(files)
-
-    def upload_saved_session_images(
-        self,
-        session_id: str,
-        *,
-        files: list[tuple[str, bytes]],
-    ) -> list[dict[str, Any]]:
-        self._require_saved_session(session_id)
-        live_session = self._find_live_session_for_saved_session(session_id)
-        if live_session is not None and live_session.status == "ended":
-            raise RuntimeError("Session run has already ended.")
-        return self._store_session_image_uploads(files)
-
-    def _store_session_image_uploads(
-        self,
-        files: list[tuple[str, bytes]],
-    ) -> list[dict[str, Any]]:
-        attachments: list[dict[str, Any]] = []
-        for original_name, raw_bytes in files:
-            safe_name = (
-                original_name or "pasted-image.png"
-            ).strip() or "pasted-image.png"
-            record = store_uploaded_image_bytes(raw_bytes=raw_bytes, name=safe_name)
-            attachments.append(
-                _message_image_payload(_message_image_attachment(record))
-            )
-        return attachments
-
     def submit_session_input(
         self,
         live_session_id: str,
@@ -266,10 +209,39 @@ class LiveSessionsMixin:
         profile_id: str | None = None,
         interactive_mode: bool = False,
         include_tool_history: bool = False,
+        follow_up_delivery: FollowUpDelivery | None = None,
     ) -> dict[str, Any]:
         live_session = self._require_live_session(live_session_id)
         if live_session.status == "ended":
             raise RuntimeError("Live session has already ended.")
+        if follow_up_delivery is not None:
+            self._validate_follow_up_submission(live_session, text)
+        if follow_up_delivery == "checkpoint" and self._should_defer_follow_up(
+            live_session
+        ):
+            return self._queue_checkpoint_follow_up(
+                live_session,
+                text=text,
+                file_paths=file_paths,
+                image_paths=image_paths,
+                image_upload_ids=image_upload_ids,
+                profile_id=profile_id,
+                interactive_mode=interactive_mode,
+                include_tool_history=include_tool_history,
+            )
+        if follow_up_delivery == "after_finish" and self._should_defer_follow_up(
+            live_session
+        ):
+            return self._queue_deferred_follow_up(
+                live_session,
+                text=text,
+                file_paths=file_paths,
+                image_paths=image_paths,
+                image_upload_ids=image_upload_ids,
+                profile_id=profile_id,
+                interactive_mode=interactive_mode,
+                include_tool_history=include_tool_history,
+            )
         command_profile_id = self._command_profile_id_for_submission(
             text,
         )
@@ -397,6 +369,7 @@ class LiveSessionsMixin:
         profile_id: str | None = None,
         interactive_mode: bool = False,
         include_tool_history: bool = False,
+        follow_up_delivery: FollowUpDelivery | None = None,
     ) -> dict[str, Any]:
         self._ensure_saved_session_title(session_id, text)
         live_session = self._find_live_session_for_saved_session(session_id)
@@ -431,6 +404,7 @@ class LiveSessionsMixin:
             profile_id=profile_id,
             interactive_mode=interactive_mode,
             include_tool_history=include_tool_history,
+            follow_up_delivery=follow_up_delivery,
         )
 
     def _command_profile_id_for_submission(
@@ -847,6 +821,7 @@ class LiveSessionsMixin:
             "session_ended": live_session.snapshot.session_ended,
             "fatal_error": live_session.snapshot.fatal_error,
             "pending_user_questions": live_session.snapshot.pending_user_questions,
+            "queued_follow_ups": list(live_session.snapshot.queued_follow_ups),
             "items": list(live_session.snapshot.items),
             "sub_agents": dict(live_session.snapshot.sub_agents),
             "last_event_seq": live_session.snapshot.last_event_seq,

@@ -6,6 +6,7 @@ import { renderWithProviders } from "../../test/render";
 import { useLiveSessionEvents } from "../../hooks/useLiveSessionEvents";
 import {
   ApiError,
+  cancelQueuedFollowUp,
   createSession,
   enhancePrompt,
   expandSessionInput,
@@ -18,6 +19,7 @@ import {
   interruptSession,
   refreshWorkspaceFileTree,
   runSessionShellCommand,
+  sendQueuedFollowUp,
   sendSessionMessage,
   setActiveModelProfile,
   setSessionProfile,
@@ -303,7 +305,9 @@ vi.mock("../../api", async (importOriginal) => {
     interruptSession: vi.fn(),
     refreshWorkspaceFileTree: vi.fn(),
     runSessionShellCommand: vi.fn(),
+  sendQueuedFollowUp: vi.fn(),
     sendSessionMessage: vi.fn(),
+  cancelQueuedFollowUp: vi.fn(),
     setActiveModelProfile: vi.fn(),
     setSessionProfile: vi.fn(),
     setLiveSessionProfile: vi.fn(),
@@ -548,6 +552,7 @@ function mockSessionDetailWithUsage({
       session_ended: true,
       fatal_error: null,
       pending_user_questions: null,
+      queued_follow_ups: [],
       items: [],
       sub_agents: {
         "sub-1": {
@@ -642,6 +647,12 @@ describe("SessionPage", () => {
     );
     vi.mocked(runSessionShellCommand).mockResolvedValue(
       makeLiveSession({ live_session_id: "live-new", session_id: "session-1", last_event_seq: 3 }),
+    );
+    vi.mocked(sendQueuedFollowUp).mockResolvedValue(
+      makeLiveSession({ live_session_id: "live-processing", session_id: "session-1", last_event_seq: 4 }),
+    );
+    vi.mocked(cancelQueuedFollowUp).mockResolvedValue(
+      makeLiveSession({ live_session_id: "live-processing", session_id: "session-1", last_event_seq: 4 }),
     );
     vi.mocked(interruptSession).mockResolvedValue(
       makeLiveSession({ live_session_id: "live-processing", session_id: "session-1" }),
@@ -973,6 +984,7 @@ describe("SessionPage", () => {
         session_ended: false,
         fatal_error: null,
         pending_user_questions: null,
+      queued_follow_ups: [],
         items: [
           {
             kind: "message",
@@ -1631,6 +1643,7 @@ describe("SessionPage", () => {
         session_ended: true,
         fatal_error: null,
         pending_user_questions: null,
+      queued_follow_ups: [],
         items: [
           {
             kind: "message",
@@ -1795,6 +1808,7 @@ describe("SessionPage", () => {
       profile_id: "analysis",
       interactive_mode: true,
       include_tool_history: false,
+      follow_up_delivery: null,
     });
     await waitFor(() => {
       const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
@@ -1826,6 +1840,7 @@ describe("SessionPage", () => {
       profile_id: "analysis",
       interactive_mode: false,
       include_tool_history: false,
+      follow_up_delivery: null,
     });
   });
 
@@ -3811,6 +3826,7 @@ describe("SessionPage", () => {
       profile_id: "analysis",
       interactive_mode: false,
       include_tool_history: false,
+      follow_up_delivery: null,
     });
   });
 
@@ -4344,6 +4360,7 @@ describe("SessionPage", () => {
           sessionEnded: true,
           fatalError: null,
           pendingUserQuestions: null,
+          queuedFollowUps: [],
           items: [],
           itemsVersion: 0,
           subAgents: {},

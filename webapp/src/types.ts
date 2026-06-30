@@ -12,6 +12,7 @@ import type {
   CommandViewModel,
   LiveSessionSnapshotModel,
   ProcessingStateModel,
+  QueuedFollowUpModel,
   RunSessionModel,
   SessionRecordModel,
   SkillCandidateViewModel,
@@ -143,6 +144,8 @@ export type PendingUserQuestions = {
   prompt_id: string;
   questions: PendingUserQuestion[];
 };
+
+export type QueuedFollowUp = QueuedFollowUpModel;
 
 export type UserQuestionAnswer = {
   question_id: string;

@@ -112,6 +112,7 @@ class GenericProvider(Provider):
         user_message: str | None = None,
         user_input: UserTurnInput | None = None,
         tool_result_items: list[dict[str, Any]] | None = None,
+        steer_user_input: UserTurnInput | None = None,
         instructions: str | None = None,
         session_id: str | None = None,
         display: DisplayProtocol,
@@ -124,6 +125,7 @@ class GenericProvider(Provider):
             user_message=user_message,
             user_input=user_input,
             tool_result_items=tool_result_items,
+            steer_user_input=steer_user_input,
         )
         result = self._http_request(
             input_value=input_value,

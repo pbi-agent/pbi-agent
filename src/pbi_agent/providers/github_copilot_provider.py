@@ -82,6 +82,7 @@ class GitHubCopilotProvider(Provider):
         user_message: str | None = None,
         user_input: UserTurnInput | None = None,
         tool_result_items: list[dict[str, Any]] | None = None,
+        steer_user_input: UserTurnInput | None = None,
         instructions: str | None = None,
         session_id: str | None = None,
         display: DisplayProtocol,
@@ -93,6 +94,7 @@ class GitHubCopilotProvider(Provider):
             user_message=user_message,
             user_input=user_input,
             tool_result_items=tool_result_items,
+            steer_user_input=steer_user_input,
             instructions=instructions,
             session_id=session_id,
             display=display,
@@ -274,6 +276,7 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
         user_message: str | None = None,
         user_input: UserTurnInput | None = None,
         tool_result_items: list[dict[str, Any]] | None = None,
+        steer_user_input: UserTurnInput | None = None,
         instructions: str | None = None,
         session_id: str | None = None,
         display: DisplayProtocol,
@@ -289,8 +292,16 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
             input_value: str | list[dict[str, Any]] = user_input.text
             self._messages.append(_build_chat_completions_user_message(user_input))
         elif tool_result_items is not None:
-            input_value = tool_result_items
+            input_value = list(tool_result_items)
             self._messages.extend(tool_result_items)
+            if steer_user_input is not None:
+                if steer_user_input.images:
+                    raise ValueError(
+                        "GitHub Copilot image inputs are not enabled in this build."
+                    )
+                steer_message = _build_chat_completions_user_message(steer_user_input)
+                input_value.append(steer_message)
+                self._messages.append(steer_message)
         else:
             raise ValueError("Either user_input or tool_result_items is required")
 

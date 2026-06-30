@@ -45,6 +45,7 @@ class Provider(ABC):
         user_message: str | None = None,
         user_input: UserTurnInput | None = None,
         tool_result_items: list[dict[str, Any]] | None = None,
+        steer_user_input: UserTurnInput | None = None,
         instructions: str | None = None,
         session_id: str | None = None,
         display: DisplayProtocol,
@@ -55,7 +56,9 @@ class Provider(ABC):
         """Send a turn and return the model response.
 
         Exactly one of *user_message* / *user_input* or *tool_result_items* should be
-        provided.  The provider manages history internally (server-side
+        provided. *steer_user_input* may accompany *tool_result_items* to append
+        user guidance at a safe tool/model boundary. The provider manages history
+        internally (server-side
         ``previous_response_id`` for OpenAI/xAI, client-side ``messages``
         list for Anthropic and generic chat-completions providers).
         """

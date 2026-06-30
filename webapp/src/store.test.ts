@@ -1466,6 +1466,7 @@ describe("session store", () => {
         session_ended: false,
         fatal_error: null,
         pending_user_questions: null,
+        queued_follow_ups: [],
         items: [],
         sub_agents: {
           "subagent-1": {
@@ -1539,6 +1540,34 @@ describe("session store", () => {
       usage: makeUsage({ context_tokens: 4200 }),
       elapsedSeconds: 1.8,
     });
+  });
+
+  it("stores queued follow-up updates from live events", () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());
+
+    useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 5,
+      type: "queued_follow_ups_updated",
+      created_at: "2026-06-29T00:00:00Z",
+      payload: {
+        queued_follow_ups: [{
+          id: "follow-1",
+          delivery: "checkpoint",
+          text: "Queued prompt",
+          file_paths: [],
+          image_attachments: [],
+          image_count: 0,
+          created_at: "2026-06-29T00:00:00Z",
+          failed: false,
+          error: null,
+        }],
+      },
+    });
+
+    expect(useSessionStore.getState().sessionsByKey[sessionKey].queuedFollowUps).toEqual([
+      expect.objectContaining({ id: "follow-1", delivery: "checkpoint", text: "Queued prompt" }),
+    ]);
   });
 
   it("stores compact threshold from live sessions and runtime updates", () => {

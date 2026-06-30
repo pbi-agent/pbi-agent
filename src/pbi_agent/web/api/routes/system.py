@@ -262,6 +262,7 @@ def submit_session_message(
             profile_id=request.profile_id,
             interactive_mode=request.interactive_mode,
             include_tool_history=request.include_tool_history,
+            follow_up_delivery=request.follow_up_delivery,
         )
     except KeyError as exc:
         raise not_found("Session not found.") from exc
@@ -286,9 +287,46 @@ def start_session_run(
             profile_id=request.profile_id,
             interactive_mode=request.interactive_mode,
             include_tool_history=request.include_tool_history,
+            follow_up_delivery=request.follow_up_delivery,
         )
     except KeyError as exc:
         raise not_found("Session not found.") from exc
+    except Exception as exc:
+        raise bad_request(str(exc)) from exc
+    return LiveSessionResponse(session=model_from_payload(LiveSessionModel, session))
+
+
+@router.post(
+    "/sessions/{session_id}/follow-ups/{follow_up_id}/send",
+    response_model=LiveSessionResponse,
+)
+def send_session_follow_up(
+    session_id: SessionIdPath,
+    follow_up_id: str,
+    manager: SessionManagerDep,
+) -> LiveSessionResponse:
+    try:
+        session = manager.send_saved_session_follow_up(session_id, follow_up_id)
+    except KeyError as exc:
+        raise not_found("Queued follow-up not found.") from exc
+    except Exception as exc:
+        raise bad_request(str(exc)) from exc
+    return LiveSessionResponse(session=model_from_payload(LiveSessionModel, session))
+
+
+@router.delete(
+    "/sessions/{session_id}/follow-ups/{follow_up_id}",
+    response_model=LiveSessionResponse,
+)
+def cancel_session_follow_up(
+    session_id: SessionIdPath,
+    follow_up_id: str,
+    manager: SessionManagerDep,
+) -> LiveSessionResponse:
+    try:
+        session = manager.cancel_saved_session_follow_up(session_id, follow_up_id)
+    except KeyError as exc:
+        raise not_found("Queued follow-up not found.") from exc
     except Exception as exc:
         raise bad_request(str(exc)) from exc
     return LiveSessionResponse(session=model_from_payload(LiveSessionModel, session))

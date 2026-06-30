@@ -239,6 +239,7 @@ class LiveSessionState:
     fatal_error: str | None = None
     terminal_status: str | None = None
     ended_at: str | None = None
+    queued_follow_ups: list[QueuedFollowUpInput] = field(default_factory=list)
     event_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
 
@@ -254,15 +255,35 @@ class LiveSessionSnapshot:
     session_ended: bool = False
     fatal_error: str | None = None
     pending_user_questions: dict[str, Any] | None = None
+    queued_follow_ups: list[dict[str, Any]] = None  # type: ignore[assignment]
     items: list[dict[str, Any]] = None  # type: ignore[assignment]
     sub_agents: dict[str, dict[str, Any]] = None  # type: ignore[assignment]
     last_event_seq: int = 0
 
     def __post_init__(self) -> None:
+        if self.queued_follow_ups is None:
+            self.queued_follow_ups = []
         if self.items is None:
             self.items = []
         if self.sub_agents is None:
             self.sub_agents = {}
+
+
+@dataclass(slots=True)
+class QueuedFollowUpInput:
+    follow_up_id: str
+    delivery: str
+    text: str
+    file_paths: list[str]
+    image_paths: list[str]
+    image_upload_ids: list[str]
+    image_attachments: list[dict[str, Any]]
+    profile_id: str | None
+    interactive_mode: bool
+    include_tool_history: bool
+    created_at: str
+    failed: bool = False
+    error: str | None = None
 
 
 @dataclass(slots=True)

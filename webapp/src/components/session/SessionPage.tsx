@@ -14,6 +14,7 @@ import {
 import { AppSidebarLayout } from "../AppSidebar";
 import {
   ApiError,
+  cancelQueuedFollowUp,
   createSession,
   enhancePrompt,
   expandSessionInput,
@@ -24,6 +25,7 @@ import {
   forkSession,
   interruptSession,
   runSessionShellCommand,
+  sendQueuedFollowUp,
   sendSessionMessage,
   setActiveModelProfile,
   setSessionProfile,
@@ -328,6 +330,7 @@ export function SessionPage({
       profile_id?: string | null;
       interactive_mode?: boolean;
       include_tool_history?: boolean;
+      follow_up_delivery?: "checkpoint" | "after_finish" | null;
     }) => {
       const sessionId = routeSessionId ?? sessionState?.sessionId;
       if (!sessionId) throw new Error("No session available.");
@@ -383,6 +386,35 @@ export function SessionPage({
       const sessionId = routeSessionId ?? sessionState?.sessionId;
       if (!sessionId) throw new Error("No session available.");
       return interruptSession(sessionId);
+    },
+    onSuccess: (session) => {
+      if (selectedRouteSessionKey) {
+        updateRuntimeFromSession(selectedRouteSessionKey, session);
+      }
+    },
+  });
+
+  const sendQueuedFollowUpMutation = useMutation({
+    mutationFn: (followUpId: string) => {
+      const sessionId = routeSessionId ?? sessionState?.sessionId;
+      if (!sessionId) throw new Error("No session available.");
+      return sendQueuedFollowUp(sessionId, followUpId);
+    },
+    onSuccess: (session) => {
+      if (selectedRouteSessionKey) {
+        attachLiveSession(selectedRouteSessionKey, session, {
+          preserveItems: true,
+          preserveEventCursor: true,
+        });
+      }
+    },
+  });
+
+  const cancelQueuedFollowUpMutation = useMutation({
+    mutationFn: (followUpId: string) => {
+      const sessionId = routeSessionId ?? sessionState?.sessionId;
+      if (!sessionId) throw new Error("No session available.");
+      return cancelQueuedFollowUp(sessionId, followUpId);
     },
     onSuccess: (session) => {
       if (selectedRouteSessionKey) {
@@ -768,14 +800,21 @@ export function SessionPage({
     );
   };
 
-  const handleSubmit = async (payload: { text: string; images: File[] }) => {
+  const handleSubmit = async (payload: {
+    text: string;
+    images: File[];
+    followUpDelivery?: "checkpoint" | "after_finish";
+  }) => {
     if (submitInFlightRef.current) return;
     submitInFlightRef.current = true;
     setDirectSubmitPending(true);
     try {
-      const { text, images } = payload;
+      const { text, images, followUpDelivery } = payload;
       setInputWarnings([]);
       if (normalizeSessionCommand(text) === NEW_SESSION_COMMAND) {
+        if (followUpDelivery) {
+          throw new Error("New session commands cannot be sent as follow-ups.");
+        }
         if (images.length > 0) {
           throw new Error("New session commands cannot include image attachments.");
         }
@@ -785,6 +824,9 @@ export function SessionPage({
         return;
       }
       if (text.startsWith("!")) {
+        if (followUpDelivery) {
+          throw new Error("Shell commands cannot be sent as follow-ups while the assistant is processing.");
+        }
         if (images.length > 0) {
           throw new Error("Shell commands cannot include image attachments.");
         }
@@ -814,6 +856,7 @@ export function SessionPage({
           profile_id: selectedSavedProfileId,
           interactive_mode: interactiveMode,
           include_tool_history: includeToolHistory,
+          follow_up_delivery: followUpDelivery ?? null,
         });
         attachLiveSession(getSavedSessionKey(sessionId), session, {
           preserveItems: true,
@@ -839,6 +882,7 @@ export function SessionPage({
         profile_id: selectedSavedProfileId,
         interactive_mode: interactiveMode,
         include_tool_history: includeToolHistory,
+        follow_up_delivery: followUpDelivery ?? null,
       });
       attachLiveSession(getSavedSessionKey(sessionId), session, {
         preserveItems: true,
@@ -963,6 +1007,14 @@ export function SessionPage({
     || sendInputMutation.isPending
     || shellCommandMutation.isPending
     || (canInterruptActiveTurn && !sessionState?.pendingUserQuestions),
+  );
+  const canQueueComposerFollowUp = Boolean(
+    !isSubAgentRoute
+    && sessionState?.liveSessionId
+    && !sessionState.sessionEnded
+    && !sessionState.inputEnabled
+    && !sessionState.pendingUserQuestions
+    && displayedProcessing?.active,
   );
   const displayedWaitMessage = isSubAgentRoute
     ? showSelectedSubAgentProcessing
@@ -1174,6 +1226,18 @@ export function SessionPage({
           <AlertDescription>{interruptMutation.error.message}</AlertDescription>
         </Alert>
       ) : null}
+      {!isSubAgentRoute && sendQueuedFollowUpMutation.error ? (
+        <Alert variant="destructive" className="banner banner--error">
+          <AlertTriangleIcon />
+          <AlertDescription>{sendQueuedFollowUpMutation.error.message}</AlertDescription>
+        </Alert>
+      ) : null}
+      {!isSubAgentRoute && cancelQueuedFollowUpMutation.error ? (
+        <Alert variant="destructive" className="banner banner--error">
+          <AlertTriangleIcon />
+          <AlertDescription>{cancelQueuedFollowUpMutation.error.message}</AlertDescription>
+        </Alert>
+      ) : null}
       {sessionDetailLoadError ? (
         <Alert variant="destructive" className="banner banner--error">
           <AlertTriangleIcon />
@@ -1245,9 +1309,26 @@ export function SessionPage({
               canCreateSession={composerCanStartRun}
               supportsImageInputs={providerSupportsImages}
               interactiveMode={interactiveMode}
-              isSubmitting={directSubmitPending || sendInputMutation.isPending || shellCommandMutation.isPending}
+            isSubmitting={
+              directSubmitPending
+              || sendInputMutation.isPending
+              || shellCommandMutation.isPending
+              || sendQueuedFollowUpMutation.isPending
+              || cancelQueuedFollowUpMutation.isPending
+            }
               isProcessing={composerIsProcessing}
+              canQueueFollowUp={canQueueComposerFollowUp}
+        queuedFollowUps={sessionState?.queuedFollowUps ?? []}
               onSubmit={handleSubmit}
+            onSendQueuedFollowUp={async (id) => {
+              await sendQueuedFollowUpMutation.mutateAsync(id);
+            }}
+            onCancelQueuedFollowUp={async (id) => {
+              await cancelQueuedFollowUpMutation.mutateAsync(id);
+            }}
+            isSendingQueuedFollowUp={
+              sendQueuedFollowUpMutation.isPending || cancelQueuedFollowUpMutation.isPending
+            }
               canInterrupt={canInterruptActiveTurn}
               isInterrupting={interruptMutation.isPending}
               dictationAvailable={dictationAvailability.available}

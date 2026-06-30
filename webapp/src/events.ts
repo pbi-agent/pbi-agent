@@ -11,6 +11,7 @@ const EVENT_TYPES = new Set([
   "processing_state",
   "user_questions_requested",
   "user_questions_resolved",
+  "queued_follow_ups_updated",
   "usage_updated",
   "message_added",
   "message_rekeyed",
@@ -34,6 +35,7 @@ const EVENT_TYPES = new Set([
 ]);
 
 const MESSAGE_ROLES = new Set(["user", "assistant", "notice", "error", "debug"]);
+const QUEUED_FOLLOW_UP_DELIVERIES = new Set(["checkpoint", "after_finish"]);
 
 export function parseSseEvent(data: string): WebEvent | null {
   let value: unknown;
@@ -104,6 +106,25 @@ function isValidMessageItemPayload(payload: Record<string, unknown>): boolean {
     && isValidOptionalMessagePartIds(payload.part_ids);
 }
 
+function isValidQueuedFollowUpsPayload(payload: Record<string, unknown>): boolean {
+  const items = payload.queued_follow_ups;
+  if (!Array.isArray(items)) return false;
+  return items.every((item) => {
+    if (!isRecord(item)) return false;
+    return isString(item.id)
+      && QUEUED_FOLLOW_UP_DELIVERIES.has(String(item.delivery))
+      && isString(item.text)
+      && isValidOptionalStringArray(item, "file_paths")
+      && isValidOptionalImageAttachments(item.image_attachments)
+      && typeof item.image_count === "number"
+      && Number.isInteger(item.image_count)
+      && item.image_count >= 0
+      && isString(item.created_at)
+      && typeof item.failed === "boolean"
+      && (!("error" in item) || item.error === null || isString(item.error));
+  });
+}
+
 function isValidOptionalStringArray(payload: Record<string, unknown>, key: string): boolean {
   return !(key in payload) || (Array.isArray(payload[key]) && payload[key].every(isString));
 }
@@ -146,6 +167,8 @@ function isValidPayload(type: string, payload: Record<string, unknown>): boolean
       return isValidUserQuestionsRequestedPayload(payload);
     case "user_questions_resolved":
       return isString(payload.prompt_id);
+    case "queued_follow_ups_updated":
+      return isValidQueuedFollowUpsPayload(payload);
     case "usage_updated":
       return (payload.scope === "session" || payload.scope === "turn")
         && isRecord(payload.usage);

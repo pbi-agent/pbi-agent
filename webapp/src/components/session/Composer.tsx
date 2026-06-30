@@ -17,7 +17,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { searchAgentMentions, searchFileMentions, searchSkillMentions, searchSlashCommands } from "../../api";
-import type { AgentMentionItem, FileMentionItem, SkillMentionItem, SlashCommandItem } from "../../types";
+import type { AgentMentionItem, FileMentionItem, QueuedFollowUp, SkillMentionItem, SlashCommandItem } from "../../types";
 import { cn } from "../../lib/utils";
 import { createWavRecorder, type WavRecorder } from "../../lib/audioRecorder";
 import { DictationWaveform } from "./DictationWaveform";
@@ -58,7 +58,13 @@ interface ComposerProps {
   interactiveMode: boolean;
   isSubmitting: boolean;
   isProcessing?: boolean;
-  onSubmit: (payload: { text: string; images: File[] }) => Promise<void>;
+  canQueueFollowUp?: boolean;
+  queuedFollowUps?: QueuedFollowUp[];
+  queuedFollowUp?: QueuedFollowUp | null;
+  onSubmit: (payload: { text: string; images: File[]; followUpDelivery?: FollowUpTiming }) => Promise<void>;
+  onSendQueuedFollowUp?: (id: string) => Promise<void> | void;
+  onCancelQueuedFollowUp?: (id: string) => Promise<void> | void;
+  isSendingQueuedFollowUp?: boolean;
   canInterrupt?: boolean;
   isInterrupting?: boolean;
   dictationAvailable?: boolean;
@@ -106,6 +112,8 @@ type PendingImage = {
   previewUrl: string;
   source: "picker" | "clipboard";
 };
+
+type FollowUpTiming = "checkpoint" | "after_finish";
 
 type ImageFileInput = HTMLInputElement & {
   showPicker?: () => void;
@@ -387,7 +395,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   interactiveMode,
   isSubmitting,
   isProcessing = false,
+  canQueueFollowUp = false,
+  queuedFollowUps,
+  queuedFollowUp = null,
   onSubmit,
+  onSendQueuedFollowUp,
+  onCancelQueuedFollowUp,
+  isSendingQueuedFollowUp = false,
   canInterrupt = false,
   isInterrupting = false,
   dictationAvailable = false,
@@ -414,6 +428,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [historyDraft, setHistoryDraft] = useState<string | null>(null);
   const [dictationState, setDictationState] = useState<ComposerDictationState>("idle");
+  const [followUpChoicesOpen, setFollowUpChoicesOpen] = useState(false);
   const completionRequestIdRef = useRef(0);
   const completionItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const activeCompletionRef = useRef<{
@@ -440,6 +455,20 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   const canSend =
     (Boolean(liveSessionId) || canCreateSession) && inputEnabled && !sessionEnded && !isSubmitting;
+  const displayedQueuedFollowUps = queuedFollowUps ?? (queuedFollowUp ? [queuedFollowUp] : []);
+  const canSendQueuedFollowUpNow = (item: QueuedFollowUp) =>
+    Boolean(liveSessionId)
+    && !sessionEnded
+    && !isSubmitting
+    && inputEnabled
+    && Boolean(onSendQueuedFollowUp)
+    && item.delivery === "after_finish";
+  const canDraftFollowUp =
+    Boolean(liveSessionId)
+    && canQueueFollowUp
+    && !inputEnabled
+    && !sessionEnded
+    && !isSubmitting;
   const shellInput = input.trimStart();
   const isShellMode = useMemo(() => input.trimStart().startsWith("!"), [input]);
   const skillNames = useSkillCatalog();
@@ -639,7 +668,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   const composerActions = useComposerActions({
     input,
-    canSend,
+    canSend: canSend || canDraftFollowUp,
     isProcessing,
     showStopButton,
     isShellMode,
@@ -653,7 +682,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   });
   const isPromptEnhancementPending = composerActions.isPromptEnhancementPending;
   const promptEnhancementPending = composerActions.promptEnhancementPending;
-  const composerInputAvailable = canSend && !promptEnhancementPending;
+  const composerInputAvailable = (canSend || canDraftFollowUp) && !promptEnhancementPending;
+  const showFollowUpSubmitButton =
+    canDraftFollowUp && input.trim().length > 0;
+  const showActionStopButton = showStopButton && !showFollowUpSubmitButton;
   const showProcessingAnimation =
     (isProcessing && !sessionEnded && !canSend) || promptEnhancementPending;
   const processingStatusLabel = promptEnhancementPending
@@ -913,6 +945,25 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     });
   }, []);
 
+  const clearComposerDraft = useCallback(() => {
+    clearPendingImages();
+    resetHistoryBrowsing();
+    setInput("");
+    setAttachmentMessage(null);
+    setCursorIndex(0);
+    closeCompletions();
+    setFollowUpChoicesOpen(false);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
+  }, [clearPendingImages, closeCompletions, resetHistoryBrowsing]);
+
+  useEffect(() => {
+    if (followUpChoicesOpen && !canDraftFollowUp) {
+      setFollowUpChoicesOpen(false);
+    }
+  }, [canDraftFollowUp, followUpChoicesOpen]);
+
   const removePendingImage = useCallback((imageId: string) => {
     setPendingImages((current) => {
       const target = current.find((image) => image.id === imageId);
@@ -958,6 +1009,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         );
         return;
       }
+      if (!canSend) {
+        if (canDraftFollowUp) {
+          closeCompletions();
+          setFollowUpChoicesOpen(true);
+          setAttachmentMessage(null);
+        }
+        return;
+      }
 
       try {
         refocusAfterSubmitRef.current = true;
@@ -965,15 +1024,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           text: trimmed,
           images: pendingImages.map((image) => image.file),
         });
-        clearPendingImages();
-        resetHistoryBrowsing();
-        setInput("");
-        setAttachmentMessage(null);
-        setCursorIndex(0);
-        closeCompletions();
-        if (textareaRef.current) {
-          textareaRef.current.style.height = "auto";
-        }
+        clearComposerDraft();
       } catch (error) {
         refocusAfterSubmitRef.current = false;
         setAttachmentMessage(
@@ -981,7 +1032,44 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         );
       }
     },
-    [clearPendingImages, closeCompletions, isPromptEnhancementPending, onSubmit, pendingImages, resetHistoryBrowsing],
+    [canDraftFollowUp, canSend, clearComposerDraft, closeCompletions, isPromptEnhancementPending, onSubmit, pendingImages],
+  );
+
+  const queueFollowUp = useCallback(
+    async (timing: FollowUpTiming) => {
+      if (!canDraftFollowUp) {
+        setFollowUpChoicesOpen(false);
+        return;
+      }
+      if (!liveSessionId) {
+        setFollowUpChoicesOpen(false);
+        return;
+      }
+      const textValue = textareaRef.current?.value ?? input;
+      const trimmed = textValue.trim();
+      if (!trimmed) return;
+      if (trimmed.startsWith("!")) {
+        setAttachmentMessage("Shell commands cannot be sent as follow-ups while the assistant is processing.");
+        setFollowUpChoicesOpen(false);
+        return;
+      }
+      setFollowUpChoicesOpen(false);
+      try {
+        await onSubmit({
+          text: trimmed,
+          images: pendingImages.map((image) => image.file),
+          followUpDelivery: timing,
+        });
+        clearComposerDraft();
+      } catch (error) {
+        setAttachmentMessage(
+          error instanceof Error
+            ? error.message
+            : "Unable to queue the follow-up.",
+        );
+      }
+    },
+    [canDraftFollowUp, clearComposerDraft, input, liveSessionId, onSubmit, pendingImages],
   );
 
   useEffect(() => {
@@ -1248,6 +1336,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       }
     }
 
+    if (followUpChoicesOpen && event.key === "Escape") {
+      event.preventDefault();
+      setFollowUpChoicesOpen(false);
+      return;
+    }
+
     const hasModifier = event.altKey || event.ctrlKey || event.metaKey || event.shiftKey;
     if (!hasModifier && event.key === "ArrowUp" && inputHistory.length > 0 && pendingImages.length === 0) {
       const historyMatchesCurrentInput = inputHistorySignatureRef.current === inputHistorySignature;
@@ -1348,6 +1442,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   const handleComposerKeyDownCapture = (event: KeyboardEvent<HTMLFormElement>) => {
     composerActions.handleShortcut(event);
+  };
+  const activateFollowUpChoice = (timing: FollowUpTiming) => {
+    if (!canDraftFollowUp) {
+      setFollowUpChoicesOpen(false);
+      return;
+    }
+    void queueFollowUp(timing);
   };
 
   return (
@@ -1490,7 +1591,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         ) : null}
         <ComposerActionButtons
           controller={composerActions}
-          showStopButton={showStopButton}
+          showStopButton={showActionStopButton}
           isInterrupting={isInterrupting}
           onInterrupt={onInterrupt}
           isShellMode={isShellMode}
@@ -1586,6 +1687,146 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               {completionStatusMessage}
             </div>
           ) : null}
+        </div>
+      ) : null}
+
+      {followUpChoicesOpen ? (
+        <div className="composer__completions composer__follow-up-menu" role="menu" aria-label="Choose follow-up delivery">
+          <Button
+            type="button"
+            variant="ghost"
+            role="menuitem"
+            className="composer__completion-item composer__follow-up-choice"
+            disabled={!canDraftFollowUp}
+            onMouseDown={(event) => {
+              event.preventDefault();
+            }}
+            onClick={() => {
+              activateFollowUpChoice("checkpoint");
+            }}
+          >
+            <span className="composer__completion-copy">
+              <span className="composer__completion-label">After next safe checkpoint</span>
+              <span className="composer__completion-description">
+                Send to the live session as soon as pbi-agent can accept queued input.
+              </span>
+            </span>
+            <span className="composer__completion-kind composer__completion-kind--project">
+              soon
+            </span>
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            role="menuitem"
+            className="composer__completion-item composer__follow-up-choice"
+            disabled={!canDraftFollowUp}
+            onMouseDown={(event) => {
+              event.preventDefault();
+            }}
+            onClick={() => {
+              activateFollowUpChoice("after_finish");
+            }}
+          >
+            <span className="composer__completion-copy">
+              <span className="composer__completion-label">After assistant finishes</span>
+              <span className="composer__completion-description">
+                Queue on the backend and send automatically when the current turn is ready.
+              </span>
+            </span>
+            <span className="composer__completion-kind composer__completion-kind--built-in">
+              later
+            </span>
+          </Button>
+        </div>
+      ) : null}
+
+      {displayedQueuedFollowUps.length > 0 ? (
+        <div
+          className="composer__follow-up-dock"
+          aria-label={displayedQueuedFollowUps.length === 1 ? "Queued follow-up" : "Queued follow-ups"}
+        >
+          {displayedQueuedFollowUps.map((item) => {
+            const imageCount = item.image_count ?? 0;
+            const canRestoreItemDraft =
+              Boolean(item)
+              && !sessionEnded
+              && !isSubmitting
+              && (inputEnabled || canQueueFollowUp)
+              && Boolean(onCancelQueuedFollowUp)
+              && !promptEnhancementPending;
+            return (
+              <div key={item.id} className="composer__follow-up-row">
+                <div className="composer__follow-up-copy">
+                  <span className="composer__follow-up-title">
+                    {item.failed
+                      ? "Queued follow-up failed"
+                      : item.delivery === "checkpoint"
+                        ? "Queued follow-up · after next checkpoint"
+                        : "Queued follow-up · after assistant finishes"}
+                  </span>
+                  <span className="composer__follow-up-preview">
+                    {item.text}
+                    {imageCount > 0
+                      ? ` · ${imageCount} image${imageCount === 1 ? "" : "s"}`
+                      : ""}
+                  </span>
+                  {item.error ? (
+                    <span className="composer__follow-up-error">
+                      {item.error}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="composer__follow-up-actions">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={isSendingQueuedFollowUp || !canRestoreItemDraft}
+                    onClick={() => {
+                      void (async () => {
+                        if (!canRestoreItemDraft) return;
+                        await onCancelQueuedFollowUp?.(item.id);
+                        setInput(item.text);
+                        setCursorIndex(item.text.length);
+                        if (imageCount > 0) {
+                          setAttachmentMessage("Queued image attachments were removed; attach them again before sending.");
+                        }
+                        window.requestAnimationFrame(() => {
+                          textareaRef.current?.focus();
+                          autoResize();
+                        });
+                      })();
+                    }}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={isSendingQueuedFollowUp || !onCancelQueuedFollowUp}
+                    onClick={() => {
+                      void onCancelQueuedFollowUp?.(item.id);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isSendingQueuedFollowUp || !canSendQueuedFollowUpNow(item)}
+                    onClick={() => {
+                      void onSendQueuedFollowUp?.(item.id);
+                    }}
+                  >
+                    {isSendingQueuedFollowUp ? "Sending…" : "Send now"}
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : null}
 

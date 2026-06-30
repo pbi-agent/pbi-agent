@@ -1,6 +1,4 @@
-- [x] Inspect release context and workspace status
-- [x] Determine version and unreleased changes
-- [x] Create release branch and changelog edits
-- [x] Run release validation
-- [x] Commit, push, open release PR
-- [x] Merge/publish and verify release
+- [x] Locate the target saved session and relevant persisted run/events
+- [x] Inspect follow-up queue/delivery events and message ordering
+- [x] Cross-check against checkpoint/after-finish semantics
+- [x] Summarize audit findings and risks

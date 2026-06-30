@@ -35,6 +35,7 @@ from pbi_agent.display.formatting import (
 EventPublisher = Callable[[str, dict[str, Any]], None]
 SummaryPublisher = Callable[[str], None]
 SessionBinder = Callable[[str | None], None]
+CheckpointFollowUpAcceptor = Callable[[str], bool]
 _ATTACHED_IMAGES_MARKER = "[attached images:"
 _APPLY_PATCH_HEADER_TO_OPERATION = {
     "*** Add File: ": "create_file",
@@ -1278,11 +1279,13 @@ class WebDisplay(_EventDisplayBase):
         model: str | None = None,
         reasoning_effort: str | None = None,
         bind_session: SessionBinder | None = None,
+        accept_checkpoint_follow_up: CheckpointFollowUpAcceptor | None = None,
     ) -> None:
         super().__init__(publish_event=publish_event, verbose=verbose)
         self._input_queue: queue.Queue[str | QueuedInput | QueuedRuntimeChange] = (
             queue.Queue()
         )
+        self._checkpoint_follow_up_queue: queue.Queue[QueuedInput] = queue.Queue()
         self._input_event = threading.Event()
         self._question_response_queue: queue.Queue[list[UserQuestionAnswer]] = (
             queue.Queue()
@@ -1295,6 +1298,7 @@ class WebDisplay(_EventDisplayBase):
         self._model = model
         self._reasoning_effort = reasoning_effort
         self._bind_session_callback = bind_session
+        self._accept_checkpoint_follow_up = accept_checkpoint_follow_up
         self._input_enabled_state: bool | None = None
         self._input_state_lock = threading.Lock()
         self._input_block_prior_states: list[tuple[bool | None, int]] = []
@@ -1458,6 +1462,46 @@ class WebDisplay(_EventDisplayBase):
         self._put_input_activity(queued)
         self._input_event.set()
         self._publish_input_state(False)
+
+    def submit_checkpoint_follow_up(
+        self,
+        value: str,
+        *,
+        file_paths: list[str] | None = None,
+        image_paths: list[str] | None = None,
+        images=None,
+        image_attachments=None,
+        interactive_mode: bool = False,
+        include_tool_history: bool = False,
+        item_id: str | None = None,
+    ) -> None:
+        self._checkpoint_follow_up_queue.put(
+            QueuedInput(
+                text=value,
+                file_paths=list(file_paths or []),
+                image_paths=list(image_paths or []),
+                images=list(images or []),
+                image_attachments=list(image_attachments or []),
+                interactive_mode=interactive_mode,
+                include_tool_history=include_tool_history,
+                item_id=item_id,
+            )
+        )
+
+    def drain_checkpoint_follow_ups(self) -> list[QueuedInput]:
+        items: list[QueuedInput] = []
+        while True:
+            try:
+                queued = self._checkpoint_follow_up_queue.get_nowait()
+            except queue.Empty:
+                return items
+            if (
+                queued.item_id
+                and self._accept_checkpoint_follow_up is not None
+                and not self._accept_checkpoint_follow_up(queued.item_id)
+            ):
+                continue
+            items.append(queued)
 
     def request_new_session(self) -> None:
         from pbi_agent.agent.session import NEW_SESSION_SENTINEL

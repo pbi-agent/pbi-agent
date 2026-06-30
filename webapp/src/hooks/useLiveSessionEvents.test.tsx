@@ -262,6 +262,7 @@ describe("useLiveSessionEvents", () => {
           sessionEnded: false,
           fatalError: null,
           pendingUserQuestions: null,
+          queuedFollowUps: [],
           items: [],
           itemsVersion: 0,
           subAgents: {},

@@ -141,6 +141,7 @@ class GoogleProvider(Provider):
         user_message: str | None = None,
         user_input: UserTurnInput | None = None,
         tool_result_items: list[dict[str, Any]] | None = None,
+        steer_user_input: UserTurnInput | None = None,
         instructions: str | None = None,
         session_id: str | None = None,
         display: DisplayProtocol,
@@ -156,6 +157,11 @@ class GoogleProvider(Provider):
             input_value = _google_user_turn_input_value(user_input)
         elif tool_result_items is not None:
             input_value = tool_result_items
+            if steer_user_input is not None:
+                input_value = [
+                    *input_value,
+                    _google_user_input_step(_google_user_input_value(steer_user_input)),
+                ]
         else:
             raise ValueError("Either user_input or tool_result_items is required")
 

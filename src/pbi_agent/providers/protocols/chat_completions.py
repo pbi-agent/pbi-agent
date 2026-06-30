@@ -95,6 +95,7 @@ class ChatCompletionsProtocol(ResponseProtocol):
         user_message: str | None,
         user_input: UserTurnInput | None,
         tool_result_items: list[dict[str, Any]] | None,
+        steer_user_input: UserTurnInput | None = None,
     ) -> str | list[dict[str, Any]]:
         if user_input is None and user_message is not None:
             user_input = UserTurnInput(text=user_message)
@@ -109,6 +110,12 @@ class ChatCompletionsProtocol(ResponseProtocol):
 
         if tool_result_items is not None:
             self.messages.extend(tool_result_items)
+            if steer_user_input is not None:
+                if steer_user_input.images:
+                    raise ValueError(
+                        "Generic provider image inputs are not enabled in this build."
+                    )
+                self.messages.append({"role": "user", "content": steer_user_input.text})
             return tool_result_items
 
         raise ValueError("Either user_input or tool_result_items is required")

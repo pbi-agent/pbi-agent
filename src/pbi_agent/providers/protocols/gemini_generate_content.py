@@ -104,6 +104,7 @@ class GeminiGenerateContentProtocol(ResponseProtocol):
         user_message: str | None,
         user_input: UserTurnInput | None,
         tool_result_items: list[dict[str, Any]] | None,
+        steer_user_input: UserTurnInput | None = None,
     ) -> str | list[dict[str, Any]]:
         if user_input is None and user_message is not None:
             user_input = UserTurnInput(text=user_message)
@@ -117,6 +118,8 @@ class GeminiGenerateContentProtocol(ResponseProtocol):
             self.contents.extend(
                 dict(item) for item in tool_result_items if isinstance(item, dict)
             )
+            if steer_user_input is not None:
+                self.contents.append(_user_input_to_content(steer_user_input))
             return [{"type": "function_result"}]
 
         raise ValueError("Either user_input or tool_result_items is required")

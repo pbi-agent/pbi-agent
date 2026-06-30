@@ -178,6 +178,7 @@ class OpenAIProvider(Provider):
         user_message: str | None = None,
         user_input: UserTurnInput | None = None,
         tool_result_items: list[dict[str, Any]] | None = None,
+        steer_user_input: UserTurnInput | None = None,
         instructions: str | None = None,
         session_id: str | None = None,
         display: DisplayProtocol,
@@ -196,6 +197,8 @@ class OpenAIProvider(Provider):
             self._chatgpt_backend.start_turn(input_items)
         elif tool_result_items is not None:
             input_items = tool_result_items
+            if steer_user_input is not None:
+                input_items = [*input_items, _build_user_input_item(steer_user_input)]
         else:
             raise ValueError("Either user_input or tool_result_items is required")
 

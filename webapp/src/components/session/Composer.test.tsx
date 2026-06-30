@@ -814,6 +814,397 @@ describe("Composer", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Assistant is processing");
   });
 
+  it("keeps idle submit behavior unchanged", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer();
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "normal follow up{enter}");
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({
+      text: "normal follow up",
+      images: [],
+    }));
+    expect(screen.queryByRole("menu", { name: "Choose follow-up delivery" })).not.toBeInTheDocument();
+  });
+
+  it("opens follow-up timing choices when submitting during processing", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer({
+      inputEnabled: false,
+      isProcessing: true,
+      canQueueFollowUp: true,
+    });
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "while busy{enter}");
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByRole("menu", { name: "Choose follow-up delivery" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /After next safe checkpoint/ })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /After assistant finishes/ })).toBeInTheDocument();
+  });
+
+  it("offers a clickable follow-up submit while interrupt is available", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer({
+      inputEnabled: false,
+      isProcessing: true,
+      canQueueFollowUp: true,
+      canInterrupt: true,
+      onInterrupt: vi.fn(),
+    });
+
+    expect(screen.getByRole("button", { name: "Interrupt assistant turn" })).toBeInTheDocument();
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "while busy");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByRole("menu", { name: "Choose follow-up delivery" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /After next safe checkpoint/ })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /After assistant finishes/ })).toBeInTheDocument();
+  });
+
+  it("sends checkpoint follow-ups to the backend queue immediately", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer({
+      inputEnabled: false,
+      isProcessing: true,
+      canQueueFollowUp: true,
+    });
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "send at checkpoint{enter}");
+    await user.click(screen.getByRole("menuitem", { name: /After next safe checkpoint/ }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({
+      text: "send at checkpoint",
+      images: [],
+      followUpDelivery: "checkpoint",
+    }));
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("");
+  });
+
+  it("closes stale follow-up timing choices when the session becomes unsafe", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = renderWithProviders(
+      <Composer
+        inputEnabled={false}
+        sessionEnded={false}
+        liveSessionId="live-1"
+        supportsImageInputs
+        interactiveMode={false}
+        isSubmitting={false}
+        isProcessing
+        canQueueFollowUp
+        onSubmit={onSubmit}
+      />,
+    );
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "while busy{enter}");
+    expect(screen.getByRole("menu", { name: "Choose follow-up delivery" })).toBeInTheDocument();
+
+    rerender(
+      <Composer
+        inputEnabled={false}
+        sessionEnded
+        liveSessionId={null}
+        supportsImageInputs
+        interactiveMode={false}
+        isSubmitting={false}
+        isProcessing={false}
+        canQueueFollowUp={false}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole("menu", { name: "Choose follow-up delivery" })).not.toBeInTheDocument();
+    });
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("blocks bang-prefixed checkpoint follow-ups while processing", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer({
+      inputEnabled: false,
+      isProcessing: true,
+      canQueueFollowUp: true,
+    });
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "!pwd{enter}");
+    await user.click(screen.getByRole("menuitem", { name: /After next safe checkpoint/ }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Shell commands cannot be sent as follow-ups while the assistant is processing."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("!pwd");
+  });
+
+  it("activates follow-up timing choices from the keyboard", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer({
+      inputEnabled: false,
+      isProcessing: true,
+      canQueueFollowUp: true,
+    });
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "keyboard checkpoint{enter}");
+    screen.getByRole("menuitem", { name: /After next safe checkpoint/ }).focus();
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({
+      text: "keyboard checkpoint",
+      images: [],
+      followUpDelivery: "checkpoint",
+    }));
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "keyboard later{enter}");
+    screen.getByRole("menuitem", { name: /After assistant finishes/ }).focus();
+    await user.keyboard(" ");
+
+    await waitFor(() => expect(onSubmit).toHaveBeenLastCalledWith({
+      text: "keyboard later",
+      images: [],
+      followUpDelivery: "after_finish",
+    }));
+  });
+
+  it("queues after-finish follow-ups through submit", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer({
+      inputEnabled: false,
+      isProcessing: true,
+      canQueueFollowUp: true,
+    });
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "queued for later{enter}");
+    await user.click(screen.getByRole("menuitem", { name: /After assistant finishes/ }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({
+      text: "queued for later",
+      images: [],
+      followUpDelivery: "after_finish",
+    }));
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("");
+  });
+
+  it("blocks bang-prefixed queued manual follow-ups while processing", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer({
+      inputEnabled: false,
+      isProcessing: true,
+      canQueueFollowUp: true,
+    });
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "!pwd{enter}");
+    await user.click(screen.getByRole("menuitem", { name: /After assistant finishes/ }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Queued follow-up")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Shell commands cannot be sent as follow-ups while the assistant is processing."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("!pwd");
+  });
+
+  it("shows, edits, cancels, and manually sends a backend queued follow-up", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const onCancelQueuedFollowUp = vi.fn().mockResolvedValue(undefined);
+    const onSendQueuedFollowUp = vi.fn().mockResolvedValue(undefined);
+    renderWithProviders(
+      <Composer
+        inputEnabled
+        sessionEnded={false}
+        liveSessionId="live-1"
+        supportsImageInputs
+        interactiveMode={false}
+        isSubmitting={false}
+        isProcessing={false}
+        canQueueFollowUp
+        queuedFollowUp={{
+          id: "follow-1",
+          delivery: "after_finish",
+          text: "queued for later",
+          file_paths: [],
+          image_attachments: [],
+          image_count: 0,
+          created_at: "2026-06-29T00:00:00Z",
+          failed: false,
+          error: null,
+        }}
+        onSubmit={onSubmit}
+        onCancelQueuedFollowUp={onCancelQueuedFollowUp}
+        onSendQueuedFollowUp={onSendQueuedFollowUp}
+      />,
+    );
+
+    expect(screen.getByLabelText("Queued follow-up")).toHaveTextContent("queued for later");
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await waitFor(() => expect(onCancelQueuedFollowUp).toHaveBeenCalledWith("follow-1"));
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("queued for later");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onCancelQueuedFollowUp).toHaveBeenCalledTimes(2);
+    await user.click(screen.getByRole("button", { name: "Send now" }));
+    expect(onSendQueuedFollowUp).toHaveBeenCalledWith("follow-1");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("disables manual send-now for after-finish queued follow-ups while processing", async () => {
+    const user = userEvent.setup();
+    const onSendQueuedFollowUp = vi.fn().mockResolvedValue(undefined);
+    renderWithProviders(
+      <Composer
+        inputEnabled={false}
+        sessionEnded={false}
+        liveSessionId="live-1"
+        supportsImageInputs
+        interactiveMode={false}
+        isSubmitting={false}
+        isProcessing
+        canQueueFollowUp
+        queuedFollowUp={{
+          id: "follow-1",
+          delivery: "after_finish",
+          text: "queued for later",
+          file_paths: [],
+          image_attachments: [],
+          image_count: 0,
+          created_at: "2026-06-29T00:00:00Z",
+          failed: false,
+          error: null,
+        }}
+        onSubmit={vi.fn()}
+        onSendQueuedFollowUp={onSendQueuedFollowUp}
+      />,
+    );
+
+    const sendNow = screen.getByRole("button", { name: "Send now" });
+    expect(sendNow).toBeDisabled();
+    await user.click(sendNow);
+    expect(onSendQueuedFollowUp).not.toHaveBeenCalled();
+  });
+
+  it("renders backend queued follow-up failures", () => {
+    renderWithProviders(
+      <Composer
+        inputEnabled={false}
+        sessionEnded={false}
+        liveSessionId="live-1"
+        supportsImageInputs
+        interactiveMode={false}
+        isSubmitting={false}
+        isProcessing
+        canQueueFollowUp
+        queuedFollowUp={{
+          id: "follow-1",
+          delivery: "after_finish",
+          text: "retry later",
+          file_paths: [],
+          image_attachments: [],
+          image_count: 1,
+          created_at: "2026-06-29T00:00:00Z",
+          failed: true,
+          error: "Auto-send failed",
+        }}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("Queued follow-up")).toHaveTextContent("retry later");
+    expect(screen.getByText("Auto-send failed")).toBeInTheDocument();
+    expect(screen.getByLabelText("Queued follow-up")).toHaveTextContent("1 image");
+  });
+
+  it("renders checkpoint queued follow-ups without manual send-now", () => {
+    renderWithProviders(
+      <Composer
+        inputEnabled={false}
+        sessionEnded={false}
+        liveSessionId="live-1"
+        supportsImageInputs
+        interactiveMode={false}
+        isSubmitting={false}
+        isProcessing
+        canQueueFollowUp
+        queuedFollowUp={{
+          id: "follow-1",
+          delivery: "checkpoint",
+          text: "steer current turn",
+          file_paths: [],
+          image_attachments: [],
+          image_count: 0,
+          created_at: "2026-06-29T00:00:00Z",
+          failed: false,
+          error: null,
+        }}
+        onSubmit={vi.fn()}
+        onSendQueuedFollowUp={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("Queued follow-up")).toHaveTextContent(
+      "after next checkpoint",
+    );
+    expect(screen.getByRole("button", { name: "Send now" })).toBeDisabled();
+  });
+
+  it("renders multiple queued follow-ups and still accepts another draft", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    renderWithProviders(
+      <Composer
+        inputEnabled={false}
+        sessionEnded={false}
+        liveSessionId="live-1"
+        supportsImageInputs
+        interactiveMode={false}
+        isSubmitting={false}
+        isProcessing
+        canQueueFollowUp
+        queuedFollowUps={[
+          {
+            id: "follow-1",
+            delivery: "checkpoint",
+            text: "first queued",
+            file_paths: [],
+            image_attachments: [],
+            image_count: 0,
+            created_at: "2026-06-29T00:00:00Z",
+            failed: false,
+            error: null,
+          },
+          {
+            id: "follow-2",
+            delivery: "after_finish",
+            text: "second queued",
+            file_paths: [],
+            image_attachments: [],
+            image_count: 0,
+            created_at: "2026-06-29T00:00:01Z",
+            failed: false,
+            error: null,
+          },
+        ]}
+        onSubmit={onSubmit}
+        onSendQueuedFollowUp={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("Queued follow-ups")).toHaveTextContent("first queued");
+    expect(screen.getByLabelText("Queued follow-ups")).toHaveTextContent("second queued");
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "third queued{enter}");
+    await user.click(screen.getByRole("menuitem", { name: /After assistant finishes/ }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({
+      text: "third queued",
+      images: [],
+      followUpDelivery: "after_finish",
+    }));
+  });
+
   it("restores interrupted input into the textbox", async () => {
     const onConsumed = vi.fn();
     renderComposer({

@@ -135,6 +135,7 @@ class AnthropicProvider(Provider):
         user_message: str | None = None,
         user_input: UserTurnInput | None = None,
         tool_result_items: list[dict[str, Any]] | None = None,
+        steer_user_input: UserTurnInput | None = None,
         instructions: str | None = None,
         session_id: str | None = None,
         display: DisplayProtocol,
@@ -156,13 +157,15 @@ class AnthropicProvider(Provider):
                 }
             )
         elif tool_result_items is not None:
-            input_value = tool_result_items
+            input_value = list(tool_result_items)
+            if steer_user_input is not None:
+                input_value.extend(_anthropic_user_content_blocks(steer_user_input))
             # Tool results are sent as a user message containing tool_result
             # content blocks.
             self._messages.append(
                 {
                     "role": "user",
-                    "content": tool_result_items,
+                    "content": input_value,
                 }
             )
         else:
