@@ -1,4 +1,1 @@
-- [x] Locate the target saved session and relevant persisted run/events
-- [x] Inspect follow-up queue/delivery events and message ordering
-- [x] Cross-check against checkpoint/after-finish semantics
-- [x] Summarize audit findings and risks
+- [x] Replace composer default placeholder with "Send a follow-up..." while session is ongoing (processing)

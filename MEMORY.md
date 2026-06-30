@@ -55,4 +55,5 @@
 ## Detailed Task Events
 
 ## 2026-06-30
+- Composer placeholder: shows "Send a follow-up..." while session is processing (`isProcessing`), else "Send a message...". Edit in `webapp/src/components/session/Composer.tsx` placeholder ternary. Validation: typecheck, lint, `bun run test:web -- composer` (62 passed).
 - Audited saved session `cc7d32d7e63147a6adee5a2c300ca79a` in `~/.pbi-agent/sessions.db`: checkpoint follow-up `look at sqllite db` was queued, delivered with tool results as provider steer input, then later hidden from timeline by interrupt despite persisted message/provider evidence; two `after_finish` `be concice` entries were queued then removed without provider delivery. Validation: read-only SQLite inspection only.

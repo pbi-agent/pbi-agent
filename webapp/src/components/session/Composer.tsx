@@ -1568,7 +1568,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 ? "Start a new session to continue..."
                 : isShellMode
                   ? "Run a shell command..."
-                  : "Send a message..."
+                  : isProcessing
+                    ? "Send a follow-up..."
+                    : "Send a message..."
             }
             rows={1}
             disabled={!composerInputAvailable}
