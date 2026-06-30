@@ -710,11 +710,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const showFollowUpSubmitButton =
     canDraftFollowUp && input.trim().length > 0;
   const showActionStopButton = showStopButton && !showFollowUpSubmitButton;
+  const showFollowUpReadyAnimation =
+    isProcessing
+    && canDraftFollowUp
+    && !isShellMode
+    && dictationState !== "recording"
+    && !promptEnhancementPending;
   const showProcessingAnimation =
-    (isProcessing && !sessionEnded && !canSend) || promptEnhancementPending;
+    (isProcessing && !sessionEnded && !canSend && !canDraftFollowUp) || promptEnhancementPending;
   const processingStatusLabel = promptEnhancementPending
     ? "Enhancing prompt"
-    : "Assistant is processing";
+    : showFollowUpReadyAnimation
+      ? "Assistant is working. You can draft a follow-up."
+      : "Assistant is processing";
   const isActionMenuOpen =
     composerInputAvailable && !isShellMode && actionMenuOpen;
 
@@ -1491,6 +1499,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     isShellMode && "composer__input-row--shell",
     interactiveMode && "composer__input-row--interactive",
     showProcessingAnimation && "composer__input-row--processing",
+    showFollowUpReadyAnimation && "composer__input-row--follow-up-ready",
     dictationState === "recording" && "composer__input-row--recording",
   );
 
@@ -1624,7 +1633,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           />
         </InputGroup>
         )}
-        {showProcessingAnimation ? (
+        {showProcessingAnimation || showFollowUpReadyAnimation ? (
           <span className="sr-only" role="status" aria-live="polite">
             {processingStatusLabel}
           </span>

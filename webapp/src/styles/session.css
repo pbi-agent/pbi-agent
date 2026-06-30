@@ -3287,6 +3287,10 @@
     0 0 0 3px color-mix(in srgb, var(--primary) 6%, transparent);
 }
 
+.composer__input-row--follow-up-ready {
+  animation: composer-follow-up-breathe 3s ease-in-out infinite;
+}
+
 .composer__input-row--recording {
   border-color: color-mix(in srgb, var(--color-error) 52%, var(--color-border));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error) 13%, transparent);
@@ -3377,6 +3381,8 @@
   animation: composer-processing-rail 1.8s ease-in-out infinite;
   pointer-events: none;
 }
+
+/* follow-up-ready uses border breathe only — no pseudo-element animation */
 
 .composer__mode-pill {
   display: inline-flex;
@@ -3681,6 +3687,48 @@
   flex-wrap: wrap;
 }
 
+/* Follow-up dock action buttons (Edit / Cancel / Send now).
+ * Give them comfortable, consistent padding and use box-shadow for hover
+ * rings so there is zero border-induced layout shift. These rules are
+ * unlayered (session.css) so they outrank the layered shadcn hover:* utilities.
+ */
+.composer__follow-up-actions button:where([data-variant="ghost"]):not(:disabled),
+.composer__follow-up-actions button:where([data-variant="outline"]):not(:disabled) {
+  min-height: 28px;
+  padding-inline: var(--sp-3);
+  border: 1px solid transparent;
+  background: transparent;
+  transition:
+    background-color 120ms var(--ease),
+    box-shadow 120ms var(--ease),
+    color 120ms var(--ease),
+    border-color 120ms var(--ease);
+}
+
+.composer__follow-up-actions button:where([data-variant="ghost"]):not(:disabled):hover {
+  background: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+  border-color: color-mix(in srgb, var(--color-border) 80%, transparent);
+  color: var(--color-text-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-text-primary) 4%, transparent);
+}
+
+.composer__follow-up-actions button:where([data-variant="ghost"]):not(:disabled):active {
+  background: color-mix(in srgb, var(--color-text-primary) 14%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-text-primary) 6%, transparent);
+}
+
+.composer__follow-up-actions button:where([data-variant="outline"]):not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--color-border));
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.composer__follow-up-actions button:where([data-variant="outline"]):not(:disabled):active {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
 .composer__send {
   width: 32px;
   height: 32px;
@@ -3872,11 +3920,23 @@
   }
 }
 
+@keyframes composer-follow-up-breathe {
+  0%, 100% {
+    border-color: color-mix(in srgb, var(--primary) 22%, var(--color-border));
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    border-color: color-mix(in srgb, var(--primary) 50%, var(--color-border));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 8%, transparent);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .composer__stop,
   .composer__dictation--recording,
   .composer__input-row--processing::before,
-  .composer__input-row--processing::after {
+  .composer__input-row--processing::after,
+  .composer__input-row--follow-up-ready {
     animation: none;
   }
 }

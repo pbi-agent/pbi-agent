@@ -809,9 +809,55 @@ describe("Composer", () => {
 
     expect(screen.getByRole("textbox", { name: "Message" })).toBeDisabled();
     expect(container.querySelector(".composer__input-row--processing")).toBeInTheDocument();
+    expect(container.querySelector(".composer__input-row--follow-up-ready")).not.toBeInTheDocument();
     expect(container.querySelector(".composer__processing-indicator")).not.toBeInTheDocument();
     expect(container.querySelector(".composer__processing-bar")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Assistant is processing");
+  });
+
+  it("uses the follow-up-ready ambient state while processing accepts drafted follow-ups", () => {
+    const { container } = renderComposer({
+      inputEnabled: false,
+      isProcessing: true,
+      canQueueFollowUp: true,
+    });
+
+    expect(screen.getByRole("textbox", { name: "Message" })).toBeEnabled();
+    expect(screen.getByPlaceholderText("Send a follow-up...")).toBeInTheDocument();
+    expect(container.querySelector(".composer__input-row--follow-up-ready")).toBeInTheDocument();
+    expect(container.querySelector(".composer__input-row--processing")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Assistant is working. You can draft a follow-up.",
+    );
+  });
+
+  it("keeps shell mode visual precedence over the follow-up-ready ambient state", async () => {
+    const user = userEvent.setup();
+    const { container } = renderComposer({
+      inputEnabled: false,
+      isProcessing: true,
+      canQueueFollowUp: true,
+    });
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "!pwd");
+
+    expect(container.querySelector(".composer__input-row--shell")).toBeInTheDocument();
+    expect(container.querySelector(".composer__input-row--follow-up-ready")).not.toBeInTheDocument();
+  });
+
+  it("keeps recording visual precedence over the follow-up-ready ambient state", async () => {
+    const user = userEvent.setup();
+    const { container } = renderComposer({
+      inputEnabled: false,
+      isProcessing: true,
+      canQueueFollowUp: true,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Start dictation" }));
+
+    expect(await screen.findByRole("button", { name: "Stop dictation recording" })).toBeInTheDocument();
+    expect(container.querySelector(".composer__input-row--recording")).toBeInTheDocument();
+    expect(container.querySelector(".composer__input-row--follow-up-ready")).not.toBeInTheDocument();
   });
 
   it("keeps idle submit behavior unchanged", async () => {
@@ -1115,6 +1161,51 @@ describe("Composer", () => {
     await user.click(screen.getByRole("button", { name: "Send now" }));
     expect(onSendQueuedFollowUp).toHaveBeenCalledWith("follow-1");
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("renders follow-up dock action buttons with hover-capable variant attributes", () => {
+    renderWithProviders(
+      <Composer
+        inputEnabled
+        sessionEnded={false}
+        liveSessionId="live-1"
+        interactiveMode={false}
+        isSubmitting={false}
+        isProcessing={false}
+        canQueueFollowUp
+        supportsImageInputs
+        queuedFollowUp={{
+          id: "follow-1",
+          delivery: "after_finish",
+          text: "queued for later",
+          file_paths: [],
+          image_attachments: [],
+          image_count: 0,
+          created_at: "2026-06-29T00:00:00Z",
+          failed: false,
+          error: null,
+        }}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        onCancelQueuedFollowUp={vi.fn().mockResolvedValue(undefined)}
+        onSendQueuedFollowUp={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    const dock = screen.getByLabelText("Queued follow-up");
+    expect(dock).toHaveClass("composer__follow-up-dock");
+    const actions = dock.querySelector(".composer__follow-up-actions");
+    expect(actions).not.toBeNull();
+
+    const edit = screen.getByRole("button", { name: "Edit" });
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    const sendNow = screen.getByRole("button", { name: "Send now" });
+
+    expect(edit).toHaveAttribute("data-variant", "ghost");
+    expect(cancel).toHaveAttribute("data-variant", "ghost");
+    expect(sendNow).toHaveAttribute("data-variant", "outline");
+    expect(actions).toContainElement(edit);
+    expect(actions).toContainElement(cancel);
+    expect(actions).toContainElement(sendNow);
   });
 
   it("disables manual send-now for after-finish queued follow-ups while processing", async () => {
