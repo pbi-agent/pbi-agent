@@ -286,6 +286,9 @@ class OpenAIProvider(Provider):
         if not response.function_calls:
             return [], False
 
+        if self._chatgpt_backend.enabled and _has_sub_agent_call(response):
+            self._chatgpt_backend.close_websocket()
+
         return execute_provider_tool_calls(
             response.function_calls,
             max_workers=max_workers,
@@ -1470,6 +1473,10 @@ def _build_user_input_item(user_input: UserTurnInput) -> dict[str, Any]:
             }
         )
     return {"role": "user", "content": content}
+
+
+def _has_sub_agent_call(response: CompletedResponse) -> bool:
+    return any(call.name == "sub_agent" for call in response.function_calls)
 
 
 def _message_record_can_restore(message: MessageRecord) -> bool:

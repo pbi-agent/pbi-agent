@@ -30,6 +30,9 @@ _WS_OPCODE_BINARY = 0x2
 _WS_OPCODE_CLOSE = 0x8
 _WS_OPCODE_PING = 0x9
 _WS_OPCODE_PONG = 0xA
+_WS_WRITE_TIMEOUT_SECS = 30.0
+_WS_RESPONSE_START_TIMEOUT_SECS = 30.0
+_WS_CLOSE_TIMEOUT_SECS = 1.0
 
 
 @dataclass(frozen=True)
@@ -160,9 +163,9 @@ class ResponsesWebSocket:
                 "websocket connection is closed", retryable=True
             )
         deadline = time.monotonic() + request_timeout
-        self._set_phase_timeout(deadline, idle_timeout)
         request_payload = {"type": "response.create", **request_body}
         try:
+            self._set_phase_timeout(deadline, min(idle_timeout, _WS_WRITE_TIMEOUT_SECS))
             self._send_text(json.dumps(request_payload, separators=(",", ":")))
         except (OSError, TimeoutError, socket.timeout) as exc:
             self.close()
@@ -172,7 +175,12 @@ class ResponsesWebSocket:
         events: list[dict[str, Any]] = []
         while True:
             try:
-                self._set_phase_timeout(deadline, idle_timeout)
+                read_timeout = (
+                    idle_timeout
+                    if events
+                    else min(idle_timeout, _WS_RESPONSE_START_TIMEOUT_SECS)
+                )
+                self._set_phase_timeout(deadline, read_timeout)
                 opcode, payload = self._recv_frame()
             except (OSError, TimeoutError, socket.timeout) as exc:
                 self.close()
@@ -187,7 +195,9 @@ class ResponsesWebSocket:
                 )
             if opcode == _WS_OPCODE_PING:
                 try:
-                    self._set_phase_timeout(deadline, idle_timeout)
+                    self._set_phase_timeout(
+                        deadline, min(idle_timeout, _WS_WRITE_TIMEOUT_SECS)
+                    )
                     self._send_frame(_WS_OPCODE_PONG, payload)
                 except (OSError, TimeoutError, socket.timeout) as exc:
                     self.close()
@@ -232,6 +242,7 @@ class ResponsesWebSocket:
             return
         self.closed = True
         try:
+            self._sock.settimeout(_WS_CLOSE_TIMEOUT_SECS)
             self._send_frame(_WS_OPCODE_CLOSE, b"")
         except OSError:
             pass

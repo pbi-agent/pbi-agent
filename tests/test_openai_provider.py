@@ -38,9 +38,12 @@ from pbi_agent.providers.chatgpt_codex_backend import (
 )
 from pbi_agent.providers.chatgpt_codex_transport import (
     CHATGPT_TURN_STATE_HEADER,
+    _WS_CLOSE_TIMEOUT_SECS,
     _WS_OPCODE_PING,
     _WS_OPCODE_PONG,
     _WS_OPCODE_TEXT,
+    _WS_RESPONSE_START_TIMEOUT_SECS,
+    _WS_WRITE_TIMEOUT_SECS,
     ChatGPTCodexWebSocketError,
     ResponsesWebSocket,
 )
@@ -1422,6 +1425,41 @@ def test_chatgpt_codex_websocket_sends_response_create_body_at_top_level() -> No
     assert "response" not in payload
 
 
+def test_chatgpt_codex_websocket_write_and_first_read_use_short_timeouts() -> None:
+    websocket = object.__new__(ResponsesWebSocket)
+    websocket.closed = False
+    websocket._buffer = b""
+    websocket._sock = Mock()
+    websocket._sock.settimeout = Mock()
+    websocket._send_text = Mock()
+    websocket._recv_frame = Mock(
+        side_effect=[
+            (
+                _WS_OPCODE_TEXT,
+                json.dumps(
+                    {
+                        "type": "response.completed",
+                        "response": {"id": "resp_1", "output": []},
+                    }
+                ).encode("utf-8"),
+            )
+        ]
+    )
+
+    websocket.send_response_create(
+        {"model": "gpt-5", "input": [], "stream": True},
+        idle_timeout=300,
+        request_timeout=3600,
+    )
+
+    assert websocket._sock.settimeout.call_args_list[0].args == (
+        _WS_WRITE_TIMEOUT_SECS,
+    )
+    assert websocket._sock.settimeout.call_args_list[1].args == (
+        _WS_RESPONSE_START_TIMEOUT_SECS,
+    )
+
+
 def test_chatgpt_codex_websocket_send_failure_is_retryable() -> None:
     websocket = ResponsesWebSocket(Mock(), response_headers={})
     send_error = ssl.SSLEOFError("EOF occurred in violation of protocol")
@@ -1441,6 +1479,7 @@ def test_chatgpt_codex_websocket_send_failure_is_retryable() -> None:
     assert error.__cause__ is send_error
     assert websocket.closed is True
     websocket._recv_frame.assert_not_called()
+    websocket._sock.settimeout.assert_any_call(_WS_CLOSE_TIMEOUT_SECS)
     websocket._sock.close.assert_called_once()
 
 
@@ -2263,6 +2302,71 @@ def test_openai_execute_tool_calls_returns_only_outputs_for_chatgpt_backend(
             "call_id": "call_2",
             "output": '{"ok": true, "result": {"created": true}}',
         },
+    ]
+
+
+def test_openai_execute_tool_calls_closes_chatgpt_websocket_before_sub_agent(
+    monkeypatch,
+    display_spy,
+) -> None:
+    provider = OpenAIProvider(
+        _make_settings(responses_url=OPENAI_CHATGPT_RESPONSES_URL)
+    )
+    websocket = Mock()
+    setattr(provider._chatgpt_backend, "_websocket", websocket)
+    response = CompletedResponse(
+        response_id="resp_1",
+        text="",
+        function_calls=[
+            ToolCall(
+                call_id="call_1",
+                name="sub_agent",
+                arguments={"task_instruction": "Inspect the repo"},
+            )
+        ],
+    )
+    batch = ToolExecutionBatch(
+        results=[
+            ToolResult(
+                call_id="call_1",
+                output_json='{"ok": true, "result": {"status":"completed"}}',
+            )
+        ],
+        had_errors=False,
+    )
+
+    def fake_execute_tool_calls(
+        calls,
+        *,
+        max_workers,
+        context=None,
+        on_result=None,
+    ):
+        del calls, max_workers, context, on_result
+        websocket.close.assert_called_once()
+        assert getattr(provider._chatgpt_backend, "_websocket") is None
+        return batch
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.openai_provider._execute_tool_calls",
+        fake_execute_tool_calls,
+    )
+
+    tool_result_items, had_errors = provider.execute_tool_calls(
+        response,
+        max_workers=1,
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+    )
+
+    assert had_errors is False
+    assert tool_result_items == [
+        {
+            "type": "function_call_output",
+            "call_id": "call_1",
+            "output": '{"ok": true, "result": {"status":"completed"}}',
+        }
     ]
 
 
