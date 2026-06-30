@@ -839,8 +839,74 @@ describe("Composer", () => {
 
     expect(onSubmit).not.toHaveBeenCalled();
     expect(screen.getByRole("menu", { name: "Choose follow-up delivery" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /After next safe checkpoint/ })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /After assistant finishes/ })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /After next safe checkpoint/ })).toHaveClass(
+      "composer__completion-item--active",
+    );
+    expect(screen.getByRole("menuitem", { name: /After assistant finishes/ })).not.toHaveClass(
+      "composer__completion-item--active",
+    );
+  });
+
+  it("submits the default follow-up choice with Enter while the textbox keeps focus", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer({
+      inputEnabled: false,
+      isProcessing: true,
+      canQueueFollowUp: true,
+    });
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+
+    await user.type(textbox, "default checkpoint{enter}");
+    fireEvent.keyDown(textbox, { key: "Enter" });
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({
+      text: "default checkpoint",
+      images: [],
+      followUpDelivery: "checkpoint",
+    }));
+  });
+
+  it("navigates follow-up timing choices with arrow keys", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer({
+      inputEnabled: false,
+      isProcessing: true,
+      canQueueFollowUp: true,
+    });
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+
+    await user.type(textbox, "send later{enter}");
+    fireEvent.keyDown(textbox, { key: "ArrowDown" });
+    expect(screen.getByRole("menuitem", { name: /After assistant finishes/ })).toHaveClass(
+      "composer__completion-item--active",
+    );
+    fireEvent.keyDown(textbox, { key: "Enter" });
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({
+      text: "send later",
+      images: [],
+      followUpDelivery: "after_finish",
+    }));
+  });
+
+  it("wraps follow-up timing navigation upward and closes with Escape", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer({
+      inputEnabled: false,
+      isProcessing: true,
+      canQueueFollowUp: true,
+    });
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+
+    await user.type(textbox, "wrapped later{enter}");
+    fireEvent.keyDown(textbox, { key: "ArrowUp" });
+    expect(screen.getByRole("menuitem", { name: /After assistant finishes/ })).toHaveClass(
+      "composer__completion-item--active",
+    );
+    fireEvent.keyDown(textbox, { key: "Escape" });
+
+    expect(screen.queryByRole("menu", { name: "Choose follow-up delivery" })).not.toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it("offers a clickable follow-up submit while interrupt is available", async () => {

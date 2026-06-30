@@ -3502,7 +3502,7 @@
 .composer__completions {
   position: absolute;
   right: var(--sp-8);
-  bottom: 100%;
+  bottom: calc(100% + var(--sp-2));
   left: var(--sp-8);
   z-index: 30;
   display: flex;
@@ -3614,6 +3614,12 @@
   gap: 2px;
 }
 
+.composer__follow-up-choice {
+  align-items: flex-start;
+  min-height: 56px;
+  padding: var(--sp-3);
+}
+
 .composer__follow-up-choice .composer__completion-label,
 .composer__follow-up-choice .composer__completion-description {
   font-family: var(--font-sans);
@@ -3623,7 +3629,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
-  padding: var(--sp-2) var(--sp-3);
+  margin-top: var(--sp-2);
+  padding: var(--sp-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface-1);
@@ -3635,6 +3642,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-3);
+  flex-wrap: wrap;
 }
 
 .composer__follow-up-copy {
@@ -3668,7 +3676,9 @@
   display: flex;
   flex-shrink: 0;
   align-items: center;
-  gap: var(--sp-1);
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
 }
 
 .composer__send {

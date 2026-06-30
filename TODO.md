@@ -1,1 +1,9 @@
-- [x] Replace composer default placeholder with "Send a follow-up..." while session is ongoing (processing)
+- [x] Planner: create plan for follow-up display fix
+- [x] Main: review planner plan
+- [x] Worker: implement follow-up display fix
+- [x] Main: inspect worker diff and run focused validation
+- [x] Reviewer round 1: review implementation
+- [x] Code-quality-reviewer round 1: review maintainability
+- [x] Final validation
+- [x] Update memory
+- [x] Handoff

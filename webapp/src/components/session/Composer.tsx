@@ -115,6 +115,29 @@ type PendingImage = {
 
 type FollowUpTiming = "checkpoint" | "after_finish";
 
+const FOLLOW_UP_OPTIONS: Array<{
+  timing: FollowUpTiming;
+  label: string;
+  description: string;
+  badge: string;
+  badgeClassName: string;
+}> = [
+  {
+    timing: "checkpoint",
+    label: "After next safe checkpoint",
+    description: "Send to the live session as soon as pbi-agent can accept queued input.",
+    badge: "soon",
+    badgeClassName: "composer__completion-kind--project",
+  },
+  {
+    timing: "after_finish",
+    label: "After assistant finishes",
+    description: "Queue on the backend and send automatically when the current turn is ready.",
+    badge: "later",
+    badgeClassName: "composer__completion-kind--built-in",
+  },
+];
+
 type ImageFileInput = HTMLInputElement & {
   showPicker?: () => void;
 };
@@ -429,6 +452,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const [historyDraft, setHistoryDraft] = useState<string | null>(null);
   const [dictationState, setDictationState] = useState<ComposerDictationState>("idle");
   const [followUpChoicesOpen, setFollowUpChoicesOpen] = useState(false);
+  const [followUpSelectedIndex, setFollowUpSelectedIndex] = useState(0);
   const completionRequestIdRef = useRef(0);
   const completionItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const activeCompletionRef = useRef<{
@@ -1012,6 +1036,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       if (!canSend) {
         if (canDraftFollowUp) {
           closeCompletions();
+          setFollowUpSelectedIndex(0);
           setFollowUpChoicesOpen(true);
           setAttachmentMessage(null);
         }
@@ -1287,6 +1312,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     submitValue,
   ]);
 
+  const activateFollowUpChoice = (timing: FollowUpTiming) => {
+    if (!canDraftFollowUp) {
+      setFollowUpChoicesOpen(false);
+      return;
+    }
+    void queueFollowUp(timing);
+  };
+
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (completionOpen) {
       const hasCompletionItems = completionItems.length > 0;
@@ -1336,10 +1369,31 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       }
     }
 
-    if (followUpChoicesOpen && event.key === "Escape") {
-      event.preventDefault();
-      setFollowUpChoicesOpen(false);
-      return;
+    if (followUpChoicesOpen) {
+      if (event.key === "ArrowDown" && !event.altKey && !event.ctrlKey && !event.metaKey) {
+        event.preventDefault();
+        setFollowUpSelectedIndex((prev) => (prev + 1) % FOLLOW_UP_OPTIONS.length);
+        return;
+      }
+      if (event.key === "ArrowUp" && !event.altKey && !event.ctrlKey && !event.metaKey) {
+        event.preventDefault();
+        setFollowUpSelectedIndex(
+          (prev) => (prev - 1 + FOLLOW_UP_OPTIONS.length) % FOLLOW_UP_OPTIONS.length,
+        );
+        return;
+      }
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        activateFollowUpChoice(
+          FOLLOW_UP_OPTIONS[followUpSelectedIndex]?.timing ?? FOLLOW_UP_OPTIONS[0].timing,
+        );
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setFollowUpChoicesOpen(false);
+        return;
+      }
     }
 
     const hasModifier = event.altKey || event.ctrlKey || event.metaKey || event.shiftKey;
@@ -1442,13 +1496,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   const handleComposerKeyDownCapture = (event: KeyboardEvent<HTMLFormElement>) => {
     composerActions.handleShortcut(event);
-  };
-  const activateFollowUpChoice = (timing: FollowUpTiming) => {
-    if (!canDraftFollowUp) {
-      setFollowUpChoicesOpen(false);
-      return;
-    }
-    void queueFollowUp(timing);
   };
 
   return (
@@ -1694,52 +1741,36 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
       {followUpChoicesOpen ? (
         <div className="composer__completions composer__follow-up-menu" role="menu" aria-label="Choose follow-up delivery">
-          <Button
-            type="button"
-            variant="ghost"
-            role="menuitem"
-            className="composer__completion-item composer__follow-up-choice"
-            disabled={!canDraftFollowUp}
-            onMouseDown={(event) => {
-              event.preventDefault();
-            }}
-            onClick={() => {
-              activateFollowUpChoice("checkpoint");
-            }}
-          >
-            <span className="composer__completion-copy">
-              <span className="composer__completion-label">After next safe checkpoint</span>
-              <span className="composer__completion-description">
-                Send to the live session as soon as pbi-agent can accept queued input.
+          {FOLLOW_UP_OPTIONS.map((option, index) => (
+            <Button
+              key={option.timing}
+              type="button"
+              variant="ghost"
+              role="menuitem"
+              className={cn(
+                "composer__completion-item composer__follow-up-choice",
+                index === followUpSelectedIndex && "composer__completion-item--active",
+              )}
+              disabled={!canDraftFollowUp}
+              onMouseDown={(event) => {
+                event.preventDefault();
+              }}
+              onMouseEnter={() => setFollowUpSelectedIndex(index)}
+              onClick={() => {
+                activateFollowUpChoice(option.timing);
+              }}
+            >
+              <span className="composer__completion-copy">
+                <span className="composer__completion-label">{option.label}</span>
+                <span className="composer__completion-description">
+                  {option.description}
+                </span>
               </span>
-            </span>
-            <span className="composer__completion-kind composer__completion-kind--project">
-              soon
-            </span>
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            role="menuitem"
-            className="composer__completion-item composer__follow-up-choice"
-            disabled={!canDraftFollowUp}
-            onMouseDown={(event) => {
-              event.preventDefault();
-            }}
-            onClick={() => {
-              activateFollowUpChoice("after_finish");
-            }}
-          >
-            <span className="composer__completion-copy">
-              <span className="composer__completion-label">After assistant finishes</span>
-              <span className="composer__completion-description">
-                Queue on the backend and send automatically when the current turn is ready.
+              <span className={cn("composer__completion-kind", option.badgeClassName)}>
+                {option.badge}
               </span>
-            </span>
-            <span className="composer__completion-kind composer__completion-kind--built-in">
-              later
-            </span>
-          </Button>
+            </Button>
+          ))}
         </div>
       ) : null}
 
