@@ -7,7 +7,7 @@ import logging
 import re
 import sqlite3
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from io import BytesIO, StringIO
 from pathlib import Path
 import threading
@@ -10703,7 +10703,13 @@ def test_get_run_detail_returns_observability_events(tmp_path, monkeypatch) -> N
         store.update_run_session(
             run_session_id,
             status="completed",
-            total_api_calls=1,
+            total_duration_ms=55,
+            input_tokens=100,
+            output_tokens=50,
+            provider_total_tokens=150,
+            total_tool_calls=4,
+            total_api_calls=7,
+            error_count=3,
         )
 
     with TestClient(app) as client:
@@ -10713,6 +10719,13 @@ def test_get_run_detail_returns_observability_events(tmp_path, monkeypatch) -> N
     payload = response.json()
     assert payload["run"]["run_session_id"] == run_session_id
     assert payload["run"]["status"] == "completed"
+    assert payload["run"]["total_duration_ms"] == 55
+    assert payload["run"]["input_tokens"] == 100
+    assert payload["run"]["output_tokens"] == 50
+    assert payload["run"]["provider_total_tokens"] == 150
+    assert payload["run"]["total_tool_calls"] == 4
+    assert payload["run"]["total_api_calls"] == 7
+    assert payload["run"]["error_count"] == 3
     assert [event["event_type"] for event in payload["events"]] == [
         "run_start",
         "model_call",
@@ -10724,6 +10737,112 @@ def test_get_run_detail_returns_observability_events(tmp_path, monkeypatch) -> N
     assert payload["events"][1]["success"] is True
     assert payload["events"][1]["status_code"] == 200
     assert payload["events"][1]["total_tokens"] == 20
+
+
+def test_get_run_detail_returns_live_observability_summary_for_started_run(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Saved session",
+        )
+        run_session_id = store.create_run_session(
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+        )
+        started_at = datetime.now(timezone.utc) - timedelta(seconds=65)
+        store._conn.execute(
+            "UPDATE run_sessions SET started_at = ? WHERE run_session_id = ?",
+            (started_at.isoformat(), run_session_id),
+        )
+        store._conn.commit()
+        store.add_observability_event(
+            run_session_id=run_session_id,
+            session_id=session_id,
+            step_index=0,
+            event_type="run_start",
+        )
+        store.add_observability_event(
+            run_session_id=run_session_id,
+            session_id=session_id,
+            step_index=1,
+            event_type="model_call",
+            duration_ms=120,
+            provider="openai",
+            model="gpt-5.4",
+            prompt_tokens=12,
+            completion_tokens=8,
+            total_tokens=20,
+            status_code=200,
+            success=True,
+        )
+        store.add_observability_event(
+            run_session_id=run_session_id,
+            session_id=session_id,
+            step_index=2,
+            event_type="tool_call",
+            duration_ms=30,
+            tool_name="shell",
+            tool_call_id="call-1",
+            success=False,
+            error_message="boom",
+        )
+        store.add_observability_event(
+            run_session_id=run_session_id,
+            session_id=session_id,
+            step_index=3,
+            event_type="error",
+            success=False,
+            error_message="follow-up error",
+        )
+        store.add_observability_event(
+            run_session_id=run_session_id,
+            session_id=session_id,
+            step_index=-1,
+            event_type="web_event",
+            duration_ms=999,
+            prompt_tokens=999,
+            completion_tokens=999,
+            total_tokens=999,
+            success=False,
+            metadata={
+                "type": "input_state",
+                "payload": {"enabled": True},
+                "seq": 1,
+            },
+        )
+
+    with TestClient(app) as client:
+        response = client.get(f"/api/runs/{run_session_id}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["run"]["status"] == "started"
+    assert payload["run"]["total_api_calls"] == 1
+    assert payload["run"]["total_tool_calls"] == 1
+    assert payload["run"]["error_count"] == 2
+    assert payload["run"]["input_tokens"] == 12
+    assert payload["run"]["output_tokens"] == 8
+    assert payload["run"]["provider_total_tokens"] == 20
+    assert payload["run"]["total_duration_ms"] >= 65_000
+    assert [event["event_type"] for event in payload["events"]] == [
+        "run_start",
+        "model_call",
+        "tool_call",
+        "error",
+    ]
 
 
 def test_get_run_detail_returns_not_found_for_unknown_run() -> None:
