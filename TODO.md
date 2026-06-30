@@ -1,12 +1,10 @@
-- [x] Planner: create plan for run detail live header metrics
-- [x] Main: review planner plan
-- [x] Worker: implement run detail live header metrics
-- [!] Main: inspect worker diff and run focused validation — focused tests and Ruff passed; concern: active duration is summed event durations instead of elapsed run time
-- [x] Reviewer round 1: review implementation
-- [x] Fixer round 1: resolve reviewer finding about active run elapsed duration
-- [x] Main: inspect fixer round 1 diff and rerun focused validation
-- [x] Reviewer round 2: verify elapsed-duration fix
-- [x] Code-quality-reviewer round 1: review maintainability
-- [x] Final validation
-- [x] Update memory
-- [x] Handoff
+- [x] Inspect release context and workspace state
+- [x] Determine previous release boundary and next version
+- [x] Create release branch
+- [x] Draft changelog and bump version
+- [x] Run release validation
+- [x] Commit release changes
+- [x] Push release branch
+- [x] Open, verify, and merge release PR
+- [x] Verify tag/GitHub Release/publish
+- [x] Update memory and report
