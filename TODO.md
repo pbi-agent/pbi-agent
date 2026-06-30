@@ -1,2 +1,27 @@
-- [x] Inspect SQLite DB location, schema, and integrity
-- [x] Summarize findings
+- [x] Planner: create plan for collapse intermediate results on session end
+- [x] Main: review planner plan
+- [x] Worker: implement collapse intermediate results on session end
+- [!] Main: inspect worker diff and run focused validation — `bun run test:web -- SessionTimeline` passed; scope gap found: work-only intermediate output is not collapsed
+- [x] Reviewer round 1: review implementation
+- [x] Fixer round 1: resolve reviewer finding about work-only completed turns
+- [x] Main: inspect fixer diff and rerun focused validation
+- [x] Reviewer round 2: verify reviewer fixes
+- [x] Fixer round 2: resolve sub-agent live-gap collapse finding
+- [x] Main: inspect fixer round 2 diff and rerun focused validation
+- [x] Reviewer round 3: verify sub-agent live-gap fix
+- [x] Fixer round 3: preserve notice/error ordering inside collapsed intermediates
+- [x] Main: inspect fixer round 3 diff and rerun focused validation
+- [x] Reviewer round 4: verify ordering fix
+- [x] Fixer round 4: collapse ended work-only turns with no assistant output
+- [x] Main: inspect fixer round 4 diff and rerun focused validation
+- [x] Reviewer round 5: verify no-assistant work-only fix
+- [x] Fixer round 5: collapse ended progress-then-work turns without final assistant
+- [x] Main: inspect fixer round 5 diff and rerun focused validation
+- [x] Reviewer round 6: verify progress-then-work fix
+- [x] Fixer round 6: prevent collapsing any visibly running work
+- [x] Main: inspect fixer round 6 diff and rerun focused validation
+- [x] Reviewer round 7: verify running-work guard
+- [x] Code-quality-reviewer round 1: review maintainability
+- [x] Final validation
+- [x] Update memory
+- [x] Handoff

@@ -62,6 +62,14 @@ type RenderUnit =
       running: boolean;
     };
 
+type IntermediateResultsRenderUnit = {
+  kind: "intermediate_results";
+  key: string;
+  units: RenderUnit[];
+};
+
+type DisplayRenderUnit = RenderUnit | IntermediateResultsRenderUnit;
+
 type TurnSummary = {
   key: string;
   items: CountSummaryItem[];
@@ -257,6 +265,104 @@ function buildRenderUnits(
   }
   flush();
   return units;
+}
+
+function collapseCompletedTurnIntermediateResults(
+  units: readonly RenderUnit[],
+  collapse: boolean,
+  subAgents: Readonly<Record<string, SubAgentSummary>>,
+): DisplayRenderUnit[] {
+  if (!collapse) return [...units];
+
+  const result: DisplayRenderUnit[] = [];
+  let turnUnits: RenderUnit[] = [];
+
+  const flushTurn = () => {
+    if (turnUnits.length === 0) return;
+    const finalAssistantIndex = turnUnits.findLastIndex((unit) =>
+      unit.kind === "message" && unit.item.role === "assistant",
+    );
+    const hasFinalAssistant = finalAssistantIndex >= 0;
+    const hasUserMessage = turnUnits.some((unit) =>
+      unit.kind === "message" && unit.item.role === "user",
+    );
+    const hasRunningWork = turnUnits.some((unit) =>
+      unit.kind === "work_run"
+      && (
+        unit.running
+        || unit.items.some((item) =>
+          item.subAgentId
+          && (
+            subAgents[item.subAgentId]?.status === "running"
+            || subAgents[item.subAgentId]?.status === "starting"
+          ),
+        )
+      ),
+    );
+    if (!hasUserMessage || hasRunningWork) {
+      result.push(...turnUnits);
+      turnUnits = [];
+      return;
+    }
+    const hasLaterWork = hasFinalAssistant && turnUnits
+      .slice(finalAssistantIndex + 1)
+      .some((unit) => unit.kind === "work_run");
+    const collapseTrailingIntermediate = hasLaterWork;
+    const collapseBoundaryIndex = hasFinalAssistant && !collapseTrailingIntermediate
+      ? finalAssistantIndex
+      : turnUnits.length;
+    if (collapseBoundaryIndex === 0) {
+      result.push(...turnUnits);
+      turnUnits = [];
+      return;
+    }
+
+    const isIntermediateUnit = (unit: RenderUnit) =>
+      unit.kind === "work_run"
+      || (hasFinalAssistant && unit.kind === "message" && unit.item.role === "assistant");
+    const intermediateUnits = turnUnits
+      .slice(0, collapseBoundaryIndex)
+      .filter(isIntermediateUnit);
+    if (intermediateUnits.length === 0) {
+      result.push(...turnUnits);
+      turnUnits = [];
+      return;
+    }
+
+    let intermediateSegment: RenderUnit[] = [];
+    const flushIntermediateSegment = () => {
+      if (intermediateSegment.length === 0) return;
+      const firstKey = renderUnitKey(intermediateSegment[0]);
+      result.push({
+        kind: "intermediate_results",
+        key: `intermediate-results-${firstKey}`,
+        units: intermediateSegment,
+      });
+      intermediateSegment = [];
+    };
+
+    for (let index = 0; index < turnUnits.length; index += 1) {
+      const unit = turnUnits[index];
+      const isIntermediate = index < collapseBoundaryIndex && isIntermediateUnit(unit);
+      if (isIntermediate) {
+        intermediateSegment.push(unit);
+        continue;
+      }
+      flushIntermediateSegment();
+      result.push(unit);
+    }
+    flushIntermediateSegment();
+    turnUnits = [];
+  };
+
+  for (const unit of units) {
+    if (unit.kind === "message" && unit.item.role === "user") {
+      flushTurn();
+    }
+    turnUnits.push(unit);
+  }
+  flushTurn();
+  return result;
 }
 
 function objectValue(value: unknown): Record<string, unknown> | undefined {
@@ -1564,6 +1670,118 @@ function WorkRun({
   );
 }
 
+function IntermediateResults({
+  unit,
+  subAgents,
+  closeSignal,
+  setWorkRunOpen,
+  openWorkRunKey,
+  parentSessionId,
+  showSubAgentCards,
+  workRunDurations,
+  subAgentItems,
+  onForkMessage,
+}: {
+  unit: IntermediateResultsRenderUnit;
+  subAgents: Record<string, SubAgentSummary>;
+  closeSignal: string | null;
+  setWorkRunOpen: (unitKey: string, nextOpen: boolean) => void;
+  openWorkRunKey: string | null;
+  parentSessionId?: string;
+  showSubAgentCards?: boolean;
+  workRunDurations: ReadonlyMap<string, number | null>;
+  subAgentItems: Record<string, WorkItem[]>;
+  onForkMessage?: (messageId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const workItems = useMemo(
+    () => unit.units.flatMap((innerUnit) =>
+      innerUnit.kind === "work_run" ? innerUnit.items : [],
+    ),
+    [unit.units],
+  );
+  const summaryItems = useMemo(
+    () => workRunCountItems(workItems, showSubAgentCards ?? true),
+    [showSubAgentCards, workItems],
+  );
+  const assistantCount = unit.units.filter((innerUnit) =>
+    innerUnit.kind === "message" && innerUnit.item.role === "assistant",
+  ).length;
+  const summaryText = workingSummaryText(summaryItems);
+  const countText = [
+    assistantCount > 0
+      ? `${assistantCount} intermediate ${assistantCount === 1 ? "message" : "messages"}`
+      : null,
+    summaryText || null,
+  ].filter(Boolean).join(" · ");
+
+  return (
+    <div className="timeline-entry timeline-entry--intermediate-results">
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="timeline-entry__header timeline-entry__header--work-run"
+            aria-label={countText ? `Intermediate results ${countText}` : "Intermediate results"}
+          >
+            <ChevronRightIcon className="timeline-entry__chevron" />
+            <span className="timeline-entry__working-label">Intermediate results</span>
+            {countText ? (
+              <span className="working-items__summary">{countText}</span>
+            ) : null}
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="timeline-entry__work-run-body">
+            {unit.units.map((innerUnit) => {
+              const innerKey = renderUnitKey(innerUnit);
+              if (innerUnit.kind === "message") {
+                return (
+                  <TimelineEntry
+                    key={innerKey}
+                    item={innerUnit.item}
+                    subAgentTitle={
+                      innerUnit.item.subAgentId
+                        ? subAgents[innerUnit.item.subAgentId]?.title
+                        : undefined
+                    }
+                    subAgentStatus={
+                      innerUnit.item.subAgentId
+                        ? subAgents[innerUnit.item.subAgentId]?.status
+                        : undefined
+                    }
+                    closeSignal={closeSignal}
+                    onForkMessage={onForkMessage}
+                  />
+                );
+              }
+              return (
+                <WorkRun
+                  key={innerKey}
+                  unit={innerUnit}
+                  subAgents={subAgents}
+                  active={false}
+                  sessionIsActive={false}
+                  phase={null}
+                  open={openWorkRunKey === innerUnit.key}
+                  closeSignal={closeSignal}
+                  onOpenChange={(nextOpen) => setWorkRunOpen(innerUnit.key, nextOpen)}
+                  parentSessionId={parentSessionId}
+                  showSubAgentCards={showSubAgentCards}
+                  durationSeconds={workRunDurations.get(innerUnit.key) ?? null}
+                  subAgentItems={subAgentItems}
+                />
+              );
+            })}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+}
+
 function TurnSummaryBlock({
   items,
   durationSeconds,
@@ -1785,6 +2003,14 @@ export const SessionTimeline = memo(function SessionTimeline({
       turnCostUsd,
       workRunDurations,
     ],
+  );
+  const displayRenderUnits = useMemo(
+    () => collapseCompletedTurnIntermediateResults(
+      renderUnits,
+      !sessionIsActive && !selectedSubAgentStillRunning,
+      subAgents,
+    ),
+    [renderUnits, selectedSubAgentStillRunning, sessionIsActive, subAgents],
   );
   const {
     containerRef,
@@ -2027,8 +2253,8 @@ export const SessionTimeline = memo(function SessionTimeline({
   return (
     <div className="session-scroll-area" ref={containerRef}>
       <div className="timeline">
-        {renderUnits.map((unit) => {
-          const unitKey = renderUnitKey(unit);
+        {displayRenderUnits.map((unit) => {
+          const unitKey = unit.kind === "intermediate_results" ? unit.key : renderUnitKey(unit);
           const turnSummary = turnSummaries.get(unitKey);
           const summaryNode = turnSummary ? (
             <TurnSummaryBlock
@@ -2058,6 +2284,23 @@ export const SessionTimeline = memo(function SessionTimeline({
                 />
                 {summaryNode}
               </Fragment>
+            );
+          }
+          if (unit.kind === "intermediate_results") {
+            return (
+              <IntermediateResults
+                key={unitKey}
+                unit={unit}
+                subAgents={subAgents}
+                closeSignal={closeCollapsiblesSignal}
+                setWorkRunOpen={setWorkRunOpen}
+                openWorkRunKey={openWorkRunKey}
+                parentSessionId={parentSessionId}
+                showSubAgentCards={showSubAgentCards}
+                workRunDurations={workRunDurations}
+                subAgentItems={subAgentItems}
+                onForkMessage={onForkMessage}
+              />
             );
           }
           const isActiveUnit = unit.key === activeWorkRunKey;
