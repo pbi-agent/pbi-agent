@@ -42,6 +42,7 @@ describe("parseSseEvent", () => {
     ["session_state", { seq: 1, type: "session_state", payload: { state: "done" } }],
     ["replay", { seq: 0, type: "server.replay_incomplete", payload: { snapshot_required: "true" } }],
     ["message_added", { seq: 1, type: "message_added", payload: { item_id: "m1", role: "assistant" } }],
+    ["queued_follow_ups_updated", { seq: 1, type: "queued_follow_ups_updated", payload: { queued_follow_ups: [{ id: "f1" }] } }],
     ["usage_updated", { seq: 1, type: "usage_updated", payload: { scope: "other", usage: {} } }],
     ["welcome", { seq: 1, type: "welcome", payload: { interactive: "yes" } }],
   ])("rejects malformed SSE payloads: %s", (_label, event) => {
@@ -103,6 +104,32 @@ describe("parseSseEvent", () => {
 
     expect(event?.type).toBe("message_added");
   });
+
+  it.each(["checkpoint", "after_finish"] as const)(
+    "accepts queued follow-up updates with %s delivery",
+    (delivery) => {
+      const event = parseSseEvent(JSON.stringify({
+        seq: 1,
+        type: "queued_follow_ups_updated",
+        created_at: "2026-05-04T00:00:00Z",
+        payload: {
+          queued_follow_ups: [{
+            id: "follow-1",
+            delivery,
+            text: "Queued prompt",
+            file_paths: [],
+            image_attachments: [],
+            image_count: 0,
+            created_at: "2026-05-04T00:00:00Z",
+            failed: false,
+            error: null,
+          }],
+        },
+      }));
+
+      expect(event?.type).toBe("queued_follow_ups_updated");
+    },
+  );
 
   it.each([
     ["missing old_item_id", { item: { item_id: "m2", role: "assistant", content: "Hello" } }],

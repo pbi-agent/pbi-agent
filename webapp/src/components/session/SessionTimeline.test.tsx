@@ -393,6 +393,8 @@ describe("SessionTimeline", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: /Intermediate results/ }));
+
     const workingButtons = screen.getAllByRole("button", { name: /Working/ });
     expect(workingButtons).toHaveLength(1);
     expect(workingButtons[0]).toHaveAccessibleName("Working 3 agents");
@@ -415,6 +417,284 @@ describe("SessionTimeline", () => {
     expect(second.compareDocumentPosition(third)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
+  });
+
+  it("keeps visible notices between collapsed intermediate result segments", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Run the task",
+            markdown: false,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            label: "shell",
+            status: "completed",
+            items: [
+              {
+                text: "first command",
+                metadata: { tool_name: "shell", status: "completed" },
+              },
+            ],
+          },
+          {
+            kind: "message",
+            itemId: "notice-1",
+            role: "notice",
+            content: "Recovered after retry.",
+            markdown: false,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-2",
+            label: "explore_workspace",
+            status: "completed",
+            items: [
+              {
+                text: "read file",
+                metadata: { tool_name: "explore_workspace", status: "completed" },
+              },
+            ],
+          },
+          {
+            kind: "message",
+            itemId: "assistant-1",
+            role: "assistant",
+            content: "Final answer",
+            markdown: true,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    const intermediateButtons = screen.getAllByRole("button", {
+      name: /Intermediate results/,
+    });
+    expect(intermediateButtons).toHaveLength(2);
+    for (const button of intermediateButtons) {
+      fireEvent.click(button);
+    }
+
+    const firstWork = screen.getByRole("button", { name: "Working 1 shell" });
+    const notice = screen.getByText("Recovered after retry.");
+    const secondWork = screen.getByRole("button", { name: "Working 1 search" });
+    const finalAnswer = screen.getByText("Final answer");
+
+    expect(firstWork.compareDocumentPosition(notice)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(notice.compareDocumentPosition(secondWork)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(secondWork.compareDocumentPosition(finalAnswer)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("collapses completed work-only turns without a final assistant message", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Run the task",
+            markdown: false,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            label: "shell",
+            status: "completed",
+            items: [
+              {
+                text: "first command",
+                metadata: { tool_name: "shell", status: "completed" },
+              },
+            ],
+          },
+          {
+            kind: "message",
+            itemId: "notice-1",
+            role: "notice",
+            content: "Recovered after retry.",
+            markdown: false,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-2",
+            label: "explore_workspace",
+            status: "completed",
+            items: [
+              {
+                text: "read file",
+                metadata: { tool_name: "explore_workspace", status: "completed" },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    expect(screen.getByText("Run the task")).toBeInTheDocument();
+    expect(screen.getByText("Recovered after retry.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Working/ })).not.toBeInTheDocument();
+
+    const intermediateButtons = screen.getAllByRole("button", {
+      name: /Intermediate results/,
+    });
+    expect(intermediateButtons).toHaveLength(2);
+    for (const button of intermediateButtons) {
+      fireEvent.click(button);
+    }
+
+    const userMessage = screen.getByText("Run the task");
+    const firstWork = screen.getByRole("button", { name: "Working 1 shell" });
+    const notice = screen.getByText("Recovered after retry.");
+    const secondWork = screen.getByRole("button", { name: "Working 1 search" });
+
+    expect(userMessage.compareDocumentPosition(firstWork)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(firstWork.compareDocumentPosition(notice)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(notice.compareDocumentPosition(secondWork)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("collapses assistant progress and later work when a turn ends with an error", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Run the task",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "assistant-progress",
+            role: "assistant",
+            content: "I am still working on it.",
+            markdown: true,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            label: "shell",
+            status: "completed",
+            items: [
+              {
+                text: "first command",
+                metadata: { tool_name: "shell", status: "completed" },
+              },
+            ],
+          },
+          {
+            kind: "message",
+            itemId: "error-1",
+            role: "error",
+            content: "Run interrupted before a final answer.",
+            markdown: false,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    expect(screen.getByText("Run the task")).toBeInTheDocument();
+    expect(screen.getByText("Run interrupted before a final answer.")).toBeInTheDocument();
+    expect(screen.queryByText("I am still working on it.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Working/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Intermediate results/ }));
+
+    const userMessage = screen.getByText("Run the task");
+    const progressMessage = screen.getByText("I am still working on it.");
+    const work = screen.getByRole("button", { name: "Working 1 shell" });
+    const error = screen.getByText("Run interrupted before a final answer.");
+
+    expect(userMessage.compareDocumentPosition(progressMessage)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(progressMessage.compareDocumentPosition(work)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(work.compareDocumentPosition(error)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("does not collapse assistant progress followed by running sub-agent work when processing is cleared", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Run the task",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "assistant-progress",
+            role: "assistant",
+            content: "I am still working on it.",
+            markdown: true,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            label: "shell",
+            status: "running",
+            subAgentId: "subagent-a",
+            items: [
+              {
+                text: "long command",
+                metadata: { tool_name: "shell", status: "running" },
+              },
+            ],
+          },
+        ]}
+        subAgents={{
+          "subagent-a": { title: "Researcher", status: "running" },
+        }}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    expect(screen.getByText("Run the task")).toBeInTheDocument();
+    expect(screen.getByText("I am still working on it.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Working 1 agent" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Intermediate results/ })).not.toBeInTheDocument();
   });
 
   it("shows scoped summaries and duration on sub-agent cards", () => {
@@ -481,6 +761,7 @@ describe("SessionTimeline", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: /Intermediate results/ }));
     openWorking(0, false);
 
     expect(screen.getByRole("button", {
@@ -726,6 +1007,8 @@ describe("SessionTimeline", () => {
     );
 
     expect(screen.queryByRole("note", { name: /Turn summary/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Intermediate results/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Working 1 shell/ })).toBeInTheDocument();
 
     rerender(
       <SessionTimeline
@@ -1366,6 +1649,8 @@ describe("SessionTimeline", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: /Intermediate results/ }));
+
     expect(screen.getByRole("button", {
       name: "Working 1 shell · 0:02",
     })).toBeInTheDocument();
@@ -1696,6 +1981,9 @@ describe("SessionTimeline", () => {
       />,
     );
 
+    expect(screen.queryByRole("button", { name: /Working/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Intermediate results/ }));
+
     expect(screen.getByRole("button", {
       name: "Working 1 shell · 0:03",
     })).toBeInTheDocument();
@@ -1758,6 +2046,9 @@ describe("SessionTimeline", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", {
+      name: /Intermediate results/,
+    }));
     expect(screen.getByRole("button", {
       name: "Working 1 shell · 0:05",
     })).toBeInTheDocument();
@@ -1767,6 +2058,174 @@ describe("SessionTimeline", () => {
     expect(screen.getByRole("note", {
       name: "Turn summary 1 read, 1 shell · 0:12",
     })).toBeInTheDocument();
+  });
+
+  it("collapses completed-turn intermediate assistant and work output while leaving final answer visible", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Do the work",
+            markdown: false,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            label: "shell",
+            status: "completed",
+            items: [{ text: "first output", metadata: { tool_name: "shell" } }],
+          },
+          {
+            kind: "message",
+            itemId: "assistant-progress",
+            role: "assistant",
+            content: "Intermediate assistant update.",
+            markdown: true,
+          },
+          {
+            kind: "message",
+            itemId: "notice-1",
+            role: "notice",
+            content: "Provider overloaded. Retrying in 10s...",
+            markdown: false,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-2",
+            label: "explore_workspace",
+            status: "completed",
+            items: [{ text: "second output", metadata: { tool_name: "explore_workspace", arguments: { target: "read" } } }],
+          },
+          {
+            kind: "message",
+            itemId: "assistant-final",
+            role: "assistant",
+            content: "Final answer.",
+            markdown: true,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    expect(screen.getByText("Final answer.")).toBeInTheDocument();
+    expect(screen.getByText("Provider overloaded. Retrying in 10s...")).toBeInTheDocument();
+    expect(screen.queryByText("Intermediate assistant update.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Working 1 shell/ })).not.toBeInTheDocument();
+
+    const intermediateButtons = screen.getAllByRole("button", {
+      name: /Intermediate results/,
+    });
+    expect(intermediateButtons).toHaveLength(2);
+    for (const button of intermediateButtons) {
+      fireEvent.click(button);
+    }
+
+    const firstWork = screen.getByRole("button", { name: /Working 1 shell/ });
+    const notice = screen.getByText("Provider overloaded. Retrying in 10s...");
+    const secondWork = screen.getByRole("button", { name: /Working 1 read/ });
+    expect(screen.getByText("Intermediate assistant update.")).toBeInTheDocument();
+    expect(firstWork.compareDocumentPosition(notice)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(notice.compareDocumentPosition(secondWork)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("collapses completed-turn work-only output while leaving final answer visible", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Do the work",
+            markdown: false,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            label: "shell",
+            status: "completed",
+            items: [{ text: "first output", metadata: { tool_name: "shell" } }],
+          },
+          {
+            kind: "message",
+            itemId: "assistant-final",
+            role: "assistant",
+            content: "Final answer.",
+            markdown: true,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    expect(screen.getByText("Final answer.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Working 1 shell/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Intermediate results/ }));
+
+    expect(screen.getByRole("button", { name: /Working 1 shell/ })).toBeInTheDocument();
+  });
+
+  it("does not collapse intermediate output while a session is active", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Do the work",
+            markdown: false,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            label: "shell",
+            status: "completed",
+            items: [{ text: "first output", metadata: { tool_name: "shell" } }],
+          },
+          {
+            kind: "message",
+            itemId: "assistant-progress",
+            role: "assistant",
+            content: "Intermediate assistant update.",
+            markdown: true,
+          },
+          {
+            kind: "message",
+            itemId: "assistant-final",
+            role: "assistant",
+            content: "Final answer.",
+            markdown: true,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "model_wait", message: "Thinking..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /Intermediate results/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Intermediate assistant update.")).toBeInTheDocument();
+    expect(screen.getByText("Final answer.")).toBeInTheDocument();
   });
 
   it("uses sub-agent item timestamps for card duration when turn usage is unavailable", () => {
@@ -2892,7 +3351,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
         subAgents={{}}
         connection="connected"
         waitMessage={null}
-        processing={null}
+        processing={{ active: true, phase: "tool_execution", message: "Applying..." }}
         itemsVersion={1}
       />,
     );
@@ -2926,8 +3385,9 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
     );
 
     await waitFor(() => {
-      expect(workingButton).toHaveAttribute("aria-expanded", "false");
+      expect(screen.queryByRole("button", { name: /Working/ })).not.toBeInTheDocument();
     });
+    expect(screen.getByRole("button", { name: /Intermediate results/ })).toBeInTheDocument();
     expect(screen.queryByText("TODO.md")).not.toBeInTheDocument();
   });
 
@@ -4112,6 +4572,9 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
     // historical block.
     scrollSpy.mockClear();
 
+    fireEvent.click(screen.getByRole("button", { name: /Intermediate results/ }));
+    scrollSpy.mockClear();
+
     const workingButton = screen.getByRole("button", { name: /Working/ });
     // The closeSignal forces historical Working blocks closed once the
     // final assistant message arrives.
@@ -4209,6 +4672,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
 
     // Once the run completes, the apply_patch diff stays collapsed until the
     // user opens this specific block.
+    fireEvent.click(screen.getByRole("button", { name: /Intermediate results/ }));
     workingButton = screen.getByRole("button", { name: /Working/ });
     expect(workingButton).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("TODO.md")).not.toBeInTheDocument();
@@ -4308,9 +4772,11 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
       );
 
       await waitFor(() => {
-        workingButton = screen.getByRole("button", { name: /Working/ });
-        expect(workingButton).toHaveAttribute("aria-expanded", "false");
+        expect(screen.getByRole("button", { name: /Intermediate results/ })).toBeInTheDocument();
       });
+      fireEvent.click(screen.getByRole("button", { name: /Intermediate results/ }));
+      workingButton = screen.getByRole("button", { name: /Working/ });
+      expect(workingButton).toHaveAttribute("aria-expanded", "false");
       expect(screen.queryByText("TODO.md")).not.toBeInTheDocument();
     },
   );
@@ -4355,6 +4821,8 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
         itemsVersion={1}
       />,
     );
+
+    fireEvent.click(screen.getByRole("button", { name: /Intermediate results/ }));
 
     let workingButtons = screen.getAllByRole("button", { name: /Working/ });
     expect(workingButtons).toHaveLength(2);

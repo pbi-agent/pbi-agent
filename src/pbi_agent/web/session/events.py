@@ -44,6 +44,7 @@ class EventsMixin:
     _app_stream: EventStream
     _directory_key: str
     _live_sessions: dict[str, LiveSessionState]
+    _maybe_submit_deferred_follow_up: Any
 
     def get_event_stream(self, stream_id: str) -> EventStream:
         if stream_id == APP_EVENT_STREAM_ID:
@@ -290,6 +291,7 @@ class EventsMixin:
         allow_after_end: bool = False,
     ) -> dict[str, Any] | None:
         live_session = self._live_sessions[live_session_id]
+        event: dict[str, Any] | None = None
         with live_session.event_lock:
             if live_session.ended_at is not None and not allow_after_end:
                 return None
@@ -318,7 +320,9 @@ class EventsMixin:
                 live_session.event_stream.discard(event)
                 raise
             live_session.event_stream.deliver(event)
-            return event
+        if event_type == "input_state" and bool(payload.get("enabled")):
+            self._maybe_submit_deferred_follow_up(live_session_id)
+        return event
 
     def _apply_live_event(
         self,
@@ -335,6 +339,8 @@ class EventsMixin:
         if event_type == "session_reset":
             snapshot.items = []
             snapshot.sub_agents = {}
+            snapshot.queued_follow_ups = []
+            live_session.queued_follow_ups.clear()
             snapshot.wait_message = None
             snapshot.processing = None
             snapshot.turn_usage = None
@@ -414,6 +420,12 @@ class EventsMixin:
                 "prompt_id"
             ) == payload.get("prompt_id"):
                 snapshot.pending_user_questions = None
+            return
+        if event_type == "queued_follow_ups_updated":
+            queued = payload.get("queued_follow_ups")
+            snapshot.queued_follow_ups = (
+                list(queued) if isinstance(queued, list) else []
+            )
             return
         if event_type == "usage_updated":
             turn_usage = _turn_usage_from_event_payload(payload)
@@ -517,6 +529,8 @@ class EventsMixin:
                     else None
                 )
                 snapshot.pending_user_questions = None
+                snapshot.queued_follow_ups = []
+                live_session.queued_follow_ups.clear()
             else:
                 snapshot.session_ended = False
                 snapshot.fatal_error = None

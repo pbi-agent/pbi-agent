@@ -57,6 +57,7 @@ function makeSessionState(
         },
       ],
     },
+    queuedFollowUps: [],
     items: [],
     itemsVersion: 0,
     subAgents: {},

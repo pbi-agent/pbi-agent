@@ -702,6 +702,7 @@ export type SessionInputPayload = LiveSessionInputRequest & {
   profile_id?: string | null;
   interactive_mode?: boolean;
   include_tool_history?: boolean;
+  follow_up_delivery?: "checkpoint" | "after_finish" | null;
 };
 
 export async function submitSessionInput(
@@ -760,6 +761,42 @@ export async function runShellCommand(
       method: "POST",
       body: jsonBody("POST /api/sessions/{session_id}/shell-command", payload),
     },
+  );
+  return result.session;
+}
+
+export async function sendQueuedFollowUp(
+  sessionId: string,
+  followUpId: string,
+): Promise<LiveSession> {
+  const result = await apiRequest<
+    "POST /api/sessions/{session_id}/follow-ups/{follow_up_id}/send",
+    LiveSessionResponsePayload
+  >(
+    "POST /api/sessions/{session_id}/follow-ups/{follow_up_id}/send",
+    pathFor("POST /api/sessions/{session_id}/follow-ups/{follow_up_id}/send", {
+      session_id: sessionId,
+      follow_up_id: followUpId,
+    }),
+    { method: "POST" },
+  );
+  return result.session;
+}
+
+export async function cancelQueuedFollowUp(
+  sessionId: string,
+  followUpId: string,
+): Promise<LiveSession> {
+  const result = await apiRequest<
+    "DELETE /api/sessions/{session_id}/follow-ups/{follow_up_id}",
+    LiveSessionResponsePayload
+  >(
+    "DELETE /api/sessions/{session_id}/follow-ups/{follow_up_id}",
+    pathFor("DELETE /api/sessions/{session_id}/follow-ups/{follow_up_id}", {
+      session_id: sessionId,
+      follow_up_id: followUpId,
+    }),
+    { method: "DELETE" },
   );
   return result.session;
 }

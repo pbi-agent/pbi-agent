@@ -9,6 +9,7 @@ import type {
   PendingUserQuestions,
   ProcessingPhase,
   ProcessingState,
+  QueuedFollowUp,
   SessionWebEvent,
   TimelineItem,
   TimelineToolGroupEntry,
@@ -51,6 +52,7 @@ export type SessionRuntimeState = {
   sessionEnded: boolean;
   fatalError: string | null;
   pendingUserQuestions: PendingUserQuestions | null;
+  queuedFollowUps: QueuedFollowUp[];
   items: TimelineItem[];
   itemsVersion: number;
   subAgents: Record<string, SubAgentState>;
@@ -104,6 +106,7 @@ export function createEmptySessionState(sessionId: string | null = null): Sessio
     sessionEnded: false,
     fatalError: null,
     pendingUserQuestions: null,
+    queuedFollowUps: [],
     items: [],
     itemsVersion: 0,
     subAgents: {},
@@ -692,6 +695,7 @@ export function reduceSessionEvent(
       patch.sessionEnded = false;
       patch.fatalError = null;
       patch.pendingUserQuestions = null;
+      patch.queuedFollowUps = [];
       break;
     case "session_identity":
       patch.sessionId = nextSessionId;
@@ -739,6 +743,9 @@ export function reduceSessionEvent(
       if (current.pendingUserQuestions?.prompt_id === event.payload.prompt_id) {
         patch.pendingUserQuestions = null;
       }
+      break;
+    case "queued_follow_ups_updated":
+      patch.queuedFollowUps = event.payload.queued_follow_ups ?? [];
       break;
     case "usage_updated": {
       const subAgentId = eventSubAgentId(event);
@@ -917,6 +924,7 @@ export function reduceSessionEvent(
         patch.processing = null;
         patch.fatalError = event.payload.fatal_error ?? null;
         patch.pendingUserQuestions = null;
+        patch.queuedFollowUps = [];
       } else {
         patch.sessionEnded = false;
         patch.fatalError = null;
@@ -985,6 +993,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
             waitMessage: null,
             processing: null,
             pendingUserQuestions: null,
+            queuedFollowUps: [],
             restoredInput: null,
             sessionEnded: false,
             // Set lastEventSeq from the server so the WS snapshot
@@ -1036,6 +1045,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
             turnUsage: options.preserveItems ? current.turnUsage : null,
             sessionEnded: session.status === "ended",
             fatalError: session.fatal_error,
+            queuedFollowUps: options.preserveItems ? current.queuedFollowUps : [],
             items: options.preserveItems ? current.items : [],
             itemsVersion: options.preserveItems ? current.itemsVersion : 0,
             subAgents: options.preserveItems ? current.subAgents : {},
@@ -1111,6 +1121,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
             sessionEnded: savedEndedSnapshot ? false : snapshot.session_ended,
             fatalError: snapshot.fatal_error,
             pendingUserQuestions: snapshot.pending_user_questions ?? null,
+            queuedFollowUps: snapshot.queued_follow_ups ?? [],
             items,
             itemsVersion: items.length,
             subAgents: normalizeSnapshotSubAgents(snapshot.sub_agents),

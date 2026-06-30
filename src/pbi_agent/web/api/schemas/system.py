@@ -280,6 +280,18 @@ class SubAgentSnapshotModel(BaseModel):
     )
 
 
+class QueuedFollowUpModel(BaseModel):
+    id: str
+    delivery: Literal["checkpoint", "after_finish"]
+    text: str
+    file_paths: list[str]
+    image_attachments: list[ImageAttachmentModel]
+    image_count: int
+    created_at: str
+    failed: bool
+    error: str | None = None
+
+
 class LiveSessionSnapshotModel(BaseModel):
     live_session_id: str
     session_id: str | None
@@ -292,6 +304,7 @@ class LiveSessionSnapshotModel(BaseModel):
     session_ended: bool
     fatal_error: str | None
     pending_user_questions: PendingUserQuestionsModel | None
+    queued_follow_ups: list[QueuedFollowUpModel] = Field(default_factory=list)
     items: list[dict[str, Any]]
     sub_agents: dict[str, SubAgentSnapshotModel]
     last_event_seq: int
@@ -335,6 +348,7 @@ class LiveSessionInputRequest(BaseModel):
     profile_id: str | None = None
     interactive_mode: bool = False
     include_tool_history: bool = False
+    follow_up_delivery: Literal["checkpoint", "after_finish"] | None = None
 
 
 class LiveSessionShellCommandRequest(BaseModel):

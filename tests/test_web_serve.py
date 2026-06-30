@@ -7,7 +7,7 @@ import logging
 import re
 import sqlite3
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from io import BytesIO, StringIO
 from pathlib import Path
 import threading
@@ -1216,6 +1216,409 @@ def test_switched_session_worker_runs_in_selected_workspace(
 
     assert captured["workspace_root"] == workspace_b.resolve()
     assert Path.cwd().resolve() == workspace_a.resolve()
+
+
+def test_after_finish_follow_up_is_backend_queued_until_input_ready(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    run_started = threading.Event()
+    release_turn = threading.Event()
+    follow_up_received = threading.Event()
+    received: list[str] = []
+
+    def fake_run_session_loop(_runtime, display, **_kwargs) -> int:
+        initial = display.user_prompt()
+        received.append(getattr(initial, "text", str(initial)))
+        display.assistant_start()
+        run_started.set()
+        assert release_turn.wait(timeout=2)
+        display.assistant_stop()
+        follow_up = display.user_prompt()
+        received.append(getattr(follow_up, "text", str(follow_up)))
+        follow_up_received.set()
+        return 0
+
+    monkeypatch.setattr(
+        "pbi_agent.web.session.workers.run_session_loop",
+        fake_run_session_loop,
+    )
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        create_response = client.post("/api/sessions", json={"title": "Follow ups"})
+        assert create_response.status_code == 200
+        session_id = create_response.json()["session"]["session_id"]
+
+        initial_response = client.post(
+            f"/api/sessions/{session_id}/messages",
+            json={"text": "Initial"},
+        )
+        assert initial_response.status_code == 200
+        live_session_id = initial_response.json()["session"]["live_session_id"]
+        assert run_started.wait(timeout=2)
+
+        queued_response = client.post(
+            f"/api/sessions/{session_id}/messages",
+            json={
+                "text": "Queued later",
+                "follow_up_delivery": "after_finish",
+            },
+        )
+        assert queued_response.status_code == 200
+        queued_snapshot = app.state.manager.get_live_session_detail(live_session_id)[
+            "snapshot"
+        ]
+        assert queued_snapshot["queued_follow_ups"][0]["text"] == "Queued later"
+
+        release_turn.set()
+        assert follow_up_received.wait(timeout=2)
+        worker = app.state.manager._live_sessions[live_session_id].worker
+        assert worker is not None
+        worker.join(timeout=2)
+
+    assert received == ["Initial", "Queued later"]
+
+
+def test_manual_after_finish_follow_up_send_during_processing_is_rejected(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    run_started = threading.Event()
+    release_turn = threading.Event()
+    follow_up_received = threading.Event()
+    received: list[str] = []
+
+    def fake_run_session_loop(_runtime, display, **_kwargs) -> int:
+        initial = display.user_prompt()
+        received.append(getattr(initial, "text", str(initial)))
+        display.assistant_start()
+        run_started.set()
+        assert release_turn.wait(timeout=2)
+        display.assistant_stop()
+        follow_up = display.user_prompt()
+        received.append(getattr(follow_up, "text", str(follow_up)))
+        follow_up_received.set()
+        return 0
+
+    monkeypatch.setattr(
+        "pbi_agent.web.session.workers.run_session_loop",
+        fake_run_session_loop,
+    )
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        create_response = client.post("/api/sessions", json={"title": "Follow ups"})
+        assert create_response.status_code == 200
+        session_id = create_response.json()["session"]["session_id"]
+
+        initial_response = client.post(
+            f"/api/sessions/{session_id}/messages",
+            json={"text": "Initial"},
+        )
+        assert initial_response.status_code == 200
+        live_session_id = initial_response.json()["session"]["live_session_id"]
+        assert run_started.wait(timeout=2)
+
+        queued_response = client.post(
+            f"/api/sessions/{session_id}/messages",
+            json={
+                "text": "Queued later",
+                "follow_up_delivery": "after_finish",
+            },
+        )
+        assert queued_response.status_code == 200
+        follow_up_id = app.state.manager.get_live_session_detail(live_session_id)[
+            "snapshot"
+        ]["queued_follow_ups"][0]["id"]
+
+        send_response = client.post(
+            f"/api/sessions/{session_id}/follow-ups/{follow_up_id}/send"
+        )
+        assert send_response.status_code == 400
+        assert "assistant is ready" in send_response.json()["detail"]
+        snapshot = app.state.manager.get_live_session_detail(live_session_id)[
+            "snapshot"
+        ]
+        assert snapshot["queued_follow_ups"][0]["id"] == follow_up_id
+        assert snapshot["queued_follow_ups"][0]["text"] == "Queued later"
+        assert received == ["Initial"]
+
+        release_turn.set()
+        assert follow_up_received.wait(timeout=2)
+        worker = app.state.manager._live_sessions[live_session_id].worker
+        assert worker is not None
+        worker.join(timeout=2)
+
+    assert received == ["Initial", "Queued later"]
+
+
+def test_checkpoint_follow_up_is_pending_and_drained_before_turn_end(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    run_started = threading.Event()
+    steer_received = threading.Event()
+    release_turn = threading.Event()
+    received: list[str] = []
+
+    def fake_run_session_loop(_runtime, display, **_kwargs) -> int:
+        initial = display.user_prompt()
+        received.append(getattr(initial, "text", str(initial)))
+        display.assistant_start()
+        run_started.set()
+        while not steer_received.is_set():
+            steers = display.drain_checkpoint_follow_ups()
+            if steers:
+                received.extend(item.text for item in steers)
+                steer_received.set()
+                break
+            time.sleep(0.01)
+        assert release_turn.wait(timeout=2)
+        display.assistant_stop()
+        return 0
+
+    monkeypatch.setattr(
+        "pbi_agent.web.session.workers.run_session_loop",
+        fake_run_session_loop,
+    )
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        create_response = client.post("/api/sessions", json={"title": "Follow ups"})
+        assert create_response.status_code == 200
+        session_id = create_response.json()["session"]["session_id"]
+
+        initial_response = client.post(
+            f"/api/sessions/{session_id}/messages",
+            json={"text": "Initial"},
+        )
+        assert initial_response.status_code == 200
+        live_session_id = initial_response.json()["session"]["live_session_id"]
+        assert run_started.wait(timeout=2)
+
+        queued_response = client.post(
+            f"/api/sessions/{session_id}/messages",
+            json={
+                "text": "Steer now",
+                "follow_up_delivery": "checkpoint",
+            },
+        )
+        assert queued_response.status_code == 200
+        queued_snapshot = app.state.manager.get_live_session_detail(live_session_id)[
+            "snapshot"
+        ]
+        assert queued_snapshot["queued_follow_ups"][0]["delivery"] == "checkpoint"
+        assert queued_snapshot["queued_follow_ups"][0]["text"] == "Steer now"
+
+        assert steer_received.wait(timeout=2)
+        delivered_snapshot = app.state.manager.get_live_session_detail(live_session_id)[
+            "snapshot"
+        ]
+        assert delivered_snapshot["queued_follow_ups"] == []
+        release_turn.set()
+        worker = app.state.manager._live_sessions[live_session_id].worker
+        assert worker is not None
+        worker.join(timeout=2)
+
+    assert received == ["Initial", "Steer now"]
+
+
+def test_checkpoint_follow_up_can_be_cancelled_before_delivery(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    run_started = threading.Event()
+    release_drain = threading.Event()
+    drained = threading.Event()
+    received: list[str] = []
+
+    def fake_run_session_loop(_runtime, display, **_kwargs) -> int:
+        initial = display.user_prompt()
+        received.append(getattr(initial, "text", str(initial)))
+        display.assistant_start()
+        run_started.set()
+        assert release_drain.wait(timeout=2)
+        received.extend(item.text for item in display.drain_checkpoint_follow_ups())
+        drained.set()
+        display.assistant_stop()
+        return 0
+
+    monkeypatch.setattr(
+        "pbi_agent.web.session.workers.run_session_loop",
+        fake_run_session_loop,
+    )
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        create_response = client.post("/api/sessions", json={"title": "Follow ups"})
+        assert create_response.status_code == 200
+        session_id = create_response.json()["session"]["session_id"]
+
+        initial_response = client.post(
+            f"/api/sessions/{session_id}/messages",
+            json={"text": "Initial"},
+        )
+        assert initial_response.status_code == 200
+        live_session_id = initial_response.json()["session"]["live_session_id"]
+        assert run_started.wait(timeout=2)
+
+        queued_response = client.post(
+            f"/api/sessions/{session_id}/messages",
+            json={"text": "Cancel me", "follow_up_delivery": "checkpoint"},
+        )
+        assert queued_response.status_code == 200
+        follow_up_id = app.state.manager.get_live_session_detail(live_session_id)[
+            "snapshot"
+        ]["queued_follow_ups"][0]["id"]
+
+        cancel_response = client.delete(
+            f"/api/sessions/{session_id}/follow-ups/{follow_up_id}"
+        )
+        assert cancel_response.status_code == 200
+        assert (
+            app.state.manager.get_live_session_detail(live_session_id)["snapshot"][
+                "queued_follow_ups"
+            ]
+            == []
+        )
+
+        release_drain.set()
+        assert drained.wait(timeout=2)
+        worker = app.state.manager._live_sessions[live_session_id].worker
+        assert worker is not None
+        worker.join(timeout=2)
+
+    assert received == ["Initial"]
+
+
+def test_checkpoint_follow_up_falls_back_after_turn_without_boundary(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    run_started = threading.Event()
+    release_turn = threading.Event()
+    follow_up_received = threading.Event()
+    received: list[str] = []
+
+    def fake_run_session_loop(_runtime, display, **_kwargs) -> int:
+        initial = display.user_prompt()
+        received.append(getattr(initial, "text", str(initial)))
+        display.assistant_start()
+        run_started.set()
+        assert release_turn.wait(timeout=2)
+        display.assistant_stop()
+        follow_up = display.user_prompt()
+        received.append(getattr(follow_up, "text", str(follow_up)))
+        follow_up_received.set()
+        return 0
+
+    monkeypatch.setattr(
+        "pbi_agent.web.session.workers.run_session_loop",
+        fake_run_session_loop,
+    )
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        create_response = client.post("/api/sessions", json={"title": "Follow ups"})
+        assert create_response.status_code == 200
+        session_id = create_response.json()["session"]["session_id"]
+
+        initial_response = client.post(
+            f"/api/sessions/{session_id}/messages",
+            json={"text": "Initial"},
+        )
+        assert initial_response.status_code == 200
+        live_session_id = initial_response.json()["session"]["live_session_id"]
+        assert run_started.wait(timeout=2)
+
+        queued_response = client.post(
+            f"/api/sessions/{session_id}/messages",
+            json={
+                "text": "Fallback steer",
+                "follow_up_delivery": "checkpoint",
+            },
+        )
+        assert queued_response.status_code == 200
+        queued_snapshot = app.state.manager.get_live_session_detail(live_session_id)[
+            "snapshot"
+        ]
+        assert queued_snapshot["queued_follow_ups"][0]["delivery"] == "checkpoint"
+
+        release_turn.set()
+        assert follow_up_received.wait(timeout=2)
+        worker = app.state.manager._live_sessions[live_session_id].worker
+        assert worker is not None
+        worker.join(timeout=2)
+
+    assert received == ["Initial", "Fallback steer"]
+
+
+def test_multiple_after_finish_follow_ups_are_submitted_fifo(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    run_started = threading.Event()
+    release_turn = threading.Event()
+    follow_ups_received = threading.Event()
+    received: list[str] = []
+
+    def fake_run_session_loop(_runtime, display, **_kwargs) -> int:
+        initial = display.user_prompt()
+        received.append(getattr(initial, "text", str(initial)))
+        display.assistant_start()
+        run_started.set()
+        assert release_turn.wait(timeout=2)
+        display.assistant_stop()
+        first = display.user_prompt()
+        received.append(getattr(first, "text", str(first)))
+        display.assistant_start()
+        display.assistant_stop()
+        second = display.user_prompt()
+        received.append(getattr(second, "text", str(second)))
+        follow_ups_received.set()
+        return 0
+
+    monkeypatch.setattr(
+        "pbi_agent.web.session.workers.run_session_loop",
+        fake_run_session_loop,
+    )
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        create_response = client.post("/api/sessions", json={"title": "Follow ups"})
+        assert create_response.status_code == 200
+        session_id = create_response.json()["session"]["session_id"]
+
+        initial_response = client.post(
+            f"/api/sessions/{session_id}/messages",
+            json={"text": "Initial"},
+        )
+        assert initial_response.status_code == 200
+        live_session_id = initial_response.json()["session"]["live_session_id"]
+        assert run_started.wait(timeout=2)
+
+        for text in ("First queued", "Second queued"):
+            queued_response = client.post(
+                f"/api/sessions/{session_id}/messages",
+                json={"text": text, "follow_up_delivery": "after_finish"},
+            )
+            assert queued_response.status_code == 200
+        queued_snapshot = app.state.manager.get_live_session_detail(live_session_id)[
+            "snapshot"
+        ]
+        assert [item["text"] for item in queued_snapshot["queued_follow_ups"]] == [
+            "First queued",
+            "Second queued",
+        ]
+
+        release_turn.set()
+        assert follow_ups_received.wait(timeout=2)
+        worker = app.state.manager._live_sessions[live_session_id].worker
+        assert worker is not None
+        worker.join(timeout=2)
+
+    assert received == ["Initial", "First queued", "Second queued"]
 
 
 def _write_default_commands(root: Path) -> None:
@@ -10300,7 +10703,13 @@ def test_get_run_detail_returns_observability_events(tmp_path, monkeypatch) -> N
         store.update_run_session(
             run_session_id,
             status="completed",
-            total_api_calls=1,
+            total_duration_ms=55,
+            input_tokens=100,
+            output_tokens=50,
+            provider_total_tokens=150,
+            total_tool_calls=4,
+            total_api_calls=7,
+            error_count=3,
         )
 
     with TestClient(app) as client:
@@ -10310,6 +10719,13 @@ def test_get_run_detail_returns_observability_events(tmp_path, monkeypatch) -> N
     payload = response.json()
     assert payload["run"]["run_session_id"] == run_session_id
     assert payload["run"]["status"] == "completed"
+    assert payload["run"]["total_duration_ms"] == 55
+    assert payload["run"]["input_tokens"] == 100
+    assert payload["run"]["output_tokens"] == 50
+    assert payload["run"]["provider_total_tokens"] == 150
+    assert payload["run"]["total_tool_calls"] == 4
+    assert payload["run"]["total_api_calls"] == 7
+    assert payload["run"]["error_count"] == 3
     assert [event["event_type"] for event in payload["events"]] == [
         "run_start",
         "model_call",
@@ -10321,6 +10737,112 @@ def test_get_run_detail_returns_observability_events(tmp_path, monkeypatch) -> N
     assert payload["events"][1]["success"] is True
     assert payload["events"][1]["status_code"] == 200
     assert payload["events"][1]["total_tokens"] == 20
+
+
+def test_get_run_detail_returns_live_observability_summary_for_started_run(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Saved session",
+        )
+        run_session_id = store.create_run_session(
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+        )
+        started_at = datetime.now(timezone.utc) - timedelta(seconds=65)
+        store._conn.execute(
+            "UPDATE run_sessions SET started_at = ? WHERE run_session_id = ?",
+            (started_at.isoformat(), run_session_id),
+        )
+        store._conn.commit()
+        store.add_observability_event(
+            run_session_id=run_session_id,
+            session_id=session_id,
+            step_index=0,
+            event_type="run_start",
+        )
+        store.add_observability_event(
+            run_session_id=run_session_id,
+            session_id=session_id,
+            step_index=1,
+            event_type="model_call",
+            duration_ms=120,
+            provider="openai",
+            model="gpt-5.4",
+            prompt_tokens=12,
+            completion_tokens=8,
+            total_tokens=20,
+            status_code=200,
+            success=True,
+        )
+        store.add_observability_event(
+            run_session_id=run_session_id,
+            session_id=session_id,
+            step_index=2,
+            event_type="tool_call",
+            duration_ms=30,
+            tool_name="shell",
+            tool_call_id="call-1",
+            success=False,
+            error_message="boom",
+        )
+        store.add_observability_event(
+            run_session_id=run_session_id,
+            session_id=session_id,
+            step_index=3,
+            event_type="error",
+            success=False,
+            error_message="follow-up error",
+        )
+        store.add_observability_event(
+            run_session_id=run_session_id,
+            session_id=session_id,
+            step_index=-1,
+            event_type="web_event",
+            duration_ms=999,
+            prompt_tokens=999,
+            completion_tokens=999,
+            total_tokens=999,
+            success=False,
+            metadata={
+                "type": "input_state",
+                "payload": {"enabled": True},
+                "seq": 1,
+            },
+        )
+
+    with TestClient(app) as client:
+        response = client.get(f"/api/runs/{run_session_id}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["run"]["status"] == "started"
+    assert payload["run"]["total_api_calls"] == 1
+    assert payload["run"]["total_tool_calls"] == 1
+    assert payload["run"]["error_count"] == 2
+    assert payload["run"]["input_tokens"] == 12
+    assert payload["run"]["output_tokens"] == 8
+    assert payload["run"]["provider_total_tokens"] == 20
+    assert payload["run"]["total_duration_ms"] >= 65_000
+    assert [event["event_type"] for event in payload["events"]] == [
+        "run_start",
+        "model_call",
+        "tool_call",
+        "error",
+    ]
 
 
 def test_get_run_detail_returns_not_found_for_unknown_run() -> None:

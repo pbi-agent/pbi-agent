@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 from pbi_agent.config import ResolvedRuntime
 from pbi_agent.models.messages import ImageAttachment, TokenUsage, WebSearchSource
@@ -136,6 +136,11 @@ class PendingToolGroup:
         self.function_count = 0
         self.function_names.clear()
         self.item_by_call_id.clear()
+
+
+@runtime_checkable
+class CheckpointFollowUpDisplay(Protocol):
+    def drain_checkpoint_follow_ups(self) -> list[QueuedInput]: ...
 
 
 class DisplayProtocol(Protocol):
@@ -301,6 +306,7 @@ class DisplayProtocol(Protocol):
 
 
 __all__ = [
+    "CheckpointFollowUpDisplay",
     "DisplayProtocol",
     "PendingToolCall",
     "PendingUserQuestion",

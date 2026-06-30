@@ -115,7 +115,7 @@ export type LiveSessionBoundSseEventModel = { seq: number; created_at: string; t
 
 export type LiveSessionEndedSseEventModel = { seq: number; created_at: string; type: "live_session_ended"; payload: LiveSessionLifecycleSseEventPayloadModel };
 
-export type LiveSessionInputRequest = { text?: string; file_paths?: string[]; image_paths?: string[]; image_upload_ids?: string[]; profile_id?: string | null; interactive_mode?: boolean; include_tool_history?: boolean };
+export type LiveSessionInputRequest = { text?: string; file_paths?: string[]; image_paths?: string[]; image_upload_ids?: string[]; profile_id?: string | null; interactive_mode?: boolean; include_tool_history?: boolean; follow_up_delivery?: "checkpoint" | "after_finish" | null };
 
 export type LiveSessionLifecycleSseEventPayloadModel = { live_session: LiveSessionModel };
 
@@ -125,7 +125,7 @@ export type LiveSessionResponse = { session: LiveSessionModel };
 
 export type LiveSessionShellCommandRequest = { command?: string };
 
-export type LiveSessionSnapshotModel = { live_session_id: string; session_id: string | null; runtime: RuntimeSummaryModel | null; input_enabled: boolean; wait_message: string | null; processing: ProcessingStateModel | null; session_usage: Record<string, unknown> | null; turn_usage: Record<string, unknown> | null; session_ended: boolean; fatal_error: string | null; pending_user_questions: PendingUserQuestionsModel | null; items: Record<string, unknown>[]; sub_agents: Record<string, SubAgentSnapshotModel>; last_event_seq: number };
+export type LiveSessionSnapshotModel = { live_session_id: string; session_id: string | null; runtime: RuntimeSummaryModel | null; input_enabled: boolean; wait_message: string | null; processing: ProcessingStateModel | null; session_usage: Record<string, unknown> | null; turn_usage: Record<string, unknown> | null; session_ended: boolean; fatal_error: string | null; pending_user_questions: PendingUserQuestionsModel | null; queued_follow_ups?: QueuedFollowUpModel[]; items: Record<string, unknown>[]; sub_agents: Record<string, SubAgentSnapshotModel>; last_event_seq: number };
 
 export type LiveSessionStartedSseEventModel = { seq: number; created_at: string; type: "live_session_started"; payload: LiveSessionLifecycleSseEventPayloadModel };
 
@@ -220,6 +220,12 @@ export type ProviderUsageLimitsResponse = { provider_id: string; provider_kind: 
 export type ProviderViewModel = { id: string; name: string; kind: string; auth_mode: string; responses_url: string | null; generic_api_url: string | null; google_cloud_project: string | null; google_cloud_location: string | null; secret_source: "none" | "plaintext" | "env_var"; secret_env_var: string | null; has_secret: boolean; supports_stt: boolean; auth_status: ProviderAuthStatusModel };
 
 export type QuestionAnswerRequest = { question_id: string; answer: string; selected_suggestion_index?: number | null; custom?: boolean; custom_note?: string | null };
+
+export type QueuedFollowUpModel = { id: string; delivery: "checkpoint" | "after_finish"; text: string; file_paths: string[]; image_attachments: ImageAttachmentModel[]; image_count: number; created_at: string; failed: boolean; error?: string | null };
+
+export type QueuedFollowUpsUpdatedSseEventModel = { seq: number; created_at: string; type: "queued_follow_ups_updated"; payload: QueuedFollowUpsUpdatedSseEventPayloadModel };
+
+export type QueuedFollowUpsUpdatedSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; queued_follow_ups?: QueuedFollowUpModel[] };
 
 export type ResolvedRuntimeViewModel = { provider: string; provider_id: string; profile_id: string; model: string; sub_agent_model: string | null; reasoning_effort: string; max_tokens: number; service_tier: string | null; allowed_tools: string[] | null; max_tool_workers: number; max_retries: number; compact_threshold: number; compact_tail_turns: number; compact_preserve_recent_tokens: number; compact_tool_output_max_chars: number; responses_url: string; generic_api_url: string; supports_image_inputs: boolean };
 
@@ -405,11 +411,11 @@ export type WorkspaceSwitchedSseEventPayloadModel = { workspace_key: string };
 
 export type AppSseEventModel = SessionCreatedSseEventModel | SessionUpdatedSseEventModel | BoardStagesUpdatedSseEventModel | TaskUpdatedSseEventModel | TaskDeletedSseEventModel | LiveSessionStartedSseEventModel | LiveSessionUpdatedSseEventModel | LiveSessionBoundSseEventModel | LiveSessionEndedSseEventModel | WorkspaceSwitchedSseEventModel;
 
-export type SessionSseEventModel = SessionResetSseEventModel | SessionIdentitySseEventModel | InputStateSseEventModel | WaitStateSseEventModel | ProcessingStateSseEventModel | UserQuestionsRequestedSseEventModel | UserQuestionsResolvedSseEventModel | UsageUpdatedSseEventModel | MessageAddedSseEventModel | MessageRekeyedSseEventModel | MessageRemovedSseEventModel | ThinkingUpdatedSseEventModel | ToolGroupAddedSseEventModel | SubAgentStateSseEventModel | SessionStateSseEventModel | SessionRuntimeUpdatedSseEventModel | WelcomeSseEventModel;
+export type SessionSseEventModel = SessionResetSseEventModel | SessionIdentitySseEventModel | InputStateSseEventModel | WaitStateSseEventModel | ProcessingStateSseEventModel | UserQuestionsRequestedSseEventModel | UserQuestionsResolvedSseEventModel | QueuedFollowUpsUpdatedSseEventModel | UsageUpdatedSseEventModel | MessageAddedSseEventModel | MessageRekeyedSseEventModel | MessageRemovedSseEventModel | ThinkingUpdatedSseEventModel | ToolGroupAddedSseEventModel | SubAgentStateSseEventModel | SessionStateSseEventModel | SessionRuntimeUpdatedSseEventModel | WelcomeSseEventModel;
 
 export type SseControlEventModel = ServerConnectedSseEventModel | ServerHeartbeatSseEventModel | ServerReplayIncompleteSseEventModel;
 
-export type SseEventModel = ServerConnectedSseEventModel | ServerHeartbeatSseEventModel | ServerReplayIncompleteSseEventModel | SessionResetSseEventModel | SessionIdentitySseEventModel | InputStateSseEventModel | WaitStateSseEventModel | ProcessingStateSseEventModel | UserQuestionsRequestedSseEventModel | UserQuestionsResolvedSseEventModel | UsageUpdatedSseEventModel | MessageAddedSseEventModel | MessageRekeyedSseEventModel | MessageRemovedSseEventModel | ThinkingUpdatedSseEventModel | ToolGroupAddedSseEventModel | SubAgentStateSseEventModel | SessionStateSseEventModel | SessionRuntimeUpdatedSseEventModel | WelcomeSseEventModel | SessionCreatedSseEventModel | SessionUpdatedSseEventModel | BoardStagesUpdatedSseEventModel | TaskUpdatedSseEventModel | TaskDeletedSseEventModel | LiveSessionStartedSseEventModel | LiveSessionUpdatedSseEventModel | LiveSessionBoundSseEventModel | LiveSessionEndedSseEventModel | WorkspaceSwitchedSseEventModel;
+export type SseEventModel = ServerConnectedSseEventModel | ServerHeartbeatSseEventModel | ServerReplayIncompleteSseEventModel | SessionResetSseEventModel | SessionIdentitySseEventModel | InputStateSseEventModel | WaitStateSseEventModel | ProcessingStateSseEventModel | UserQuestionsRequestedSseEventModel | UserQuestionsResolvedSseEventModel | QueuedFollowUpsUpdatedSseEventModel | UsageUpdatedSseEventModel | MessageAddedSseEventModel | MessageRekeyedSseEventModel | MessageRemovedSseEventModel | ThinkingUpdatedSseEventModel | ToolGroupAddedSseEventModel | SubAgentStateSseEventModel | SessionStateSseEventModel | SessionRuntimeUpdatedSseEventModel | WelcomeSseEventModel | SessionCreatedSseEventModel | SessionUpdatedSseEventModel | BoardStagesUpdatedSseEventModel | TaskUpdatedSseEventModel | TaskDeletedSseEventModel | LiveSessionStartedSseEventModel | LiveSessionUpdatedSseEventModel | LiveSessionBoundSseEventModel | LiveSessionEndedSseEventModel | WorkspaceSwitchedSseEventModel;
 
 export type ApiOperationResponses = {
   "GET /api/agents/search": AgentMentionSearchResponse;
@@ -475,6 +481,8 @@ export type ApiOperationResponses = {
   "DELETE /api/sessions/{session_id}": void;
   "GET /api/sessions/{session_id}": SessionDetailResponse;
   "PATCH /api/sessions/{session_id}": SessionResponse;
+  "DELETE /api/sessions/{session_id}/follow-ups/{follow_up_id}": LiveSessionResponse;
+  "POST /api/sessions/{session_id}/follow-ups/{follow_up_id}/send": LiveSessionResponse;
   "POST /api/sessions/{session_id}/fork": SessionResponse;
   "POST /api/sessions/{session_id}/images": SessionImageUploadResponse;
   "POST /api/sessions/{session_id}/interrupt": LiveSessionResponse;
@@ -563,6 +571,8 @@ export type ApiOperationPathParams = {
   "DELETE /api/sessions/{session_id}": { session_id: string };
   "GET /api/sessions/{session_id}": { session_id: string };
   "PATCH /api/sessions/{session_id}": { session_id: string };
+  "DELETE /api/sessions/{session_id}/follow-ups/{follow_up_id}": { session_id: string; follow_up_id: string };
+  "POST /api/sessions/{session_id}/follow-ups/{follow_up_id}/send": { session_id: string; follow_up_id: string };
   "POST /api/sessions/{session_id}/fork": { session_id: string };
   "POST /api/sessions/{session_id}/images": { session_id: string };
   "POST /api/sessions/{session_id}/interrupt": { session_id: string };

@@ -29,7 +29,12 @@ from pbi_agent.config import (
     Settings,
     resolve_runtime_for_profile_id,
 )
-from pbi_agent.display.protocol import DisplayProtocol, QueuedInput, QueuedRuntimeChange
+from pbi_agent.display.protocol import (
+    CheckpointFollowUpDisplay,
+    DisplayProtocol,
+    QueuedInput,
+    QueuedRuntimeChange,
+)
 from pbi_agent.extensions import (
     find_extension_for_slash,
     format_extensions_markdown,
@@ -47,6 +52,7 @@ from pbi_agent.models.messages import (
     ImageAttachment,
     TokenUsage,
     ToolCall,
+    UserTurnInput,
 )
 from pbi_agent.observability import RunTracer
 from pbi_agent.providers import create_provider
@@ -1830,22 +1836,53 @@ def _run_tool_iterations(
                 ),
             )
 
+        steer_user_input = _drain_checkpoint_follow_ups(
+            provider=provider,
+            display=display,
+            store=store,
+            session_id=session_id,
+        )
+
         try:
             if compacted_after_tools:
-                response = provider.request_turn(
-                    user_message=_compaction_continuation_prompt(
-                        current_user_turn_text
-                    ),
-                    instructions=instructions,
-                    session_id=session_id,
-                    display=display,
-                    session_usage=session_usage,
-                    turn_usage=turn_usage,
-                    tracer=tracer,
+                continuation_text = _compaction_continuation_prompt(
+                    current_user_turn_text
                 )
+                if steer_user_input is not None:
+                    steer_user_input = UserTurnInput(
+                        text=(
+                            f"{continuation_text}\n\n"
+                            "User follow-up for the current turn:\n"
+                            f"{steer_user_input.text}"
+                        ).strip(),
+                        images=list(steer_user_input.images),
+                    )
+                    response = provider.request_turn(
+                        user_input=steer_user_input,
+                        instructions=instructions,
+                        session_id=session_id,
+                        display=display,
+                        session_usage=session_usage,
+                        turn_usage=turn_usage,
+                        tracer=tracer,
+                    )
+                else:
+                    response = provider.request_turn(
+                        user_message=continuation_text,
+                        instructions=instructions,
+                        session_id=session_id,
+                        display=display,
+                        session_usage=session_usage,
+                        turn_usage=turn_usage,
+                        tracer=tracer,
+                    )
             else:
+                follow_up_kwargs: dict[str, Any] = {}
+                if steer_user_input is not None:
+                    follow_up_kwargs["steer_user_input"] = steer_user_input
                 response = provider.request_turn(
                     tool_result_items=tool_result_items,
+                    **follow_up_kwargs,
                     instructions=instructions,
                     session_id=session_id,
                     display=display,
@@ -1867,6 +1904,57 @@ def _run_tool_iterations(
             raise
 
     return response, had_errors, request_count
+
+
+def _drain_checkpoint_follow_ups(
+    *,
+    provider: Any,
+    display: DisplayProtocol,
+    store: SessionStore | None,
+    session_id: str | None,
+) -> UserTurnInput | None:
+    if not isinstance(display, CheckpointFollowUpDisplay):
+        return None
+    queued_items = display.drain_checkpoint_follow_ups()
+    if not queued_items:
+        return None
+
+    texts: list[str] = []
+    images: list[ImageAttachment] = []
+    for queued in queued_items:
+        turn_input = _build_user_turn_input(
+            text=queued.text,
+            image_paths=[],
+            images=queued.images,
+            settings=provider.settings,
+        )
+        history_text = _user_turn_history_text(turn_input)
+        if store is not None and session_id is not None:
+            message_id = _add_message(
+                store,
+                session_id,
+                _runtime_from_provider(provider),
+                "user",
+                history_text,
+                file_paths=queued.file_paths,
+                image_attachments=queued.image_attachments,
+            )
+            _publish_persisted_message(
+                display,
+                store,
+                message_id,
+                previous_item_id=queued.item_id,
+            )
+        elif history_text:
+            display.render_user_message(history_text)
+        if turn_input.text.strip():
+            texts.append(turn_input.text.strip())
+        images.extend(turn_input.images)
+
+    return UserTurnInput(
+        text="\n\n".join(texts),
+        images=images,
+    )
 
 
 def _raise_if_sub_agent_timed_out(

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import re
 import threading
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 from pbi_agent.config import ResolvedRuntime
 from pbi_agent.session_store import (
     KanbanTaskRecord,
+    ObservabilityEventRecord,
     RunSessionRecord,
     SessionRecord,
     SessionStore,
@@ -71,6 +73,43 @@ def _resolve_session_activity(
         active_run=active_run,
         status_run=active_run or latest_web_run or latest_run,
     )
+
+
+def _serialize_run_detail_run(
+    run: RunSessionRecord,
+    events: list[ObservabilityEventRecord],
+) -> dict[str, Any]:
+    serialized = _serialize_run_session(run)
+    if run.status in _TERMINAL_RUN_STATUSES:
+        return serialized
+
+    detail_events = [event for event in events if event.event_type != "web_event"]
+    started_at = datetime.fromisoformat(run.started_at)
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=timezone.utc)
+    serialized.update(
+        {
+            "total_duration_ms": max(
+                0,
+                int((datetime.now(timezone.utc) - started_at).total_seconds() * 1000),
+            ),
+            "input_tokens": sum(event.prompt_tokens or 0 for event in detail_events),
+            "output_tokens": sum(
+                event.completion_tokens or 0 for event in detail_events
+            ),
+            "provider_total_tokens": sum(
+                event.total_tokens or 0 for event in detail_events
+            ),
+            "total_tool_calls": sum(
+                1 for event in detail_events if event.event_type == "tool_call"
+            ),
+            "total_api_calls": sum(
+                1 for event in detail_events if event.event_type == "model_call"
+            ),
+            "error_count": sum(1 for event in detail_events if event.success == 0),
+        }
+    )
+    return serialized
 
 
 if TYPE_CHECKING:
@@ -315,7 +354,7 @@ class SavedSessionsMixin:
                     raise KeyError(run_session_id)
             events = store.list_observability_events(run_session_id=run_session_id)
         return {
-            "run": _serialize_run_session(run),
+            "run": _serialize_run_detail_run(run, events),
             "events": [
                 _serialize_observability_event(event)
                 for event in events
