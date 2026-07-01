@@ -645,6 +645,8 @@ def _serialize_observability_event(  # pyright: ignore[reportUnusedFunction] - i
         "prompt_tokens": record.prompt_tokens,
         "completion_tokens": record.completion_tokens,
         "total_tokens": record.total_tokens,
+        "cached_input_tokens": record.cached_input_tokens,
+        "reasoning_tokens": record.reasoning_tokens,
         "status_code": record.status_code,
         "success": None if record.success is None else bool(record.success),
         "error_message": record.error_message,

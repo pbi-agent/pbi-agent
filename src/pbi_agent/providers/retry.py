@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 import time
 import urllib.error
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pbi_agent.models.messages import TokenUsage
 
 MODEL_RATE_LIMIT_MAX_RETRIES = 10
 RETRYABLE_HTTP_STATUS_CODES = frozenset({500, 502, 503, 504})
@@ -123,6 +126,7 @@ def trace_provider_call(
     request_payload: dict[str, Any],
     response_payload: dict[str, Any],
     duration_ms: int,
+    usage: "TokenUsage | None" = None,
     prompt_tokens: int | None = None,
     completion_tokens: int | None = None,
     total_tokens: int | None = None,
@@ -133,6 +137,15 @@ def trace_provider_call(
 ) -> None:
     if tracer is None:
         return
+    cached_input_tokens: int | None = None
+    reasoning_tokens: int | None = None
+    if usage is not None:
+        usage_snapshot = usage.snapshot()
+        prompt_tokens = usage_snapshot.input_tokens
+        completion_tokens = usage_snapshot.output_tokens
+        total_tokens = usage_snapshot.total_tokens
+        cached_input_tokens = usage_snapshot.cached_input_tokens
+        reasoning_tokens = usage_snapshot.reasoning_tokens
     tracer.log_model_call(
         provider=provider,
         model=model,
@@ -144,6 +157,8 @@ def trace_provider_call(
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
+        cached_input_tokens=cached_input_tokens,
+        reasoning_tokens=reasoning_tokens,
         status_code=status_code,
         success=success,
         error_message=error_message,

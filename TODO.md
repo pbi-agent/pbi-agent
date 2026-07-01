@@ -1,10 +1,6 @@
-- [x] Inspect release context and workspace state
-- [x] Determine previous release boundary and next version
-- [x] Create release branch
-- [x] Draft changelog and bump version
-- [x] Run release validation
-- [x] Commit release changes
-- [x] Push release branch
-- [x] Open, verify, and merge release PR
-- [x] Verify tag/GitHub Release/publish
-- [x] Update memory and report
+- [x] Inspect current sessions DB schema for observability cached/reasoning columns
+- [x] Trace ChatGPT/OpenAI usage flow into observability events
+- [x] Patch missing cached/reasoning trace propagation if needed
+- [x] Add focused regression coverage
+- [x] Run targeted validation
+- [x] Update task memory

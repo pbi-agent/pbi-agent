@@ -816,6 +816,81 @@ def test_openai_chatgpt_codex_persists_and_replays_only_final_message(
     ]
 
 
+def test_openai_chatgpt_websocket_records_cached_reasoning_observability(
+    monkeypatch,
+    display_spy,
+) -> None:
+    def fake_send_websocket_request(
+        self, *, request_body, headers, connect_timeout, idle_timeout, request_timeout
+    ):
+        del self, request_body, headers, connect_timeout, idle_timeout, request_timeout
+        return [
+            {"type": "response.created", "response": {"id": "resp_usage"}},
+            {
+                "type": "response.completed",
+                "response": {
+                    "id": "resp_usage",
+                    "model": "gpt-5.5",
+                    "usage": {
+                        "input_tokens": 10,
+                        "input_tokens_details": {"cached_tokens": 6},
+                        "output_tokens": 5,
+                        "output_tokens_details": {"reasoning_tokens": 2},
+                        "total_tokens": 15,
+                    },
+                    "output": [
+                        {
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [{"type": "output_text", "text": "Done."}],
+                        }
+                    ],
+                },
+            },
+        ]
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.chatgpt_codex_backend._EnabledChatGPTCodexBackend.send_websocket_request",
+        fake_send_websocket_request,
+    )
+    provider = OpenAIProvider(
+        _make_settings(
+            provider="chatgpt",
+            responses_url=OPENAI_CHATGPT_RESPONSES_URL,
+            auth=OAuthSessionAuth(
+                provider_id="openai-chatgpt",
+                backend="openai_chatgpt",
+                access_token="access-token",
+                refresh_token="refresh-token",
+                account_id="acct_123",
+                expires_at=4070908800,
+                email="user@example.com",
+                plan_type="chatgpt_plus",
+            ),
+        )
+    )
+    tracer = Mock()
+
+    result = provider.request_turn(
+        user_message="Measure usage",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+        session_id="session-123",
+        tracer=tracer,
+    )
+
+    assert result.usage.cached_input_tokens == 6
+    assert result.usage.reasoning_tokens == 2
+    tracer.log_model_call.assert_called_once()
+    logged = tracer.log_model_call.call_args.kwargs
+    assert logged["prompt_tokens"] == 10
+    assert logged["cached_input_tokens"] == 6
+    assert logged["completion_tokens"] == 5
+    assert logged["reasoning_tokens"] == 2
+    assert logged["total_tokens"] == 15
+
+
 def test_openai_build_request_body_includes_service_tier() -> None:
     provider = OpenAIProvider(_make_settings(service_tier="flex"))
 

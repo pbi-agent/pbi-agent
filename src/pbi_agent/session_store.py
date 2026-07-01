@@ -161,6 +161,8 @@ CREATE TABLE IF NOT EXISTS observability_events (
     prompt_tokens         INTEGER,
     completion_tokens     INTEGER,
     total_tokens          INTEGER,
+    cached_input_tokens   INTEGER,
+    reasoning_tokens      INTEGER,
     status_code           INTEGER,
     success               INTEGER,
     error_message         TEXT,
@@ -384,6 +386,8 @@ class ObservabilityEventRecord:
     prompt_tokens: int | None
     completion_tokens: int | None
     total_tokens: int | None
+    cached_input_tokens: int | None
+    reasoning_tokens: int | None
     status_code: int | None
     success: int | None
     error_message: str | None
@@ -946,6 +950,22 @@ class SessionStore:
             if column_name not in run_session_columns:
                 self._conn.execute(
                     f"ALTER TABLE run_sessions ADD COLUMN {column_name} {column_sql}"
+                )
+
+        observability_event_columns = {
+            row["name"]
+            for row in self._conn.execute(
+                "PRAGMA table_info(observability_events)"
+            ).fetchall()
+        }
+        for column_name, column_sql in (
+            ("cached_input_tokens", "INTEGER"),
+            ("reasoning_tokens", "INTEGER"),
+        ):
+            if column_name not in observability_event_columns:
+                self._conn.execute(
+                    "ALTER TABLE observability_events "
+                    f"ADD COLUMN {column_name} {column_sql}"
                 )
 
         kanban_task_columns = {
@@ -2457,6 +2477,8 @@ class SessionStore:
         prompt_tokens: int | None = None,
         completion_tokens: int | None = None,
         total_tokens: int | None = None,
+        cached_input_tokens: int | None = None,
+        reasoning_tokens: int | None = None,
         status_code: int | None = None,
         success: bool | None = None,
         error_message: str | None = None,
@@ -2469,10 +2491,11 @@ class SessionStore:
                 "duration_ms, provider, model, url, request_config_json, "
                 "request_payload_json, response_payload_json, tool_name, "
                 "tool_call_id, tool_input_json, tool_output_json, tool_duration_ms, "
-                "prompt_tokens, completion_tokens, total_tokens, status_code, "
+                "prompt_tokens, completion_tokens, total_tokens, "
+                "cached_input_tokens, reasoning_tokens, status_code, "
                 "success, error_message, metadata_json) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                "?, ?, ?, ?, ?)",
+                "?, ?, ?, ?, ?, ?, ?)",
                 (
                     run_session_id,
                     session_id,
@@ -2494,6 +2517,8 @@ class SessionStore:
                     prompt_tokens,
                     completion_tokens,
                     total_tokens,
+                    cached_input_tokens,
+                    reasoning_tokens,
                     status_code,
                     None if success is None else int(success),
                     error_message,

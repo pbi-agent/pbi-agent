@@ -23,6 +23,7 @@ from pbi_agent.providers import retry as provider_retry
 from pbi_agent.providers.wait_messages import waiting_message_for_input
 
 if TYPE_CHECKING:
+    from pbi_agent.models.messages import TokenUsage
     from pbi_agent.observability import RunTracer
 
 
@@ -158,9 +159,7 @@ class JsonModelTransport:
                     tracer=tracer,
                     response_payload=response_json,
                     duration_ms=provider_retry.duration_ms(req_start),
-                    prompt_tokens=result.usage.input_tokens,
-                    completion_tokens=result.usage.output_tokens,
-                    total_tokens=result.usage.total_tokens,
+                    usage=result.usage,
                     status_code=200,
                     success=True,
                     metadata={"attempt": attempt + 1, **spec.metadata},
@@ -318,6 +317,7 @@ class JsonModelTransport:
         response_payload: dict[str, Any],
         duration_ms: int,
         success: bool,
+        usage: "TokenUsage | None" = None,
         prompt_tokens: int | None = None,
         completion_tokens: int | None = None,
         total_tokens: int | None = None,
@@ -334,6 +334,7 @@ class JsonModelTransport:
             request_payload=spec.trace_request_payload or spec.body,
             response_payload=response_payload,
             duration_ms=duration_ms,
+            usage=usage,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,

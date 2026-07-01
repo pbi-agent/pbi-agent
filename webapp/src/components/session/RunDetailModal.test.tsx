@@ -78,6 +78,8 @@ function makeEvent(overrides: Partial<ObservabilityEvent>): ObservabilityEvent {
     prompt_tokens: null,
     completion_tokens: null,
     total_tokens: 3,
+    cached_input_tokens: null,
+    reasoning_tokens: null,
     status_code: null,
     success: true,
     error_message: null,

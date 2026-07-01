@@ -58,6 +58,7 @@ from pbi_agent.models.messages import (
     UserTurnInput,
 )
 from pbi_agent.observability import RunTracer
+from pbi_agent.providers import retry as provider_retry
 from pbi_agent.providers.github_copilot_backend import (
     github_copilot_backend_for_model,
 )
@@ -1532,6 +1533,53 @@ def test_run_tracer_finish_merges_start_and_finish_metadata(tmp_path) -> None:
         "include_context": False,
         "tool_errors": False,
     }
+
+
+def test_trace_provider_call_persists_usage_detail_fields(tmp_path) -> None:
+    db_path = tmp_path / "sessions.db"
+
+    with SessionStore(db_path=db_path) as store:
+        session_id = store.create_session(str(tmp_path), "openai", "gpt-5", "trace me")
+        tracer = RunTracer.start(
+            store=store,
+            session_id=session_id,
+            agent_name="main",
+            agent_type="single_turn",
+            provider="openai",
+            provider_id=None,
+            profile_id=None,
+            model="gpt-5",
+        )
+
+        provider_retry.trace_provider_call(
+            tracer=tracer,
+            provider="openai",
+            model="gpt-5",
+            url="https://api.example.test/v1/responses",
+            request_config={},
+            request_payload={"input": "hello"},
+            response_payload={"output": "hi"},
+            duration_ms=42,
+            usage=TokenUsage(
+                input_tokens=17,
+                cached_input_tokens=11,
+                output_tokens=5,
+                reasoning_tokens=4,
+                provider_total_tokens=22,
+            ),
+            status_code=200,
+            success=True,
+        )
+        events = store.list_observability_events(
+            run_session_id=tracer.run_session_id or ""
+        )
+
+    model_event = next(event for event in events if event.event_type == "model_call")
+    assert model_event.prompt_tokens == 17
+    assert model_event.cached_input_tokens == 11
+    assert model_event.completion_tokens == 5
+    assert model_event.reasoning_tokens == 4
+    assert model_event.total_tokens == 22
 
 
 def test_run_sub_agent_task_creates_nested_run_session(tmp_path, monkeypatch) -> None:

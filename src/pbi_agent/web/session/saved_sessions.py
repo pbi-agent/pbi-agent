@@ -94,8 +94,14 @@ def _serialize_run_detail_run(
                 int((datetime.now(timezone.utc) - started_at).total_seconds() * 1000),
             ),
             "input_tokens": sum(event.prompt_tokens or 0 for event in detail_events),
+            "cached_input_tokens": sum(
+                event.cached_input_tokens or 0 for event in detail_events
+            ),
             "output_tokens": sum(
                 event.completion_tokens or 0 for event in detail_events
+            ),
+            "reasoning_tokens": sum(
+                event.reasoning_tokens or 0 for event in detail_events
             ),
             "provider_total_tokens": sum(
                 event.total_tokens or 0 for event in detail_events

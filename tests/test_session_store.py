@@ -208,6 +208,59 @@ def test_existing_session_table_adds_fork_columns(tmp_path) -> None:
     assert session.fork_created_at is None
 
 
+def test_existing_observability_table_adds_usage_columns(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    conn = sqlite3.connect(db)
+    conn.executescript(
+        """
+        CREATE TABLE observability_events (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_session_id        TEXT NOT NULL,
+            session_id            TEXT,
+            step_index            INTEGER NOT NULL,
+            event_type            TEXT NOT NULL,
+            timestamp             TEXT NOT NULL,
+            duration_ms           INTEGER,
+            provider              TEXT,
+            model                 TEXT,
+            url                   TEXT,
+            request_config_json   TEXT,
+            request_payload_json  TEXT,
+            response_payload_json TEXT,
+            tool_name             TEXT,
+            tool_call_id          TEXT,
+            tool_input_json       TEXT,
+            tool_output_json      TEXT,
+            tool_duration_ms      INTEGER,
+            prompt_tokens         INTEGER,
+            completion_tokens     INTEGER,
+            total_tokens          INTEGER,
+            status_code           INTEGER,
+            success               INTEGER,
+            error_message         TEXT,
+            metadata_json         TEXT NOT NULL DEFAULT '{}'
+        );
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    with SessionStore(db_path=db) as store:
+        store.add_observability_event(
+            run_session_id="run-1",
+            session_id=None,
+            step_index=0,
+            event_type="model_call",
+            cached_input_tokens=123,
+            reasoning_tokens=45,
+        )
+        events = store.list_observability_events(run_session_id="run-1")
+
+    assert len(events) == 1
+    assert events[0].cached_input_tokens == 123
+    assert events[0].reasoning_tokens == 45
+
+
 def test_directory_scoped_listing(tmp_path) -> None:
     db = tmp_path / "sessions.db"
     with SessionStore(db_path=db) as store:

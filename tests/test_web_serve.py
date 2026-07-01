@@ -10682,7 +10682,13 @@ def test_get_run_detail_returns_observability_events(tmp_path, monkeypatch) -> N
             provider="openai",
             model="gpt-5.4",
             request_payload={"input": "Hello"},
-            response_payload={"output": "Hi"},
+            response_payload={
+                "output": "Hi",
+                "usage": {
+                    "prompt_tokens_details": {"cached_tokens": 12},
+                    "completion_tokens_details": {"reasoning_tokens": 6},
+                },
+            },
             prompt_tokens=12,
             completion_tokens=8,
             total_tokens=20,
@@ -10705,7 +10711,9 @@ def test_get_run_detail_returns_observability_events(tmp_path, monkeypatch) -> N
             status="completed",
             total_duration_ms=55,
             input_tokens=100,
+            cached_input_tokens=90,
             output_tokens=50,
+            reasoning_tokens=30,
             provider_total_tokens=150,
             total_tool_calls=4,
             total_api_calls=7,
@@ -10721,7 +10729,9 @@ def test_get_run_detail_returns_observability_events(tmp_path, monkeypatch) -> N
     assert payload["run"]["status"] == "completed"
     assert payload["run"]["total_duration_ms"] == 55
     assert payload["run"]["input_tokens"] == 100
+    assert payload["run"]["cached_input_tokens"] == 90
     assert payload["run"]["output_tokens"] == 50
+    assert payload["run"]["reasoning_tokens"] == 30
     assert payload["run"]["provider_total_tokens"] == 150
     assert payload["run"]["total_tool_calls"] == 4
     assert payload["run"]["total_api_calls"] == 7
@@ -10733,7 +10743,13 @@ def test_get_run_detail_returns_observability_events(tmp_path, monkeypatch) -> N
     assert payload["events"][0]["request_config"] == {"provider": "openai"}
     assert payload["events"][0]["metadata"] == {"origin": "test"}
     assert payload["events"][1]["request_payload"] == {"input": "Hello"}
-    assert payload["events"][1]["response_payload"] == {"output": "Hi"}
+    assert payload["events"][1]["response_payload"] == {
+        "output": "Hi",
+        "usage": {
+            "prompt_tokens_details": {"cached_tokens": 12},
+            "completion_tokens_details": {"reasoning_tokens": 6},
+        },
+    }
     assert payload["events"][1]["success"] is True
     assert payload["events"][1]["status_code"] == 200
     assert payload["events"][1]["total_tokens"] == 20
@@ -10785,6 +10801,8 @@ def test_get_run_detail_returns_live_observability_summary_for_started_run(
             prompt_tokens=12,
             completion_tokens=8,
             total_tokens=20,
+            cached_input_tokens=9,
+            reasoning_tokens=3,
             status_code=200,
             success=True,
         )
@@ -10834,7 +10852,9 @@ def test_get_run_detail_returns_live_observability_summary_for_started_run(
     assert payload["run"]["total_tool_calls"] == 1
     assert payload["run"]["error_count"] == 2
     assert payload["run"]["input_tokens"] == 12
+    assert payload["run"]["cached_input_tokens"] == 9
     assert payload["run"]["output_tokens"] == 8
+    assert payload["run"]["reasoning_tokens"] == 3
     assert payload["run"]["provider_total_tokens"] == 20
     assert payload["run"]["total_duration_ms"] >= 65_000
     assert [event["event_type"] for event in payload["events"]] == [

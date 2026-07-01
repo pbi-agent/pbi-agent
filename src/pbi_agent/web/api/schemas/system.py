@@ -467,6 +467,8 @@ class ObservabilityEventModel(BaseModel):
     prompt_tokens: int | None
     completion_tokens: int | None
     total_tokens: int | None
+    cached_input_tokens: int | None
+    reasoning_tokens: int | None
     status_code: int | None
     success: bool | None
     error_message: str | None

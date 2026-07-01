@@ -163,7 +163,7 @@ export type ModelProfileViewModel = { id: string; name: string; provider_id: str
 
 export type NewSessionRequest = { profile_id?: string | null };
 
-export type ObservabilityEventModel = { run_session_id: string; session_id: string | null; step_index: number; event_type: string; timestamp: string; duration_ms: number | null; provider: string | null; model: string | null; url: string | null; request_config: unknown | null; request_payload: unknown | null; response_payload: unknown | null; tool_name: string | null; tool_call_id: string | null; tool_input: unknown | null; tool_output: unknown | null; tool_duration_ms: number | null; prompt_tokens: number | null; completion_tokens: number | null; total_tokens: number | null; status_code: number | null; success: boolean | null; error_message: string | null; metadata: unknown | null };
+export type ObservabilityEventModel = { run_session_id: string; session_id: string | null; step_index: number; event_type: string; timestamp: string; duration_ms: number | null; provider: string | null; model: string | null; url: string | null; request_config: unknown | null; request_payload: unknown | null; response_payload: unknown | null; tool_name: string | null; tool_call_id: string | null; tool_input: unknown | null; tool_output: unknown | null; tool_duration_ms: number | null; prompt_tokens: number | null; completion_tokens: number | null; total_tokens: number | null; cached_input_tokens: number | null; reasoning_tokens: number | null; status_code: number | null; success: boolean | null; error_message: string | null; metadata: unknown | null };
 
 export type PendingUserQuestionModel = { question_id: string; question: string; suggestions: string[]; recommended_suggestion_index?: 0 };
 

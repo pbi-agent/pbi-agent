@@ -811,6 +811,8 @@ export type ObservabilityEvent = {
   prompt_tokens: number | null;
   completion_tokens: number | null;
   total_tokens: number | null;
+  cached_input_tokens: number | null;
+  reasoning_tokens: number | null;
   status_code: number | null;
   success: boolean | null;
   error_message: string | null;
