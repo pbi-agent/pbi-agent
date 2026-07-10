@@ -1,5 +1,4 @@
-- [x] Inspect OpenAI/ChatGPT discovery, profile persistence, request payloads, and official Codex compatibility
-- [x] Add generic provider/model capability rules with OpenAI reasoning effort metadata
-- [x] Add OpenAI-only profile reasoning mode and request forwarding
-- [x] Add backend/frontend tests and regenerate API/static artifacts
-- [x] Run validation and update MEMORY.md
+- [x] Review the uncommitted GPT-5.6 pricing and cache-write changes for correctness and quality
+- [-] Fix any review findings (none reported)
+- [x] Repeat both reviews until no findings remain
+- [x] Run relevant validation and record task history

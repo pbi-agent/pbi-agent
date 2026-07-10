@@ -1,7 +1,7 @@
 ---
 name: review
 description: Review Mode
-model_profile_id: reviewer
+model_profile_id: worker-pro
 allowed_tools: read,shell
 ---
 

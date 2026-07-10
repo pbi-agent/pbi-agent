@@ -1,6 +1,7 @@
 ---
 name: explorer
 description: Explore the codebase and report focused file, module, and symbol findings.
+model_profile_id: worker-mini
 allowed_tools: read
 ---
 

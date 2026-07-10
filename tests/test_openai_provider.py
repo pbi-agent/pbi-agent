@@ -1051,7 +1051,10 @@ def test_openai_parse_response_extracts_function_calls_reasoning_and_usage() -> 
             "model": DEFAULT_MODEL,
             "usage": {
                 "input_tokens": 376,
-                "input_tokens_details": {"cached_tokens": 282},
+                "input_tokens_details": {
+                    "cached_tokens": 282,
+                    "cache_write_tokens": 42,
+                },
                 "output_tokens": 233,
                 "output_tokens_details": {"reasoning_tokens": 207},
             },
@@ -1101,6 +1104,7 @@ def test_openai_parse_response_extracts_function_calls_reasoning_and_usage() -> 
     assert result.function_calls[0].arguments == {"location": "San Francisco"}
     assert result.usage.input_tokens == 376
     assert result.usage.cached_input_tokens == 282
+    assert result.usage.cache_write_tokens == 42
     assert result.usage.output_tokens == 233
     assert result.usage.reasoning_tokens == 207
     assert result.usage.model == DEFAULT_MODEL

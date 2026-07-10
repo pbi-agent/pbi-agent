@@ -52,10 +52,14 @@ class ModelCatalog:
         normalized_model = model.lower()
         if normalized_model in self._models:
             return self._models[normalized_model]
-        for key, entry in self._models.items():
-            if normalized_model.startswith(key):
-                return entry
-        return None
+        matching_entries = [
+            (key, entry)
+            for key, entry in self._models.items()
+            if normalized_model.startswith(key)
+        ]
+        if not matching_entries:
+            return None
+        return max(matching_entries, key=lambda item: len(item[0]))[1]
 
     def get_pricing(self, model: str) -> tuple[float, float, float, float, float]:
         """Return per-MTok prices ``(input, cache_write_5m, cache_write_1h,
@@ -178,8 +182,8 @@ class TokenUsage:
 
         For Anthropic, ``input_tokens`` is set to the total input
         (base + cache reads + cache writes) so we subtract out all
-        cached / cache-creation components.  For OpenAI the cache-write
-        fields are always 0, so this collapses to the old behaviour.
+        cached / cache-creation components. OpenAI GPT-5.6 responses
+        likewise report cache writes within ``input_tokens``.
         """
         return max(
             self.input_tokens

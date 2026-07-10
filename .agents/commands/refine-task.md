@@ -1,7 +1,7 @@
 ---
 name: refine-task
 description: Refine Task Prompt Mode
-model_profile_id: planner
+model_profile_id: worker-pro
 allowed_tools: read,web,ask-user
 ---
 

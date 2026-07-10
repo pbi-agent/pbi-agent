@@ -1,7 +1,7 @@
 ---
 name: plan
 description: Plan Mode (Non-Interactive)
-model_profile_id: planner
+model_profile_id: worker-pro
 allowed_tools: read,shell,web
 ---
 
