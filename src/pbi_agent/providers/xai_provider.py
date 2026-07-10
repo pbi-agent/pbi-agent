@@ -823,7 +823,7 @@ def _response_include() -> list[str]:
 
 def _reasoning_request(model: str, effort: str) -> dict[str, Any]:
     if any(model.startswith(prefix) for prefix in _REASONING_EFFORT_MODELS):
-        return {"effort": _EFFORT_MAP.get(effort, "high")}
+        return {"effort": _EFFORT_MAP.get(effort, effort)}
     return {}
 
 

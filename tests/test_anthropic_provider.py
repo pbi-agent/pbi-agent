@@ -19,6 +19,7 @@ from pbi_agent.models.messages import (
     UserTurnInput,
 )
 from pbi_agent.providers.anthropic_provider import ANTHROPIC_API_URL, AnthropicProvider
+from pbi_agent.providers.protocols.anthropic_messages import build_messages_body
 from pbi_agent.session_store import MessageImageAttachment, MessageRecord
 from pbi_agent.tools.types import ToolResult
 from pbi_agent.web import uploads
@@ -57,6 +58,17 @@ def test_anthropic_provider_hides_web_tools_without_web_group() -> None:
     assert not any(
         str(tool.get("type", "")).startswith("web_search") for tool in provider._tools
     )
+
+
+def test_anthropic_request_body_preserves_custom_reasoning_effort() -> None:
+    body = build_messages_body(
+        settings=_make_settings(reasoning_effort="focused"),
+        tools=[],
+        messages=[],
+        system_prompt=None,
+    )
+
+    assert body["output_config"] == {"effort": "focused"}
 
 
 def test_anthropic_parse_response_extracts_cache_usage_and_tool_calls() -> None:

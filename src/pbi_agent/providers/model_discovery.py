@@ -61,6 +61,7 @@ class DiscoveredProviderModel:
     output_modalities: list[str] = field(default_factory=list)
     aliases: list[str] = field(default_factory=list)
     supports_reasoning_effort: bool | None = None
+    supported_reasoning_efforts: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -175,25 +176,36 @@ def _discover_openai_models(settings: Settings) -> list[DiscoveredProviderModel]
         payload = response.get("models", [])
         if not isinstance(payload, list):
             return []
-        return [
-            DiscoveredProviderModel(
-                id=model_id,
-                display_name=_string_value(item.get("display_name")) or model_id,
-                created=_created_value(item.get("created")),
-                owned_by="openai",
-                input_modalities=_string_list(item.get("input_modalities")),
-                output_modalities=["text"],
-                aliases=_string_list(item.get("aliases")),
-                supports_reasoning_effort=_openai_chatgpt_supports_reasoning_effort(
-                    item
-                ),
+        models: list[DiscoveredProviderModel] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            if item.get("supported_in_api", True) is False:
+                continue
+            if _string_value(item.get("visibility")) == "hide":
+                continue
+            model_id = _string_value(item.get("slug"))
+            if not model_id:
+                continue
+            supports_effort, supported_efforts = _reasoning_effort_metadata(
+                item.get("supported_reasoning_levels")
             )
-            for item in payload
-            if isinstance(item, dict)
-            if item.get("supported_in_api", True) is not False
-            if _string_value(item.get("visibility")) != "hide"
-            if (model_id := _string_value(item.get("slug")))
-        ]
+            if supports_effort is None:
+                supports_effort = _bool_value(item.get("supports_reasoning_summaries"))
+            models.append(
+                DiscoveredProviderModel(
+                    id=model_id,
+                    display_name=_string_value(item.get("display_name")) or model_id,
+                    created=_created_value(item.get("created")),
+                    owned_by="openai",
+                    input_modalities=_string_list(item.get("input_modalities")),
+                    output_modalities=["text"],
+                    aliases=_string_list(item.get("aliases")),
+                    supports_reasoning_effort=supports_effort,
+                    supported_reasoning_efforts=supported_efforts,
+                )
+            )
+        return models
 
     response = _get_json(
         settings, _replace_path_suffix(settings.responses_url, "models")
@@ -299,6 +311,9 @@ def _discover_github_copilot_models(
         input_modalities = ["text"]
         if _bool_value(supports.get("vision")):
             input_modalities.append("image")
+        supports_effort, supported_efforts = _reasoning_effort_metadata(
+            supports.get("reasoning_effort")
+        )
         models.append(
             DiscoveredProviderModel(
                 id=model_id,
@@ -308,9 +323,8 @@ def _discover_github_copilot_models(
                 input_modalities=input_modalities,
                 output_modalities=["text"],
                 aliases=aliases,
-                supports_reasoning_effort=_supports_reasoning_effort(
-                    supports.get("reasoning_effort")
-                ),
+                supports_reasoning_effort=supports_effort,
+                supported_reasoning_efforts=supported_efforts,
             )
         )
     return models
@@ -691,19 +705,28 @@ def _string_value(value: Any) -> str | None:
     return None
 
 
-def _openai_chatgpt_supports_reasoning_effort(item: dict[str, Any]) -> bool | None:
-    supported_levels = item.get("supported_reasoning_levels")
-    if isinstance(supported_levels, list):
-        return bool(supported_levels)
-    return _bool_value(item.get("supports_reasoning_summaries"))
-
-
-def _supports_reasoning_effort(value: Any) -> bool | None:
+def _reasoning_effort_metadata(value: Any) -> tuple[bool | None, list[str]]:
     if isinstance(value, bool):
-        return value
+        return value, []
     if isinstance(value, list):
-        return bool(_string_list(value))
-    return None
+        efforts = _reasoning_effort_values(value)
+        return bool(efforts), efforts
+    return None, []
+
+
+def _reasoning_effort_values(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    efforts: list[str] = []
+    for item in value:
+        effort = _string_value(item)
+        if isinstance(item, dict):
+            effort = _string_value(item.get("effort")) or _string_value(
+                item.get("reasoning_effort")
+            )
+        if effort and effort not in efforts:
+            efforts.append(effort)
+    return efforts
 
 
 def _string_list(value: Any) -> list[str]:

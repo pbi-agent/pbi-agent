@@ -207,7 +207,7 @@ export type ProviderModelFetchErrorModel = { code: string; message: string; stat
 
 export type ProviderModelListResponse = { provider_id: string; provider_kind: string; discovery_supported: boolean; manual_entry_required: boolean; models: ProviderModelViewModel[]; error?: ProviderModelFetchErrorModel | null };
 
-export type ProviderModelViewModel = { id: string; display_name?: string | null; created?: number | string | null; owned_by?: string | null; input_modalities?: string[]; output_modalities?: string[]; aliases?: string[]; supports_reasoning_effort?: boolean | null };
+export type ProviderModelViewModel = { id: string; display_name?: string | null; created?: number | string | null; owned_by?: string | null; input_modalities?: string[]; output_modalities?: string[]; aliases?: string[]; supports_reasoning_effort?: boolean | null; supported_reasoning_efforts?: string[] };
 
 export type ProviderMutationRequest = { id?: string | null; name: string; kind: string; auth_mode?: string | null; api_key?: string | null; api_key_env?: string | null; responses_url?: string | null; generic_api_url?: string | null; google_cloud_project?: string | null; google_cloud_location?: string | null };
 

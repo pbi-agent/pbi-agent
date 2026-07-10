@@ -302,7 +302,7 @@ class GoogleProvider(Provider):
             "generation_config": {
                 "thinking_level": _THINKING_LEVEL_MAP.get(
                     self._settings.reasoning_effort,
-                    "high",
+                    self._settings.reasoning_effort,
                 ),
                 "thinking_summaries": "auto",
                 "max_output_tokens": self._settings.max_tokens,

@@ -162,6 +162,21 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         self.assertEqual(args.sub_agent_model, "gpt-5-mini")
 
+    def test_parser_accepts_provider_specific_reasoning_effort(self) -> None:
+        parser = cli.build_parser()
+
+        args = parser.parse_args(
+            [
+                "--reasoning-effort",
+                "focused",
+                "run",
+                "--prompt",
+                "Review this workspace",
+            ]
+        )
+
+        self.assertEqual(args.reasoning_effort, "focused")
+
     def test_parser_accepts_skills_list_command(self) -> None:
         parser = cli.build_parser()
 

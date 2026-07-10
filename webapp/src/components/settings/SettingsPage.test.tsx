@@ -334,7 +334,7 @@ function makeConfigBootstrap(
         "deepgram",
         "elevenlabs",
       ],
-      reasoning_efforts: ["high", "medium"],
+      reasoning_efforts: ["low", "medium", "high", "xhigh"],
       openai_service_tiers: [],
       provider_metadata: {
         openai: {
@@ -938,6 +938,7 @@ describe("SettingsPage", () => {
           output_modalities: ["text"],
           aliases: [],
           supports_reasoning_effort: true,
+          supported_reasoning_efforts: ["low", "medium", "high", "xhigh"],
         },
         {
           id: "gpt-5.4-mini",
@@ -948,6 +949,13 @@ describe("SettingsPage", () => {
           output_modalities: ["text"],
           aliases: ["gpt-5-mini"],
           supports_reasoning_effort: true,
+          supported_reasoning_efforts: [
+            "none",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+          ],
         },
       ],
       error: null,
@@ -3241,6 +3249,80 @@ describe("SettingsPage", () => {
         name: "GPT-5.4 mini (gpt-5.4-mini)",
       }),
     ).toBeInTheDocument();
+  });
+
+  it("uses model reasoning efforts, generic fallback, and custom values", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Model Profiles");
+    await user.click(await screen.findByRole("button", { name: "Add Profile" }));
+    await waitFor(() =>
+      expect(fetchProviderModels).toHaveBeenCalledWith("openai-main"),
+    );
+
+    const reasoningSelect = screen.getByRole("combobox", {
+      name: "Reasoning effort",
+    });
+    let listbox = await openSelectListbox(user, reasoningSelect);
+    expect(
+      within(listbox).getByRole("option", { name: "xhigh" }),
+    ).toBeInTheDocument();
+    expect(
+      within(listbox).queryByRole("option", { name: "minimal" }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    await selectRadixOption(
+      user,
+      screen.getByRole("combobox", { name: "Model" }),
+      "GPT-5.4 mini (gpt-5.4-mini)",
+    );
+
+    listbox = await openSelectListbox(user, reasoningSelect);
+    expect(
+      within(listbox).getByRole("option", { name: "minimal" }),
+    ).toBeInTheDocument();
+    expect(
+      within(listbox).queryByRole("option", { name: "xhigh" }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    await selectRadixOption(
+      user,
+      screen.getByRole("combobox", { name: "Model" }),
+      "GPT-5.4 (gpt-5.4)",
+    );
+    await selectRadixOption(
+      user,
+      screen.getByRole("combobox", { name: "Sub-agent model" }),
+      "GPT-5.4 mini (gpt-5.4-mini)",
+    );
+
+    listbox = await openSelectListbox(user, reasoningSelect);
+    expect(
+      within(listbox).getByRole("option", { name: "low" }),
+    ).toBeInTheDocument();
+    expect(
+      within(listbox).queryByRole("option", { name: "minimal" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(listbox).queryByRole("option", { name: "xhigh" }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    const reasoningField = reasoningSelect.closest('[data-slot="field"]');
+    expect(reasoningField).not.toBeNull();
+    await user.click(
+      within(reasoningField as HTMLElement).getByRole("button", {
+        name: "Custom value",
+      }),
+    );
+    const customInput = within(reasoningField as HTMLElement).getByRole(
+      "textbox",
+    );
+    await user.type(customInput, "focused");
+    expect(customInput).toHaveValue("focused");
   });
 
   it("leaves the sub-agent model blank so the main profile model is used", async () => {

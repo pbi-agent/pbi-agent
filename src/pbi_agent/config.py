@@ -206,10 +206,9 @@ class Settings:
             raise ConfigError("--max-tool-workers must be >= 1.")
         if self.max_retries < 0:
             raise ConfigError("--max-retries must be >= 0.")
-        if self.reasoning_effort not in {"low", "medium", "high", "xhigh"}:
-            raise ConfigError(
-                "--reasoning-effort must be one of: low, medium, high, xhigh."
-            )
+        self.reasoning_effort = self.reasoning_effort.strip()
+        if not self.reasoning_effort:
+            raise ConfigError("--reasoning-effort cannot be empty.")
         if self.compact_threshold < 0:
             raise ConfigError("--compact-threshold must be >= 0.")
         if self.compact_tail_turns < 0:
@@ -333,15 +332,8 @@ class ModelProfileConfig:
                 f"Provider kind '{provider_kind}' is not supported. "
                 f"Allowed provider kinds: {allowed}."
             )
-        if self.reasoning_effort is not None and self.reasoning_effort not in {
-            "low",
-            "medium",
-            "high",
-            "xhigh",
-        }:
-            raise ConfigError(
-                "--reasoning-effort must be one of: low, medium, high, xhigh."
-            )
+        if self.reasoning_effort is not None:
+            self.reasoning_effort = self.reasoning_effort.strip() or None
         if self.max_tokens is not None and self.max_tokens < 1:
             raise ConfigError("--max-tokens must be >= 1.")
         if self.max_tool_workers is not None and self.max_tool_workers < 1:

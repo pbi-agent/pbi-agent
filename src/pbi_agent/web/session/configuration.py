@@ -848,6 +848,7 @@ class ConfigurationMixin:
             "output_modalities": list(model.output_modalities),
             "aliases": list(model.aliases),
             "supports_reasoning_effort": model.supports_reasoning_effort,
+            "supported_reasoning_efforts": list(model.supported_reasoning_efforts),
         }
 
     def _provider_model_error_view(self, error: Any) -> dict[str, Any] | None:

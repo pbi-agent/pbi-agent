@@ -167,10 +167,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     model_group.add_argument(
         "--reasoning-effort",
-        choices=["low", "medium", "high", "xhigh"],
         metavar="LEVEL",
         default=None,
-        help="Reasoning effort: low, medium, high, or xhigh.",
+        help=(
+            "Reasoning effort (common values: low, medium, high, xhigh; "
+            "provider-specific values are accepted)."
+        ),
     )
     model_group.add_argument(
         "--service-tier",
@@ -1021,9 +1023,8 @@ def build_parser() -> argparse.ArgumentParser:
         )
         target.add_argument(
             "--reasoning-effort",
-            choices=["low", "medium", "high", "xhigh"],
             default=None,
-            help="Requested reasoning effort.",
+            help="Requested reasoning effort; provider-specific values are accepted.",
         )
         target.add_argument("--max-tokens", type=int, default=None)
         target.add_argument(

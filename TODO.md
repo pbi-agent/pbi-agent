@@ -1,5 +1,5 @@
-- [x] Locate ChatGPT/Codex version identifier in this repo
-- [x] Inspect official ~/codex version identifier
-- [x] Update internal version id and tests/docs if needed
-- [x] Run focused validation
-- [x] Update MEMORY.md
+- [x] Inspect official Codex reasoning-effort model metadata and current discovery/UI contracts
+- [x] Add model-specific effort options with generic fallback
+- [x] Preserve arbitrary custom reasoning-effort values end to end
+- [x] Add focused backend and frontend tests
+- [x] Run validation and update MEMORY.md

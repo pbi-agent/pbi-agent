@@ -125,6 +125,7 @@ class ProviderModelViewModel(BaseModel):
     output_modalities: list[str] = Field(default_factory=list)
     aliases: list[str] = Field(default_factory=list)
     supports_reasoning_effort: bool | None = None
+    supported_reasoning_efforts: list[str] = Field(default_factory=list)
 
 
 class ProviderModelListResponse(BaseModel):

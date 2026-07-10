@@ -493,6 +493,7 @@ export type ProviderModelView = {
   output_modalities: string[];
   aliases: string[];
   supports_reasoning_effort: boolean | null;
+  supported_reasoning_efforts: string[];
 };
 
 export type ProviderModelListPayload = {
