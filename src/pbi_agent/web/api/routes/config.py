@@ -52,6 +52,8 @@ from pbi_agent.web.api.schemas.config import (
     SkillViewModel,
     SttProviderRequest,
     SttProviderResponse,
+    UserProfileConfigModel,
+    UserProfileConfigResponse,
 )
 
 router = APIRouter(prefix="/api/config", tags=["config"])
@@ -78,6 +80,32 @@ def _agent_http_error(exc: ProjectAgentInstallError) -> HTTPException:
 @router.get("/bootstrap", response_model=ConfigBootstrapResponse)
 def config_bootstrap(manager: SessionManagerDep) -> ConfigBootstrapResponse:
     return model_from_payload(ConfigBootstrapResponse, manager.config_bootstrap())
+
+
+@router.put("/profile", response_model=UserProfileConfigResponse)
+def update_user_profile(
+    request: UserProfileConfigModel,
+    manager: SessionManagerDep,
+    expected_revision: ConfigRevisionHeader,
+) -> UserProfileConfigResponse:
+    try:
+        payload = manager.update_user_profile(
+            preferred_name=request.preferred_name,
+            role=request.role,
+            about=request.about,
+            preferences=request.preferences,
+            instructions=request.instructions,
+            expected_revision=expected_revision,
+        )
+    except Exception as exc:
+        raise config_http_error(exc) from exc
+    return UserProfileConfigResponse(
+        user_profile=model_from_payload(
+            UserProfileConfigModel,
+            payload["user_profile"],
+        ),
+        config_revision=str(payload["config_revision"]),
+    )
 
 
 @router.put("/maintenance", response_model=MaintenanceConfigResponse)
@@ -240,6 +268,7 @@ def create_model_profile(
             model=request.model,
             sub_agent_model=request.sub_agent_model,
             reasoning_effort=request.reasoning_effort,
+            reasoning_mode=request.reasoning_mode,
             max_tokens=request.max_tokens,
             service_tier=request.service_tier,
             allowed_tools=(
@@ -280,6 +309,7 @@ def update_model_profile(
             model=request.model,
             sub_agent_model=request.sub_agent_model,
             reasoning_effort=request.reasoning_effort,
+            reasoning_mode=request.reasoning_mode,
             max_tokens=request.max_tokens,
             service_tier=request.service_tier,
             allowed_tools=(

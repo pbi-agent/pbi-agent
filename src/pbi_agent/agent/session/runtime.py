@@ -143,6 +143,18 @@ from pbi_agent.agent.session.subagents import (
 )
 
 
+def _append_hook_context_with_system_prompt(
+    instructions: str | None,
+    context_text: str | None,
+    system_prompt: str,
+) -> str | None:
+    if not context_text:
+        return instructions
+    if instructions is None:
+        instructions = system_prompt
+    return _append_hook_context(instructions, context_text)
+
+
 def run_single_turn(
     prompt: str,
     settings: Settings | ResolvedRuntime,
@@ -241,20 +253,20 @@ def run_single_turn(
         agent_type="single_turn",
         tracer=tracer,
     )
-
     try:
+        system_prompt = get_system_prompt(
+            settings=settings,
+            excluded_tools=INTERACTIVE_ONLY_TOOLS,
+            cwd=workspace,
+            explicit_skill_names=explicit_skill_names,
+            visible_skill_names=active_command_skill_names,
+            visible_agent_names=active_command_sub_agent_names,
+            explicit_agent_names=explicit_agent_names,
+            workspace_directory_key=workspace_directory_key,
+        )
         with _open_runtime_provider(
             settings,
-            system_prompt=get_system_prompt(
-                settings=settings,
-                excluded_tools=INTERACTIVE_ONLY_TOOLS,
-                cwd=workspace,
-                explicit_skill_names=explicit_skill_names,
-                visible_skill_names=active_command_skill_names,
-                visible_agent_names=active_command_sub_agent_names,
-                explicit_agent_names=explicit_agent_names,
-                workspace_directory_key=workspace_directory_key,
-            ),
+            system_prompt=system_prompt,
             excluded_tools=INTERACTIVE_ONLY_TOOLS,
             tool_availability_overridden=runtime.tool_availability_overridden,
             workspace_root=workspace,
@@ -268,9 +280,10 @@ def run_single_turn(
                 reason="resume" if resume_session_id else "startup",
                 tracer=tracer,
             )
-            turn_instructions = _append_hook_context(
+            turn_instructions = _append_hook_context_with_system_prompt(
                 turn_instructions,
                 session_start_context,
+                system_prompt,
             )
             _resume_session(
                 provider=provider,
@@ -301,9 +314,10 @@ def run_single_turn(
                     tool_errors=True,
                     session_id=session_id,
                 )
-            turn_instructions = _append_hook_context(
+            turn_instructions = _append_hook_context_with_system_prompt(
                 turn_instructions,
                 prompt_hook.context_text,
+                system_prompt,
             )
             if persisted_user_message_id is None:
                 user_message_id = _add_message(
@@ -475,14 +489,15 @@ def run_session_loop(
     _bind_session(display, session_id)
     had_tool_errors = False
     while not should_exit:
+        provider_system_prompt = get_system_prompt(
+            settings=current_runtime.settings,
+            excluded_tools=_turn_excluded_tools(interactive_mode=False),
+            cwd=workspace,
+            workspace_directory_key=workspace_directory_key,
+        )
         with _open_runtime_provider(
             current_runtime.settings,
-            system_prompt=get_system_prompt(
-                settings=current_runtime.settings,
-                excluded_tools=_turn_excluded_tools(interactive_mode=False),
-                cwd=workspace,
-                workspace_directory_key=workspace_directory_key,
-            ),
+            system_prompt=provider_system_prompt,
             excluded_tools=_turn_excluded_tools(interactive_mode=False),
             tool_availability_overridden=(current_runtime.tool_availability_overridden),
             workspace_root=workspace,
@@ -647,7 +662,7 @@ def run_session_loop(
                         force=init_force,
                         directory_key=workspace_directory_key,
                     )
-                    _reload_provider_initialization(
+                    provider_system_prompt = _reload_provider_initialization(
                         provider,
                         workspace,
                         workspace_directory_key=workspace_directory_key,
@@ -659,7 +674,7 @@ def run_session_loop(
                     )
                     continue
                 if normalized_command == RELOAD_COMMAND:
-                    _reload_provider_initialization(
+                    provider_system_prompt = _reload_provider_initialization(
                         provider,
                         workspace,
                         workspace_directory_key=workspace_directory_key,
@@ -854,9 +869,10 @@ def run_session_loop(
                 )
                 hook_coordinator = SessionHookCoordinator(hook_runtime)
                 if session_start_hook_context:
-                    turn_instructions = _append_hook_context(
+                    turn_instructions = _append_hook_context_with_system_prompt(
                         turn_instructions,
                         session_start_hook_context,
+                        provider_system_prompt,
                     )
                     session_start_hook_context = None
                 display.assistant_start()
@@ -959,9 +975,10 @@ def run_session_loop(
                             )
                             display.assistant_stop()
                             continue
-                        turn_instructions = _append_hook_context(
+                        turn_instructions = _append_hook_context_with_system_prompt(
                             turn_instructions,
                             prompt_hook.context_text,
+                            provider_system_prompt,
                         )
                         user_message_id = _add_message(
                             store,

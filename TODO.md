@@ -1,6 +1,6 @@
-- [x] Inspect current sessions DB schema for observability cached/reasoning columns
-- [x] Trace ChatGPT/OpenAI usage flow into observability events
-- [x] Patch missing cached/reasoning trace propagation if needed
-- [x] Add focused regression coverage
-- [x] Run targeted validation
-- [x] Update task memory
+- [x] Define the global profile persistence, API, and prompt contract
+- [x] Add backend profile config, API schemas/routes, and prompt injection
+- [x] Add the Settings → Profile UI and typed frontend API integration
+- [x] Add/update backend and frontend tests and generated API types
+- [x] Run relevant Python/frontend validation and review the changes
+- [x] Update task memory and summarize remaining risk

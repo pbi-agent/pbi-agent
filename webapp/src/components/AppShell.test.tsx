@@ -83,6 +83,13 @@ function makeConfigBootstrap(
     active_profile_id: "profile-1",
     stt_provider_id: null,
     maintenance: { retention_days: 30 },
+    user_profile: {
+      preferred_name: "",
+      role: "",
+      about: "",
+      preferences: "",
+      instructions: "",
+    },
     providers: [],
     model_profiles: [
       {
@@ -93,6 +100,7 @@ function makeConfigBootstrap(
         model: "gpt-5.4",
         sub_agent_model: null,
         reasoning_effort: "medium",
+        reasoning_mode: null,
         max_tokens: null,
         service_tier: null,
         allowed_tools: null,
@@ -112,6 +120,7 @@ function makeConfigBootstrap(
     options: {
       provider_kinds: ["chatgpt"],
       reasoning_efforts: ["medium"],
+      openai_reasoning_modes: [],
       openai_service_tiers: [],
       provider_metadata: {
         chatgpt: {

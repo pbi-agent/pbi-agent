@@ -1970,15 +1970,47 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
         assert bootstrap_payload["providers"] == []
         assert bootstrap_payload["model_profiles"] == []
         assert bootstrap_payload["stt_provider_id"] is None
+        assert bootstrap_payload["user_profile"] == {
+            "preferred_name": "",
+            "role": "",
+            "about": "",
+            "preferences": "",
+            "instructions": "",
+        }
         assert [item["id"] for item in bootstrap_payload["commands"]] == [
             "implement",
             "plan",
             "review",
         ]
         assert bootstrap_payload["maintenance"] == {"retention_days": 30}
+        assert bootstrap_payload["options"]["openai_reasoning_modes"] == [
+            "standard",
+            "pro",
+        ]
         assert bootstrap_payload["commands"][1]["path"] == ".agents/commands/plan.md"
         assert "config_revision" in bootstrap_payload
         revision = bootstrap_payload["config_revision"]
+
+        profile_response = client.put(
+            "/api/config/profile",
+            headers={"If-Match": revision},
+            json={
+                "preferred_name": " Ada ",
+                "role": " Staff engineer ",
+                "about": " Builds developer tools. ",
+                "preferences": " Prefer concise answers. ",
+                "instructions": " Always report validation. ",
+            },
+        )
+        assert profile_response.status_code == 200
+        assert profile_response.json()["user_profile"] == {
+            "preferred_name": "Ada",
+            "role": "Staff engineer",
+            "about": "Builds developer tools.",
+            "preferences": "Prefer concise answers.",
+            "instructions": "Always report validation.",
+        }
+        revision = profile_response.json()["config_revision"]
 
         maintenance_response = client.put(
             "/api/config/maintenance",
@@ -2032,8 +2064,9 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
             json={
                 "name": "Analysis",
                 "provider_id": "openai-main",
-                "model": "gpt-5.4-2026-03-05",
-                "reasoning_effort": "xhigh",
+                "model": "gpt-5.6-sol",
+                "reasoning_effort": "focused",
+                "reasoning_mode": "pro",
                 "allowed_tools": ["read", "web"],
             },
         )
@@ -2046,12 +2079,17 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
         )
         assert (
             profile_payload["model_profile"]["resolved_runtime"]["model"]
-            == "gpt-5.4-2026-03-05"
+            == "gpt-5.6-sol"
         )
         assert (
             profile_payload["model_profile"]["resolved_runtime"]["sub_agent_model"]
-            == "gpt-5.4-2026-03-05"
+            == "gpt-5.6-sol"
         )
+        assert (
+            profile_payload["model_profile"]["resolved_runtime"]["reasoning_effort"]
+            == "focused"
+        )
+        assert profile_payload["model_profile"]["reasoning_mode"] == "pro"
         assert profile_payload["model_profile"]["allowed_tools"] == ["read", "web"]
         assert profile_payload["model_profile"]["resolved_runtime"][
             "allowed_tools"
@@ -2074,6 +2112,11 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
         refreshed_payload = refreshed.json()
         assert refreshed_payload["active_profile_id"] == "analysis"
         assert refreshed_payload["stt_provider_id"] is None
+        assert refreshed_payload["user_profile"]["preferred_name"] == "Ada"
+        assert (
+            refreshed_payload["user_profile"]["instructions"]
+            == "Always report validation."
+        )
         assert refreshed_payload["maintenance"] == {"retention_days": 14}
         assert {item["id"] for item in refreshed_payload["providers"]} == {
             "openai-main",
@@ -11683,6 +11726,11 @@ def test_provider_model_discovery_endpoint_returns_openai_models(
                         "created": 1_713_000_100,
                         "owned_by": "openai",
                     },
+                    {
+                        "id": "gpt-5.6-sol",
+                        "created": 1_713_000_200,
+                        "owned_by": "openai",
+                    },
                 ]
             }
         )
@@ -11710,9 +11758,33 @@ def test_provider_model_discovery_endpoint_returns_openai_models(
     assert payload["provider_kind"] == "openai"
     assert payload["discovery_supported"] is True
     assert payload["manual_entry_required"] is False
-    assert [item["id"] for item in payload["models"]] == ["gpt-5.4", "gpt-5.4-mini"]
+    assert [item["id"] for item in payload["models"]] == [
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.6-sol",
+    ]
     assert payload["models"][0]["owned_by"] == "openai"
     assert payload["models"][0]["supports_reasoning_effort"] is True
+    assert payload["models"][0]["supported_reasoning_efforts"] == [
+        "none",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+    ]
+    assert payload["models"][0]["supported_reasoning_modes"] == []
+    assert payload["models"][2]["supported_reasoning_efforts"] == [
+        "none",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+    ]
+    assert payload["models"][2]["supported_reasoning_modes"] == [
+        "standard",
+        "pro",
+    ]
     assert payload["error"] is None
     assert requests_seen[0].full_url == "https://api.openai.com/v1/models"
     assert requests_seen[0].headers["Authorization"] == "Bearer env-openai-key"
@@ -11769,7 +11841,9 @@ def test_provider_model_discovery_endpoint_lists_chatgpt_openai_models(
                         "display_name": "GPT-5.4",
                         "input_modalities": ["text", "image"],
                         "supported_reasoning_levels": [
-                            {"effort": "medium", "description": "balanced"}
+                            {"effort": "minimal", "description": "fastest"},
+                            {"effort": "medium", "description": "balanced"},
+                            {"effort": "xhigh", "description": "deepest"},
                         ],
                         "visibility": "list",
                         "supported_in_api": True,
@@ -11838,13 +11912,15 @@ def test_provider_model_discovery_endpoint_lists_chatgpt_openai_models(
             "output_modalities": ["text"],
             "aliases": [],
             "supports_reasoning_effort": True,
+            "supported_reasoning_efforts": ["minimal", "medium", "xhigh"],
+            "supported_reasoning_modes": [],
         }
     ]
     assert payload["error"] is None
     assert len(requests_seen) == 1
     assert (
         requests_seen[0].full_url
-        == "https://chatgpt.com/backend-api/codex/models?client_version=0.124.0"
+        == "https://chatgpt.com/backend-api/codex/models?client_version=0.144.1"
     )
     headers = {key.lower(): value for key, value in requests_seen[0].header_items()}
     assert headers["authorization"].startswith("Bearer ")
@@ -11995,6 +12071,8 @@ def test_provider_model_discovery_endpoint_discovers_github_copilot_models(
             "output_modalities": ["text"],
             "aliases": ["2026-04-01"],
             "supports_reasoning_effort": None,
+            "supported_reasoning_efforts": [],
+            "supported_reasoning_modes": [],
         },
         {
             "id": "gpt-5.4",
@@ -12005,6 +12083,8 @@ def test_provider_model_discovery_endpoint_discovers_github_copilot_models(
             "output_modalities": ["text"],
             "aliases": ["2026-04-01"],
             "supports_reasoning_effort": True,
+            "supported_reasoning_efforts": ["low", "medium", "high"],
+            "supported_reasoning_modes": [],
         },
     ]
     assert requests_seen[0].full_url == "https://api.githubcopilot.com/models"
@@ -12188,6 +12268,8 @@ def test_provider_model_discovery_normalizes_google_payload(
             "output_modalities": ["text"],
             "aliases": ["gemini-2.5-flash-preview-001", "2.5"],
             "supports_reasoning_effort": True,
+            "supported_reasoning_efforts": [],
+            "supported_reasoning_modes": [],
         }
     ]
     assert payload["error"] is None
@@ -12306,6 +12388,8 @@ def test_provider_model_discovery_normalizes_xai_and_anthropic_payloads(
             "output_modalities": ["text"],
             "aliases": ["grok-4.20"],
             "supports_reasoning_effort": True,
+            "supported_reasoning_efforts": [],
+            "supported_reasoning_modes": [],
         }
     ]
 

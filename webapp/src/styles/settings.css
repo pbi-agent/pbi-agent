@@ -1293,6 +1293,25 @@
   max-width: 100%;
 }
 
+.profile-settings-panel__body {
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+}
+
+.profile-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-4);
+}
+
+.profile-settings-textarea {
+  min-height: 7rem;
+}
+
+.profile-settings-textarea--instructions {
+  min-height: 10rem;
+}
+
 .settings-panel__actions {
   display: flex;
   justify-content: flex-end;
@@ -1584,6 +1603,10 @@
 }
 
 @media (max-width: 48rem) {
+  .profile-settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .settings-dialog {
     padding: var(--sp-4);
   }

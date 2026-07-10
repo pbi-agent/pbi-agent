@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { fetchProviderModels } from "../../api";
 import type {
   ConfigOptions,
@@ -68,6 +68,7 @@ interface FormState {
   model: string;
   sub_agent_model: string;
   reasoning_effort: string;
+  reasoning_mode: string;
   max_tokens: string;
   service_tier: string;
   allowed_tools: ToolCategory[];
@@ -88,6 +89,7 @@ function initForm(
       model: profile.model ?? "",
       sub_agent_model: profile.sub_agent_model ?? "",
       reasoning_effort: profile.reasoning_effort ?? "",
+      reasoning_mode: profile.reasoning_mode ?? "",
       max_tokens: profile.max_tokens?.toString() ?? "",
       service_tier: profile.service_tier ?? "",
       allowed_tools: normalizeToolCategories(profile.allowed_tools),
@@ -103,6 +105,7 @@ function initForm(
     model: "",
     sub_agent_model: "",
     reasoning_effort: "",
+    reasoning_mode: "",
     max_tokens: "",
     service_tier: "",
     allowed_tools: [...ALL_TOOL_CATEGORIES],
@@ -119,6 +122,7 @@ export type ProfilePayload = {
   model?: string | null;
   sub_agent_model?: string | null;
   reasoning_effort?: string | null;
+  reasoning_mode?: string | null;
   max_tokens?: number | null;
   service_tier?: string | null;
   allowed_tools?: ToolCategory[] | null;
@@ -219,6 +223,144 @@ function preferredModelMode(
   return matchesKnownModel(value, providerModels) ? "select" : "custom";
 }
 
+type ReasoningCapabilityField =
+  | "supported_reasoning_efforts"
+  | "supported_reasoning_modes";
+
+function compatibleReasoningValuesForModels(
+  modelValue: string,
+  subAgentModelValue: string,
+  providerModels: ProviderModelListPayload | null,
+  capabilityField: ReasoningCapabilityField,
+  fallbackValues: string[] | null,
+): string[] {
+  const modelValues = [
+    modelValue,
+    ...(subAgentModelValue.trim() ? [subAgentModelValue] : []),
+  ];
+  const valuesByModel = modelValues.map((value) => {
+    const selectedModel = value.trim();
+    if (!selectedModel && fallbackValues === null) {
+      return [];
+    }
+    const model = providerModels?.models.find(
+      (item) =>
+        item.id === selectedModel || item.aliases.includes(selectedModel),
+    );
+    const configuredValues = model?.[capabilityField] ?? [];
+    const values =
+      configuredValues.length > 0
+        ? configuredValues
+        : (fallbackValues ?? []);
+    return [...new Set(values)];
+  });
+  return valuesByModel
+    .slice(1)
+    .reduce(
+      (compatible, values) =>
+        compatible.filter((value) => values.includes(value)),
+      valuesByModel[0] ?? [],
+    );
+}
+
+function preferredValueMode(
+  value: string,
+  suggestedValues: string[],
+): ModelFieldMode {
+  const trimmed = value.trim();
+  if (!trimmed || suggestedValues.includes(trimmed)) {
+    return "select";
+  }
+  return "custom";
+}
+
+interface SelectOrCustomValueControlProps {
+  label: string;
+  name: string;
+  value: string;
+  placeholder: string;
+  defaultOptionLabel?: string;
+  mode: ModelFieldMode;
+  setMode: (mode: ModelFieldMode) => void;
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+  selectAvailable?: boolean;
+  selectButtonLabel: string;
+}
+
+function SelectOrCustomValueControl({
+  label,
+  name,
+  value,
+  placeholder,
+  defaultOptionLabel,
+  mode,
+  setMode,
+  options,
+  onChange,
+  selectAvailable = true,
+  selectButtonLabel,
+}: SelectOrCustomValueControlProps) {
+  if (selectAvailable && mode === "select") {
+    return (
+      <>
+        <FieldLabel>{label}</FieldLabel>
+        <Select
+          value={toSelectValue(value)}
+          onValueChange={(nextValue) =>
+            onChange(fromSelectValue(nextValue))
+          }
+        >
+          <SelectTrigger aria-label={label} className="task-form__select">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={EMPTY_SELECT_VALUE}>
+              {defaultOptionLabel ?? "Provider default"}
+            </SelectItem>
+            {options.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setMode("custom")}
+        >
+          Custom value
+        </Button>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <FieldLabel>{label}</FieldLabel>
+      <Input
+        name={name}
+        className="task-form__input"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+      />
+      {selectAvailable && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setMode("select")}
+        >
+          {selectButtonLabel}
+        </Button>
+      )}
+    </>
+  );
+}
+
 export function ModelProfileModal({
   profile,
   providers,
@@ -241,6 +383,15 @@ export function ModelProfileModal({
   const [modelMode, setModelMode] = useState<ModelFieldMode>("custom");
   const [subAgentModelMode, setSubAgentModelMode] =
     useState<ModelFieldMode>("custom");
+  const [reasoningEffortMode, setReasoningEffortMode] =
+    useState<ModelFieldMode>(() =>
+      preferredValueMode(form.reasoning_effort, options.reasoning_efforts),
+    );
+  const formRef = useRef(form);
+
+  useEffect(() => {
+    formRef.current = form;
+  }, [form]);
 
   function set(updates: Partial<FormState>) {
     setForm((prev) => ({ ...prev, ...updates }));
@@ -303,6 +454,56 @@ export function ModelProfileModal({
     );
     return [...extraOptions, ...options];
   }, [form.sub_agent_model, providerModels]);
+  const reasoningEfforts = useMemo(
+    () =>
+      compatibleReasoningValuesForModels(
+        form.model,
+        form.sub_agent_model,
+        providerModels,
+        "supported_reasoning_efforts",
+        options.reasoning_efforts,
+      ),
+    [
+      form.model,
+      form.sub_agent_model,
+      options.reasoning_efforts,
+      providerModels,
+    ],
+  );
+  const reasoningEffortOptions = useMemo(() => {
+    const currentEffort = form.reasoning_effort.trim();
+    const extraOptions =
+      currentEffort && !reasoningEfforts.includes(currentEffort)
+        ? [{ value: currentEffort, label: `${currentEffort} (custom)` }]
+        : [];
+    return [
+      ...extraOptions,
+      ...reasoningEfforts.map((effort) => ({
+        value: effort,
+        label: effort,
+      })),
+    ];
+  }, [form.reasoning_effort, reasoningEfforts]);
+  const reasoningModes = useMemo(
+    () =>
+      compatibleReasoningValuesForModels(
+        form.model,
+        form.sub_agent_model,
+        providerModels,
+        "supported_reasoning_modes",
+        null,
+      ),
+    [form.model, form.sub_agent_model, providerModels],
+  );
+  const reasoningModeAvailable =
+    selectedProvider?.kind === "openai" && reasoningModes.length > 0;
+  const reasoningModeTargetUnchanged =
+    selectedProvider?.kind === "openai" &&
+    Boolean(profile?.reasoning_mode) &&
+    form.provider_id === profile?.provider_id &&
+    form.model.trim() === (profile?.model ?? "").trim() &&
+    form.sub_agent_model.trim() ===
+      (profile?.sub_agent_model ?? "").trim();
 
   useEffect(() => {
     let cancelled = false;
@@ -325,6 +526,7 @@ export function ModelProfileModal({
             return;
           }
           setProviderModels(payload);
+          const currentForm = formRef.current;
           const nextDiscoveredModelsAvailable = Boolean(
             payload.discovery_supported &&
             !payload.error &&
@@ -332,13 +534,25 @@ export function ModelProfileModal({
           );
           setModelMode(
             nextDiscoveredModelsAvailable
-              ? preferredModelMode(form.model, payload)
+              ? preferredModelMode(currentForm.model, payload)
               : "custom",
           );
           setSubAgentModelMode(
             nextDiscoveredModelsAvailable
-              ? preferredModelMode(form.sub_agent_model, payload)
+              ? preferredModelMode(currentForm.sub_agent_model, payload)
               : "custom",
+          );
+          setReasoningEffortMode(
+            preferredValueMode(
+              currentForm.reasoning_effort,
+              compatibleReasoningValuesForModels(
+                currentForm.model,
+                currentForm.sub_agent_model,
+                payload,
+                "supported_reasoning_efforts",
+                options.reasoning_efforts,
+              ),
+            ),
           );
         })
         .catch((err) => {
@@ -349,6 +563,12 @@ export function ModelProfileModal({
           setProviderModelsError((err as Error).message);
           setModelMode("custom");
           setSubAgentModelMode("custom");
+          setReasoningEffortMode(
+            preferredValueMode(
+              formRef.current.reasoning_effort,
+              options.reasoning_efforts,
+            ),
+          );
         })
         .finally(() => {
           if (!cancelled) {
@@ -360,7 +580,7 @@ export function ModelProfileModal({
     return () => {
       cancelled = true;
     };
-  }, [form.model, form.provider_id, form.sub_agent_model]);
+  }, [form.provider_id, options.reasoning_efforts]);
 
   function providerKindLabel(providerKind: string): string {
     return options.provider_metadata[providerKind]?.label ?? providerKind;
@@ -374,6 +594,9 @@ export function ModelProfileModal({
     const updates: Partial<FormState> = { provider_id: newProviderId };
     if (!newMeta?.supports_service_tier) {
       updates.service_tier = "";
+    }
+    if (newProvider?.kind !== "openai") {
+      updates.reasoning_mode = "";
     }
     set(updates);
   }
@@ -389,78 +612,6 @@ export function ModelProfileModal({
       ? "Enter your Azure deployment name. Model discovery is not available for Azure — use a custom value."
       : null;
 
-  function renderModelControl(args: {
-    label: string;
-    name: string;
-    value: string;
-    placeholder: string;
-    defaultOptionLabel?: string;
-    mode: ModelFieldMode;
-    setMode: (mode: ModelFieldMode) => void;
-    options: Array<{ value: string; label: string }>;
-    onChange: (value: string) => void;
-  }) {
-    if (discoveredModelsAvailable && args.mode === "select") {
-      return (
-        <>
-          <FieldLabel>{args.label}</FieldLabel>
-          <Select
-            value={toSelectValue(args.value)}
-            onValueChange={(value) => args.onChange(fromSelectValue(value))}
-          >
-            <SelectTrigger
-              aria-label={args.label}
-              className="task-form__select"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={EMPTY_SELECT_VALUE}>
-                {args.defaultOptionLabel ?? "Provider default"}
-              </SelectItem>
-            {args.options.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-            </SelectContent>
-          </Select>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => args.setMode("custom")}
-          >
-            Custom value
-          </Button>
-        </>
-      );
-    }
-
-    return (
-      <>
-        <FieldLabel>{args.label}</FieldLabel>
-        <Input
-          name={args.name}
-          className="task-form__input"
-          value={args.value}
-          onChange={(e) => args.onChange(e.target.value)}
-          placeholder={args.placeholder}
-        />
-        {discoveredModelsAvailable && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => args.setMode("select")}
-          >
-            Choose from provider
-          </Button>
-        )}
-      </>
-    );
-  }
-
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setIsPending(true);
@@ -471,7 +622,11 @@ export function ModelProfileModal({
       provider_id: form.provider_id,
       model: form.model.trim() || null,
       sub_agent_model: form.sub_agent_model.trim() || null,
-      reasoning_effort: form.reasoning_effort || null,
+      reasoning_effort: form.reasoning_effort.trim() || null,
+      reasoning_mode:
+        reasoningModeAvailable || reasoningModeTargetUnchanged
+        ? form.reasoning_mode || null
+        : null,
       max_tokens: toInt(form.max_tokens),
       service_tier: kindMeta?.supports_service_tier
         ? form.service_tier || null
@@ -574,32 +729,36 @@ export function ModelProfileModal({
 
               <div className="task-form__row">
                 <Field>
-                  {renderModelControl({
-                    label: "Model",
-                    name: "model",
-                    value: form.model,
-                    placeholder: kindMeta?.default_model ?? "provider default",
-                    mode: modelMode,
-                    setMode: setModelMode,
-                    options: modelOptions,
-                    onChange: (value) => set({ model: value }),
-                  })}
+                  <SelectOrCustomValueControl
+                    label="Model"
+                    name="model"
+                    value={form.model}
+                    placeholder={kindMeta?.default_model ?? "provider default"}
+                    mode={modelMode}
+                    setMode={setModelMode}
+                    options={modelOptions}
+                    onChange={(value) => set({ model: value })}
+                    selectAvailable={discoveredModelsAvailable}
+                    selectButtonLabel="Choose from provider"
+                  />
                   {modelFieldHint && (
                     <FieldDescription>{modelFieldHint}</FieldDescription>
                   )}
                 </Field>
                 <Field>
-                  {renderModelControl({
-                    label: "Sub-agent model",
-                    name: "sub-agent-model",
-                    value: form.sub_agent_model,
-                    placeholder: form.model.trim() || "same as model",
-                    defaultOptionLabel: "Profile main model",
-                    mode: subAgentModelMode,
-                    setMode: setSubAgentModelMode,
-                    options: subAgentModelOptions,
-                    onChange: (value) => set({ sub_agent_model: value }),
-                  })}
+                  <SelectOrCustomValueControl
+                    label="Sub-agent model"
+                    name="sub-agent-model"
+                    value={form.sub_agent_model}
+                    placeholder={form.model.trim() || "same as model"}
+                    defaultOptionLabel="Profile main model"
+                    mode={subAgentModelMode}
+                    setMode={setSubAgentModelMode}
+                    options={subAgentModelOptions}
+                    onChange={(value) => set({ sub_agent_model: value })}
+                    selectAvailable={discoveredModelsAvailable}
+                    selectButtonLabel="Choose from provider"
+                  />
                   <FieldDescription>
                     Leave blank to use this profile&apos;s main model.
                   </FieldDescription>
@@ -623,30 +782,21 @@ export function ModelProfileModal({
 
               <div className="task-form__row">
                 <Field>
-                  <FieldLabel>Reasoning effort</FieldLabel>
-                  <Select
-                    value={toSelectValue(form.reasoning_effort)}
-                    onValueChange={(value) =>
-                      set({ reasoning_effort: fromSelectValue(value) })
-                    }
-                  >
-                    <SelectTrigger
-                      aria-label="Reasoning effort"
-                      className="task-form__select"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={EMPTY_SELECT_VALUE}>
-                        Provider default
-                      </SelectItem>
-                    {options.reasoning_efforts.map((r) => (
-                      <SelectItem key={r} value={r}>
-                        {r}
-                      </SelectItem>
-                    ))}
-                    </SelectContent>
-                  </Select>
+                  <SelectOrCustomValueControl
+                    label="Reasoning effort"
+                    name="reasoning-effort"
+                    value={form.reasoning_effort}
+                    placeholder="Provider default"
+                    mode={reasoningEffortMode}
+                    setMode={setReasoningEffortMode}
+                    options={reasoningEffortOptions}
+                    onChange={(value) => set({ reasoning_effort: value })}
+                    selectButtonLabel="Choose suggested value"
+                  />
+                  <FieldDescription>
+                    Uses values compatible with the selected main and sub-agent
+                    models, with generic suggestions as a fallback.
+                  </FieldDescription>
                 </Field>
                 <Field>
                   <FieldLabel>Max tokens</FieldLabel>
@@ -661,6 +811,39 @@ export function ModelProfileModal({
                   />
                 </Field>
               </div>
+
+              {reasoningModeAvailable && (
+                <Field>
+                  <FieldLabel>Reasoning mode</FieldLabel>
+                  <Select
+                    value={toSelectValue(form.reasoning_mode)}
+                    onValueChange={(value) =>
+                      set({ reasoning_mode: fromSelectValue(value) })
+                    }
+                  >
+                    <SelectTrigger
+                      aria-label="Reasoning mode"
+                      className="task-form__select"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={EMPTY_SELECT_VALUE}>
+                        Provider default
+                      </SelectItem>
+                      {reasoningModes.map((mode) => (
+                        <SelectItem key={mode} value={mode}>
+                          {mode}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>
+                    GPT-5.6 supports standard and pro mode. Pro can use more
+                    model work, latency, and tokens.
+                  </FieldDescription>
+                </Field>
+              )}
 
               {kindMeta?.supports_service_tier && (
                 <Field>

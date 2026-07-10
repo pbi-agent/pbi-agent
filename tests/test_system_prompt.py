@@ -8,7 +8,7 @@ import stat
 
 import pytest
 
-from pbi_agent.config import CommandConfig, Settings
+from pbi_agent.config import CommandConfig, Settings, update_user_profile_config
 from pbi_agent.agent.session.shared import _turn_instructions
 from pbi_agent.agent.system_prompt import (
     _MAX_FILE_BYTES,
@@ -249,6 +249,44 @@ def test_get_system_prompt_with_agents_and_memory_orders_sections(tmp_path):
     assert prompt.index("</active_command>") < prompt.index("<workspace_memory>")
     assert prompt.endswith(
         "<workspace_memory>\nRemember the release note.\n</workspace_memory>"
+    )
+
+
+def test_global_user_profile_is_in_main_and_sub_agent_prompts(tmp_path):
+    update_user_profile_config(
+        preferred_name="Ada",
+        role="Staff engineer",
+        about="Builds developer tools.",
+        preferences="Use concise explanations.",
+        instructions="Always report validation.",
+    )
+    (tmp_path / "AGENTS.md").write_text("Use project conventions.", encoding="utf-8")
+
+    main_prompt = get_system_prompt(cwd=tmp_path)
+    sub_agent_prompt = get_sub_agent_system_prompt(
+        agent_prompt_override="Review the implementation.",
+        cwd=tmp_path,
+    )
+
+    expected_profile = "\n".join(
+        (
+            "<user_profile>",
+            "Preferred name: Ada",
+            "Role: Staff engineer",
+            "About the user:",
+            "Builds developer tools.",
+            "Preferences:",
+            "Use concise explanations.",
+            "Global instructions:",
+            "Always report validation.",
+            "</user_profile>",
+        )
+    )
+    assert expected_profile in main_prompt
+    assert expected_profile in sub_agent_prompt
+    assert main_prompt.index("</user_profile>") < main_prompt.index("<project_rules>")
+    assert sub_agent_prompt.index("</user_profile>") < sub_agent_prompt.index(
+        "<persona>"
     )
 
 

@@ -4,6 +4,13 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from pbi_agent.config import (
+    USER_PROFILE_ABOUT_MAX_LENGTH,
+    USER_PROFILE_INSTRUCTIONS_MAX_LENGTH,
+    USER_PROFILE_PREFERENCES_MAX_LENGTH,
+    USER_PROFILE_PREFERRED_NAME_MAX_LENGTH,
+    USER_PROFILE_ROLE_MAX_LENGTH,
+)
 from pbi_agent.web.api.deps import NonEmptyString
 
 
@@ -34,6 +41,7 @@ class ProviderAuthModeMetadataModel(BaseModel):
 class ConfigOptionsModel(BaseModel):
     provider_kinds: list[str]
     reasoning_efforts: list[str]
+    openai_reasoning_modes: list[str]
     openai_service_tiers: list[str]
     provider_metadata: dict[str, ProviderKindMetadataModel]
 
@@ -125,6 +133,8 @@ class ProviderModelViewModel(BaseModel):
     output_modalities: list[str] = Field(default_factory=list)
     aliases: list[str] = Field(default_factory=list)
     supports_reasoning_effort: bool | None = None
+    supported_reasoning_efforts: list[str] = Field(default_factory=list)
+    supported_reasoning_modes: list[str] = Field(default_factory=list)
 
 
 class ProviderModelListResponse(BaseModel):
@@ -258,6 +268,7 @@ class ModelProfileViewModel(BaseModel):
     model: str | None
     sub_agent_model: str | None
     reasoning_effort: str | None
+    reasoning_mode: str | None
     max_tokens: int | None
     service_tier: str | None
     allowed_tools: list[str] | None
@@ -278,6 +289,7 @@ class ModelProfileMutationRequest(BaseModel):
     model: str | None = None
     sub_agent_model: str | None = None
     reasoning_effort: str | None = None
+    reasoning_mode: str | None = None
     max_tokens: int | None = Field(default=None, ge=1)
     service_tier: str | None = None
     allowed_tools: list[str] | None = None
@@ -295,6 +307,7 @@ class ModelProfileUpdateRequest(BaseModel):
     model: str | None = None
     sub_agent_model: str | None = None
     reasoning_effort: str | None = None
+    reasoning_mode: str | None = None
     max_tokens: int | None = Field(default=None, ge=1)
     service_tier: str | None = None
     allowed_tools: list[str] | None = None
@@ -341,6 +354,19 @@ class MaintenanceConfigModel(BaseModel):
 
 class MaintenanceConfigResponse(BaseModel):
     maintenance: MaintenanceConfigModel
+    config_revision: str
+
+
+class UserProfileConfigModel(BaseModel):
+    preferred_name: str = Field(max_length=USER_PROFILE_PREFERRED_NAME_MAX_LENGTH)
+    role: str = Field(max_length=USER_PROFILE_ROLE_MAX_LENGTH)
+    about: str = Field(max_length=USER_PROFILE_ABOUT_MAX_LENGTH)
+    preferences: str = Field(max_length=USER_PROFILE_PREFERENCES_MAX_LENGTH)
+    instructions: str = Field(max_length=USER_PROFILE_INSTRUCTIONS_MAX_LENGTH)
+
+
+class UserProfileConfigResponse(BaseModel):
+    user_profile: UserProfileConfigModel
     config_revision: str
 
 
@@ -518,6 +544,7 @@ class ConfigBootstrapResponse(BaseModel):
     commands: list[CommandViewModel]
     skills: list[SkillViewModel]
     agents: list[AgentViewModel]
+    user_profile: UserProfileConfigModel
     active_profile_id: str | None
     stt_provider_id: str | None
     maintenance: MaintenanceConfigModel

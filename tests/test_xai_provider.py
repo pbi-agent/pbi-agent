@@ -218,6 +218,19 @@ def test_xai_build_request_body_maps_grok_3_mini_reasoning_effort() -> None:
     ]
 
 
+def test_xai_build_request_body_preserves_custom_reasoning_effort() -> None:
+    provider = XAIProvider(
+        _make_settings(model="grok-3-mini", reasoning_effort="focused")
+    )
+
+    body = provider._build_request_body(
+        input_items=[{"role": "user", "content": "hello"}],
+        instructions="be concise",
+    )
+
+    assert body["reasoning"] == {"effort": "focused"}
+
+
 def test_xai_build_request_body_replays_restored_response_items() -> None:
     provider = XAIProvider(_make_settings())
     restored_items = [

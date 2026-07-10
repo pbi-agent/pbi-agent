@@ -60,7 +60,10 @@ def build_messages_body(
 
     if supports_adaptive_thinking(settings.model):
         body["thinking"] = {"type": "adaptive"}
-        effort = _EFFORT_MAP.get(settings.reasoning_effort, "high")
+        effort = _EFFORT_MAP.get(
+            settings.reasoning_effort,
+            settings.reasoning_effort,
+        )
         body["output_config"] = {"effort": effort}
 
     if system_prompt:

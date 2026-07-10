@@ -13,10 +13,12 @@ from pbi_agent.config import (
     InternalConfig,
     MaintenanceConfig,
     ModelProfileConfig,
+    OPENAI_REASONING_MODES,
     OPENAI_SERVICE_TIERS,
     PROVIDER_KINDS,
     ProviderConfig,
     ResolvedRuntime,
+    UserProfileConfig,
     create_model_profile_config,
     create_provider_config,
     delete_model_profile_config,
@@ -37,6 +39,7 @@ from pbi_agent.config import (
     select_stt_provider,
     slugify,
     update_maintenance_config as save_maintenance_config,
+    update_user_profile_config as save_user_profile_config,
 )
 from pbi_agent.agent.sub_agent_discovery import ProjectSubAgent
 from pbi_agent.agents.project_catalog import discover_installed_project_agents
@@ -125,6 +128,7 @@ class ConfigurationMixin:
             "commands": self._installed_command_views(),
             "skills": self._installed_skill_views(),
             "agents": self._installed_agent_views(),
+            "user_profile": self._user_profile_view(config.user_profile),
             "active_profile_id": config.web.active_profile_id,
             "stt_provider_id": config.web.stt_provider_id,
             "maintenance": self._maintenance_view(config.maintenance),
@@ -132,6 +136,7 @@ class ConfigurationMixin:
             "options": {
                 "provider_kinds": list(PROVIDER_KINDS),
                 "reasoning_efforts": ["low", "medium", "high", "xhigh"],
+                "openai_reasoning_modes": list(OPENAI_REASONING_MODES),
                 "openai_service_tiers": list(OPENAI_SERVICE_TIERS),
                 "provider_metadata": {
                     provider_kind: provider_ui_metadata(provider_kind)
@@ -152,6 +157,29 @@ class ConfigurationMixin:
         )
         return {
             "maintenance": self._maintenance_view(config),
+            "config_revision": revision,
+        }
+
+    def update_user_profile(
+        self,
+        *,
+        preferred_name: str,
+        role: str,
+        about: str,
+        preferences: str,
+        instructions: str,
+        expected_revision: str,
+    ) -> dict[str, Any]:
+        config, revision = save_user_profile_config(
+            preferred_name=preferred_name,
+            role=role,
+            about=about,
+            preferences=preferences,
+            instructions=instructions,
+            expected_revision=expected_revision,
+        )
+        return {
+            "user_profile": self._user_profile_view(config),
             "config_revision": revision,
         }
 
@@ -319,6 +347,7 @@ class ConfigurationMixin:
         model: str | None,
         sub_agent_model: str | None,
         reasoning_effort: str | None,
+        reasoning_mode: str | None,
         max_tokens: int | None,
         service_tier: str | None,
         allowed_tools: tuple[str, ...] | None,
@@ -340,6 +369,7 @@ class ConfigurationMixin:
                 model=model,
                 sub_agent_model=sub_agent_model,
                 reasoning_effort=reasoning_effort,
+                reasoning_mode=reasoning_mode,
                 max_tokens=max_tokens,
                 service_tier=service_tier,
                 allowed_tools=allowed_tools,
@@ -373,6 +403,7 @@ class ConfigurationMixin:
         model: str | None,
         sub_agent_model: str | None,
         reasoning_effort: str | None,
+        reasoning_mode: str | None,
         max_tokens: int | None,
         service_tier: str | None,
         allowed_tools: tuple[str, ...] | None,
@@ -413,6 +444,11 @@ class ConfigurationMixin:
                 reasoning_effort
                 if "reasoning_effort" in fields_set
                 else profile.reasoning_effort
+            ),
+            reasoning_mode=(
+                reasoning_mode
+                if "reasoning_mode" in fields_set
+                else profile.reasoning_mode
             ),
             max_tokens=max_tokens if "max_tokens" in fields_set else profile.max_tokens,
             service_tier=(
@@ -848,6 +884,8 @@ class ConfigurationMixin:
             "output_modalities": list(model.output_modalities),
             "aliases": list(model.aliases),
             "supports_reasoning_effort": model.supports_reasoning_effort,
+            "supported_reasoning_efforts": list(model.supported_reasoning_efforts),
+            "supported_reasoning_modes": list(model.supported_reasoning_modes),
         }
 
     def _provider_model_error_view(self, error: Any) -> dict[str, Any] | None:
@@ -879,6 +917,7 @@ class ConfigurationMixin:
             "model": profile.model,
             "sub_agent_model": profile.sub_agent_model,
             "reasoning_effort": profile.reasoning_effort,
+            "reasoning_mode": profile.reasoning_mode,
             "max_tokens": profile.max_tokens,
             "service_tier": profile.service_tier,
             "allowed_tools": (
@@ -1087,6 +1126,15 @@ class ConfigurationMixin:
 
     def _maintenance_view(self, config: MaintenanceConfig) -> dict[str, Any]:
         return {"retention_days": config.retention_days}
+
+    def _user_profile_view(self, config: UserProfileConfig) -> dict[str, Any]:
+        return {
+            "preferred_name": config.preferred_name,
+            "role": config.role,
+            "about": config.about,
+            "preferences": config.preferences,
+            "instructions": config.instructions,
+        }
 
     def _provider_map(self, config: InternalConfig) -> dict[str, ProviderConfig]:
         return {provider.id: provider for provider in config.providers}

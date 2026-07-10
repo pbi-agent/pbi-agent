@@ -141,6 +141,17 @@ def test_google_build_request_body_uses_interactions_shape() -> None:
     assert "previous_interaction_id" not in body
 
 
+def test_google_build_request_body_preserves_custom_reasoning_effort() -> None:
+    provider = GoogleProvider(_make_settings(reasoning_effort="focused"))
+
+    body = provider._build_request_body(
+        input_value="hello",
+        instructions="be concise",
+    )
+
+    assert body["generation_config"]["thinking_level"] == "focused"
+
+
 def test_google_build_request_body_replays_restored_user_images_without_previous_interaction_id(
     monkeypatch,
     tmp_path,

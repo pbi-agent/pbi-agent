@@ -162,6 +162,72 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         self.assertEqual(args.sub_agent_model, "gpt-5-mini")
 
+    def test_parser_accepts_provider_specific_reasoning_effort(self) -> None:
+        parser = cli.build_parser()
+
+        args = parser.parse_args(
+            [
+                "--reasoning-effort",
+                "focused",
+                "run",
+                "--prompt",
+                "Review this workspace",
+            ]
+        )
+
+        self.assertEqual(args.reasoning_effort, "focused")
+
+    def test_parser_accepts_openai_profile_reasoning_mode(self) -> None:
+        parser = cli.build_parser()
+        args = parser.parse_args(
+            [
+                "config",
+                "profiles",
+                "create",
+                "--name",
+                "GPT-5.6 Pro",
+                "--provider-id",
+                "openai-main",
+                "--model",
+                "gpt-5.6-sol",
+                "--reasoning-mode",
+                "pro",
+            ]
+        )
+
+        self.assertEqual(args.reasoning_mode, "pro")
+
+    def test_parser_accepts_clearing_openai_profile_reasoning_mode(self) -> None:
+        parser = cli.build_parser()
+        args = parser.parse_args(
+            [
+                "config",
+                "profiles",
+                "update",
+                "gpt-5.6-pro",
+                "--clear-reasoning-mode",
+            ]
+        )
+
+        self.assertTrue(args.clear_reasoning_mode)
+        self.assertIsNone(args.reasoning_mode)
+
+    def test_parser_rejects_setting_and_clearing_reasoning_mode(self) -> None:
+        parser = cli.build_parser()
+
+        with self.assertRaises(SystemExit):
+            parser.parse_args(
+                [
+                    "config",
+                    "profiles",
+                    "update",
+                    "gpt-5.6-pro",
+                    "--reasoning-mode",
+                    "pro",
+                    "--clear-reasoning-mode",
+                ]
+            )
+
     def test_parser_accepts_skills_list_command(self) -> None:
         parser = cli.build_parser()
 

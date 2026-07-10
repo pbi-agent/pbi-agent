@@ -25,6 +25,8 @@ from pbi_agent.config import (
     MaintenanceConfig,
     ModelProfileConfig,
     ProviderConfig,
+    USER_PROFILE_PREFERRED_NAME_MAX_LENGTH,
+    UserProfileConfig,
     WebConfig,
     create_model_profile_config,
     create_provider_config,
@@ -45,6 +47,8 @@ from pbi_agent.config import (
     select_active_model_profile,
     select_stt_provider,
     update_maintenance_config,
+    update_model_profile_config,
+    update_user_profile_config,
     validate_allowed_tools,
 )
 
@@ -117,6 +121,58 @@ def test_internal_config_rejects_invalid_maintenance_days(
 
     with pytest.raises(ConfigError):
         update_maintenance_config(retention_days=0)
+
+
+def test_internal_config_user_profile_defaults_and_round_trips(
+    tmp_path, monkeypatch
+) -> None:
+    path = tmp_path / "config.json"
+    monkeypatch.setenv("PBI_AGENT_INTERNAL_CONFIG_PATH", str(path))
+
+    assert load_internal_config().user_profile == UserProfileConfig()
+
+    updated, revision = update_user_profile_config(
+        preferred_name="  Ada  ",
+        role="  Staff engineer  ",
+        about="  Builds developer tools.  ",
+        preferences="  Prefer concise answers.  ",
+        instructions="  Always include validation results.  ",
+    )
+
+    assert updated == UserProfileConfig(
+        preferred_name="Ada",
+        role="Staff engineer",
+        about="Builds developer tools.",
+        preferences="Prefer concise answers.",
+        instructions="Always include validation results.",
+    )
+    assert load_internal_config().user_profile == updated
+    assert load_internal_config_snapshot()[1] == revision
+    assert json.loads(path.read_text(encoding="utf-8"))["user_profile"] == {
+        "preferred_name": "Ada",
+        "role": "Staff engineer",
+        "about": "Builds developer tools.",
+        "preferences": "Prefer concise answers.",
+        "instructions": "Always include validation results.",
+    }
+
+
+def test_internal_config_rejects_oversized_user_profile_fields(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv(
+        "PBI_AGENT_INTERNAL_CONFIG_PATH",
+        str(tmp_path / "config.json"),
+    )
+
+    with pytest.raises(ConfigError, match="Preferred name must be"):
+        update_user_profile_config(
+            preferred_name="x" * (USER_PROFILE_PREFERRED_NAME_MAX_LENGTH + 1),
+            role="",
+            about="",
+            preferences="",
+            instructions="",
+        )
 
 
 def _write_command(root: Path, name: str, content: str) -> Path:
@@ -386,9 +442,10 @@ def test_config_store_roundtrip_and_active_profile_selection(monkeypatch) -> Non
             id="analysis",
             name="Analysis",
             provider_id=provider.id,
-            model="gpt-5.4-2026-03-05",
-            sub_agent_model="gpt-5.4-mini",
+            model="gpt-5.6-sol",
+            sub_agent_model="gpt-5.6-terra",
             reasoning_effort="xhigh",
+            reasoning_mode="pro",
             max_tokens=4096,
             service_tier="flex",
             allowed_tools=("read", "web", "shell"),
@@ -406,6 +463,7 @@ def test_config_store_roundtrip_and_active_profile_selection(monkeypatch) -> Non
     assert config.web.active_profile_id == "analysis"
     assert config.providers[0].api_key == "saved-openai-key"
     assert config.model_profiles[0].service_tier == "flex"
+    assert config.model_profiles[0].reasoning_mode == "pro"
     assert config.model_profiles[0].allowed_tools == ("read", "web", "shell")
 
 
@@ -823,8 +881,9 @@ def test_resolve_web_runtime_uses_selected_web_profile(monkeypatch) -> None:
             id="analysis",
             name="Analysis",
             provider_id="openai-main",
-            model="gpt-5.4-2026-03-05",
+            model="gpt-5.6-sol",
             reasoning_effort="xhigh",
+            reasoning_mode="standard",
             max_tool_workers=6,
             max_retries=5,
             compact_threshold=123456,
@@ -838,13 +897,44 @@ def test_resolve_web_runtime_uses_selected_web_profile(monkeypatch) -> None:
 
     assert settings.provider == "openai"
     assert settings.api_key == "saved-openai-key"
-    assert settings.model == "gpt-5.4-2026-03-05"
-    assert settings.sub_agent_model == "gpt-5.4-2026-03-05"
+    assert settings.model == "gpt-5.6-sol"
+    assert settings.reasoning_mode == "standard"
+    assert settings.sub_agent_model == "gpt-5.6-sol"
     assert settings.max_tool_workers == 6
     assert settings.max_retries == 5
     assert settings.compact_threshold == 123456
     assert settings.allowed_tools == ("read",)
     assert runtime.profile_id == "analysis"
+
+
+def test_update_model_profile_can_clear_reasoning_mode() -> None:
+    create_provider_config(
+        ProviderConfig(
+            id="openai-main",
+            name="OpenAI Main",
+            kind="openai",
+            api_key="saved-openai-key",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="analysis",
+            name="Analysis",
+            provider_id="openai-main",
+            model="gpt-5.6-sol",
+            reasoning_mode="pro",
+        )
+    )
+
+    updated, _ = update_model_profile_config(
+        "analysis",
+        model="gpt-5.4",
+        clear_reasoning_mode=True,
+    )
+
+    assert updated.model == "gpt-5.4"
+    assert updated.reasoning_mode is None
+    assert load_internal_config().model_profiles[0].reasoning_mode is None
 
 
 def test_resolve_web_runtime_preserves_zero_compact_threshold(monkeypatch) -> None:
@@ -1555,6 +1645,71 @@ def test_invalid_service_tier_on_non_openai_profile_is_rejected(monkeypatch) -> 
                 name="Bad Profile",
                 provider_id="xai-main",
                 service_tier="flex",
+            )
+        )
+
+
+def test_reasoning_mode_on_non_openai_profile_is_rejected(monkeypatch) -> None:
+    monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
+    create_provider_config(
+        ProviderConfig(id="xai-main", name="xAI Main", kind="xai", api_key="x")
+    )
+
+    with pytest.raises(ConfigError, match="only supported with the OpenAI provider"):
+        create_model_profile_config(
+            ModelProfileConfig(
+                id="bad-profile",
+                name="Bad Profile",
+                provider_id="xai-main",
+                reasoning_mode="pro",
+            )
+        )
+
+
+def test_unknown_openai_reasoning_mode_is_rejected(monkeypatch) -> None:
+    monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
+    create_provider_config(
+        ProviderConfig(
+            id="openai-main",
+            name="OpenAI Main",
+            kind="openai",
+            api_key="x",
+        )
+    )
+
+    with pytest.raises(ConfigError, match="Reasoning mode must be one of"):
+        create_model_profile_config(
+            ModelProfileConfig(
+                id="bad-profile",
+                name="Bad Profile",
+                provider_id="openai-main",
+                reasoning_mode="turbo",
+            )
+        )
+
+
+def test_reasoning_mode_requires_compatible_main_and_sub_agent_models(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
+    create_provider_config(
+        ProviderConfig(
+            id="openai-main",
+            name="OpenAI Main",
+            kind="openai",
+            api_key="x",
+        )
+    )
+
+    with pytest.raises(ConfigError, match="gpt-5.4-mini"):
+        create_model_profile_config(
+            ModelProfileConfig(
+                id="bad-profile",
+                name="Bad Profile",
+                provider_id="openai-main",
+                model="gpt-5.6-sol",
+                sub_agent_model="gpt-5.4-mini",
+                reasoning_mode="pro",
             )
         )
 

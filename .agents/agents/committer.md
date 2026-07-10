@@ -1,7 +1,7 @@
 ---
 name: committer
 description: Create final local task commits.
-model_profile_id: gpt-5.4-mini-gpt
+model_profile_id: worker-mini
 ---
 
 # Commit Mode

@@ -1197,6 +1197,8 @@ class OpenAIProvider(Provider):
                 "summary": "auto",
             },
         }
+        if self._settings.provider == "openai" and self._settings.reasoning_mode:
+            body["reasoning"]["mode"] = self._settings.reasoning_mode
         if request_options.tool_choice is not None:
             body["tool_choice"] = request_options.tool_choice
         if request_options.use_session_prompt_cache_key and session_id:
@@ -1404,6 +1406,11 @@ class OpenAIProvider(Provider):
             if isinstance(input_details, dict)
             else 0
         )
+        cache_write_tokens = (
+            int(input_details.get("cache_write_tokens", 0) or 0)
+            if isinstance(input_details, dict)
+            else 0
+        )
         reasoning_tokens = (
             int(output_details.get("reasoning_tokens", 0) or 0)
             if isinstance(output_details, dict)
@@ -1433,6 +1440,7 @@ class OpenAIProvider(Provider):
             usage=TokenUsage(
                 input_tokens=input_tokens,
                 cached_input_tokens=cached_input_tokens,
+                cache_write_tokens=cache_write_tokens,
                 output_tokens=output_tokens,
                 reasoning_tokens=reasoning_tokens,
                 context_tokens=total_tokens or (input_tokens + output_tokens),

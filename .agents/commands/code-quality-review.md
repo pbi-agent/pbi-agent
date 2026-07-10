@@ -1,7 +1,7 @@
 ---
 name: code-quality-review
 description: Strict structural maintainability review for abstraction quality, file growth, branching, and simplification.
-model_profile_id: reviewer
+model_profile_id: worker-pro
 allowed_tools: read,shell
 ---
 

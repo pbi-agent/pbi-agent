@@ -24,6 +24,7 @@ import type {
   SseControlEventModel,
   SseEventModel,
   TokenUsagePayloadModel,
+  UserProfileConfigModel,
 } from "./api-types.generated";
 
 export type SessionLifecycleStatus = NonNullable<SessionRecordModel["status"]>;
@@ -493,6 +494,8 @@ export type ProviderModelView = {
   output_modalities: string[];
   aliases: string[];
   supports_reasoning_effort: boolean | null;
+  supported_reasoning_efforts: string[];
+  supported_reasoning_modes: string[];
 };
 
 export type ProviderModelListPayload = {
@@ -558,6 +561,7 @@ export type ProviderUsageLimitsResponse = {
 export type ConfigOptions = {
   provider_kinds: string[];
   reasoning_efforts: string[];
+  openai_reasoning_modes: string[];
   openai_service_tiers: string[];
   provider_metadata: Record<string, ProviderKindMetadata>;
 };
@@ -591,6 +595,7 @@ export type ModelProfileView = {
   model: string | null;
   sub_agent_model: string | null;
   reasoning_effort: string | null;
+  reasoning_mode: string | null;
   max_tokens: number | null;
   service_tier: string | null;
   allowed_tools: string[] | null;
@@ -640,6 +645,7 @@ export type ConfigBootstrapPayload = {
   commands: CommandView[];
   skills: SkillView[];
   agents: AgentView[];
+  user_profile: UserProfile;
   active_profile_id: string | null;
   stt_provider_id: string | null;
   maintenance: MaintenanceConfig;
@@ -650,6 +656,8 @@ export type ConfigBootstrapPayload = {
 export type MaintenanceConfig = {
   retention_days: number;
 };
+
+export type UserProfile = UserProfileConfigModel;
 
 export type TimelineMessageItem = {
   kind: "message";

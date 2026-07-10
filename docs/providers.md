@@ -104,6 +104,13 @@ uv run pbi-agent web
       "compact_threshold": 200000
     }
   ],
+  "user_profile": {
+    "preferred_name": "Ada",
+    "role": "Staff software engineer",
+    "about": "I build developer tools.",
+    "preferences": "Keep responses concise and include validation results.",
+    "instructions": "Preserve project conventions and ask before destructive changes."
+  },
   "web": {
     "active_profile_id": "analysis",
     "stt_provider_id": "deepgram-stt"

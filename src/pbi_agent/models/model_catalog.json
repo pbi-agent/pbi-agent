@@ -1,5 +1,45 @@
 {
   "models": {
+    "gpt-5.6-sol": {
+      "context_window": 1050000,
+      "pricing": {
+        "input": 5.00,
+        "cache_write_5m": 6.25,
+        "cache_write_1h": 6.25,
+        "cache_hit": 0.50,
+        "output": 30.00
+      }
+    },
+    "gpt-5.6-terra": {
+      "context_window": 1050000,
+      "pricing": {
+        "input": 2.50,
+        "cache_write_5m": 3.125,
+        "cache_write_1h": 3.125,
+        "cache_hit": 0.25,
+        "output": 15.00
+      }
+    },
+    "gpt-5.6-luna": {
+      "context_window": 1050000,
+      "pricing": {
+        "input": 1.00,
+        "cache_write_5m": 1.25,
+        "cache_write_1h": 1.25,
+        "cache_hit": 0.10,
+        "output": 6.00
+      }
+    },
+    "gpt-5.6": {
+      "context_window": 1050000,
+      "pricing": {
+        "input": 5.00,
+        "cache_write_5m": 6.25,
+        "cache_write_1h": 6.25,
+        "cache_hit": 0.50,
+        "output": 30.00
+      }
+    },
     "gpt-5.3-codex": {
       "context_window": 272000,
       "pricing": {

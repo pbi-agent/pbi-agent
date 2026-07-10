@@ -77,6 +77,15 @@ def test_unknown_model_returns_zero_cost() -> None:
 
 
 def test_known_model_pricing() -> None:
+    pricing = _pricing_for_model("gpt-5.6-sol")
+    assert pricing == (5.00, 6.25, 6.25, 0.50, 30.00)
+
+    pricing = _pricing_for_model("gpt-5.6-terra")
+    assert pricing == (2.50, 3.125, 3.125, 0.25, 15.00)
+
+    pricing = _pricing_for_model("gpt-5.6-luna")
+    assert pricing == (1.00, 1.25, 1.25, 0.10, 6.00)
+
     pricing = _pricing_for_model("gpt-5.3-codex")
     assert pricing == (1.75, 1.75, 1.75, 0.175, 14.00)
 
@@ -94,6 +103,15 @@ def test_known_model_pricing() -> None:
 
 
 def test_prefix_matching() -> None:
+    pricing = _pricing_for_model("gpt-5.6")
+    assert pricing == (5.00, 6.25, 6.25, 0.50, 30.00)
+
+    pricing = _pricing_for_model("gpt-5.6-terra-2026-04-23")
+    assert pricing == (2.50, 3.125, 3.125, 0.25, 15.00)
+
+    ctx = context_window_for_model("gpt-5.6-luna")
+    assert ctx == 1_050_000
+
     pricing = _pricing_for_model("gpt-5.3-codex-some-variant")
     assert pricing == (1.75, 1.75, 1.75, 0.175, 14.00)
 
@@ -195,6 +213,19 @@ def test_priority_service_tier_doubles_cost() -> None:
     assert priority_usage.estimated_cost_usd == pytest.approx(
         base_usage.estimated_cost_usd * 2
     )
+
+
+def test_gpt_5_6_cache_writes_use_the_documented_rate() -> None:
+    usage = TokenUsage(
+        input_tokens=100_000,
+        cached_input_tokens=20_000,
+        cache_write_tokens=30_000,
+        output_tokens=10_000,
+        model="gpt-5.6-sol",
+    )
+
+    assert usage.non_cached_input_tokens == 50_000
+    assert usage.estimated_cost_usd == pytest.approx(0.7475)
 
 
 def test_default_service_tier_no_change() -> None:

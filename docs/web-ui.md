@@ -20,7 +20,7 @@ The web UI is the default interactive workspace. It combines live chat sessions,
 | Sessions | Start or resume agent conversations, use `@file` mentions, upload images, run shell commands, and inspect run history. |
 | Kanban | Manage task cards across configurable workflow stages and start automated task runs. |
 | Dashboard | Review run observability, cost/token totals, duration, errors, and provider/model breakdowns. |
-| Settings | Configure providers, model profiles, speech-to-text, ChatGPT and GitHub Copilot account auth, and project skill/command installs. |
+| Settings | Configure your global profile, providers, model profiles, speech-to-text, account auth, and project skill/command installs. |
 
 If provider setup is incomplete, the app sends you to **Settings** first so you can create a provider and model profile.
 
@@ -62,11 +62,18 @@ Starting a new session resets the provider conversation state while keeping the 
 
 The Settings page manages persistent local configuration under `~/.pbi-agent/`:
 
+- Profile stores your preferred name, role, background, collaboration
+  preferences, and global instructions once for every workspace. Main agents and
+  sub-agents receive this context when a new or reloaded session starts.
 - Providers hold connection settings such as provider kind, API key, auth mode, endpoint URLs, and Google Cloud project/location values.
 - Model profiles hold runnable model/runtime settings tied to one saved provider.
 - The active default profile is used when a session or run does not specify another profile.
 - Speech-to-text selects the saved provider used for web UI dictation.
 - Project skills, commands, and agents can be installed from official catalogs, GitHub sources, or server-side local paths.
+
+Profile content becomes part of the system prompt and is sent to the model
+provider used by the session. Avoid storing secrets or other information you do
+not want sent to that provider.
 
 See [Providers](/providers), [Model Profiles](/model-profiles), and
 [Speech-to-text](/speech-to-text) for setup details.

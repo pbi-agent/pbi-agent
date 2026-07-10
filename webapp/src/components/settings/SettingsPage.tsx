@@ -15,12 +15,14 @@ import {
   updateMaintenanceConfig,
   updateModelProfile,
   updateProvider,
+  updateUserProfile,
 } from "../../api";
 import { ApiError } from "../../api";
 import type {
   ConfigBootstrapPayload,
   ModelProfileView,
   ProviderView,
+  UserProfile,
 } from "../../types";
 import { useSettingsDialog } from "../../hooks/useSettingsDialog";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
@@ -46,6 +48,7 @@ import { NotificationsSettingsSection } from "./NotificationsSettingsSection";
 import { ProviderAuthFlowModal } from "./ProviderAuthFlowModal";
 import { ProviderUsageLimitsDialog } from "./ProviderUsageLimitsDialog";
 import { ProvidersSettingsSection } from "./ProvidersSettingsSection";
+import { ProfileSettingsSection } from "./ProfileSettingsSection";
 import type { ProviderPayload } from "./ProviderModal";
 import { ProviderModal } from "./ProviderModal";
 import { SkillsSettingsSection } from "./SkillsSettingsSection";
@@ -62,10 +65,16 @@ type ModalState =
   | { type: "edit-profile"; profile: ModelProfileView }
   | { type: "delete-profile"; profile: ModelProfileView };
 
+type UserProfileDraftState = {
+  profile: UserProfile;
+  sourceRevision: string;
+};
+
 const STALE_MESSAGE =
   "Settings were changed while you were editing. Please review and resubmit.";
 
 type SettingsTabId =
+  | "profile"
   | "appearance"
   | "notifications"
   | "providers"
@@ -82,6 +91,16 @@ const SETTINGS_NAV_GROUPS: Array<{
   label: string;
   items: Array<{ id: SettingsTabId; label: string; description: string }>;
 }> = [
+    {
+      label: "General",
+      items: [
+        {
+          id: "profile",
+          label: "Profile",
+          description: "Identity and global instructions",
+        },
+      ],
+    },
     {
       label: "Models",
       items: [
@@ -180,6 +199,8 @@ export function SettingsPage() {
   const [modal, setModal] = useState<ModalState>({ type: "none" });
   const [pageError, setPageError] = useState<string | null>(null);
   const [busyProviderId, setBusyProviderId] = useState<string | null>(null);
+  const [userProfileDraft, setUserProfileDraft] =
+    useState<UserProfileDraftState | null>(null);
 
   const configQuery = useQuery({
     queryKey: ["config-bootstrap"],
@@ -337,6 +358,40 @@ export function SettingsPage() {
     }
   }
 
+  async function handleSaveUserProfile(
+    profile: ConfigBootstrapPayload["user_profile"],
+  ): Promise<void> {
+    try {
+      await updateUserProfile(
+        profile,
+        userProfileDraft?.sourceRevision ?? getRevision(),
+      );
+      await invalidateBoth();
+      setUserProfileDraft(null);
+    } catch (err) {
+      if (
+        err instanceof ApiError &&
+        err.status === 409 &&
+        err.message.includes("Config has changed")
+      ) {
+        await queryClient.refetchQueries({ queryKey: ["config-bootstrap"] });
+        const latestRevision = getRevision();
+        setUserProfileDraft((current) =>
+          current ? { ...current, sourceRevision: latestRevision } : current,
+        );
+        throw new Error(STALE_MESSAGE);
+      }
+      wrapStale(err);
+    }
+  }
+
+  function handleUserProfileDraftChange(profile: UserProfile) {
+    setUserProfileDraft((current) => ({
+      profile,
+      sourceRevision: current?.sourceRevision ?? getRevision(),
+    }));
+  }
+
   if (configQuery.isLoading) {
     return (
       <Dialog open={open} onOpenChange={(v) => { if (!v) closeSettings(); }}>
@@ -399,6 +454,7 @@ export function SettingsPage() {
     commands,
     skills,
     agents,
+    user_profile,
     active_profile_id,
     stt_provider_id,
     maintenance,
@@ -481,6 +537,15 @@ export function SettingsPage() {
                     )}
 
                     {activeTab === "appearance" && <AppearanceSettingsSection />}
+
+                    {activeTab === "profile" && (
+                      <ProfileSettingsSection
+                        profile={user_profile}
+                        draft={userProfileDraft?.profile ?? user_profile}
+                        onDraftChange={handleUserProfileDraftChange}
+                        onSave={handleSaveUserProfile}
+                      />
+                    )}
 
                     {activeTab === "notifications" && <NotificationsSettingsSection />}
 

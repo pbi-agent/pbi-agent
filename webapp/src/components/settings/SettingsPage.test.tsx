@@ -28,6 +28,8 @@ import {
   setSttProvider,
   startProviderAuthFlow,
   updateMaintenanceConfig,
+  updateModelProfile,
+  updateUserProfile,
 } from "../../api";
 import type { ConfigBootstrapPayload } from "../../types";
 import {
@@ -179,6 +181,7 @@ vi.mock("../../api", async (importOriginal) => {
     refreshProviderAuth: vi.fn(),
     logoutProviderAuth: vi.fn(),
     updateMaintenanceConfig: vi.fn(),
+    updateUserProfile: vi.fn(),
   };
 });
 
@@ -190,6 +193,13 @@ function makeConfigBootstrap(
     active_profile_id: "analysis",
     stt_provider_id: null,
     maintenance: { retention_days: 30 },
+    user_profile: {
+      preferred_name: "",
+      role: "",
+      about: "",
+      preferences: "",
+      instructions: "",
+    },
     providers: [
       {
         id: "openai-main",
@@ -251,6 +261,7 @@ function makeConfigBootstrap(
         model: "gpt-5.4",
         sub_agent_model: null,
         reasoning_effort: "high",
+        reasoning_mode: null,
         max_tokens: null,
         service_tier: null,
         allowed_tools: null,
@@ -290,6 +301,7 @@ function makeConfigBootstrap(
         model: "gpt-5.4-mini",
         sub_agent_model: null,
         reasoning_effort: "medium",
+        reasoning_mode: null,
         max_tokens: null,
         service_tier: null,
         allowed_tools: null,
@@ -334,7 +346,8 @@ function makeConfigBootstrap(
         "deepgram",
         "elevenlabs",
       ],
-      reasoning_efforts: ["high", "medium"],
+      reasoning_efforts: ["low", "medium", "high", "xhigh"],
+      openai_reasoning_modes: ["standard", "pro"],
       openai_service_tiers: [],
       provider_metadata: {
         openai: {
@@ -923,6 +936,16 @@ describe("SettingsPage", () => {
       maintenance: { retention_days: 14 },
       config_revision: "rev-2",
     });
+    vi.mocked(updateUserProfile).mockResolvedValue({
+      user_profile: {
+        preferred_name: "Ada",
+        role: "Staff engineer",
+        about: "Builds developer tools.",
+        preferences: "Prefer concise answers.",
+        instructions: "Always report validation.",
+      },
+      config_revision: "rev-2",
+    });
     vi.mocked(fetchProviderModels).mockResolvedValue({
       provider_id: "openai-main",
       provider_kind: "openai",
@@ -938,6 +961,8 @@ describe("SettingsPage", () => {
           output_modalities: ["text"],
           aliases: [],
           supports_reasoning_effort: true,
+          supported_reasoning_efforts: ["low", "medium", "high", "xhigh"],
+          supported_reasoning_modes: [],
         },
         {
           id: "gpt-5.4-mini",
@@ -948,6 +973,33 @@ describe("SettingsPage", () => {
           output_modalities: ["text"],
           aliases: ["gpt-5-mini"],
           supports_reasoning_effort: true,
+          supported_reasoning_efforts: [
+            "none",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+          ],
+          supported_reasoning_modes: [],
+        },
+        {
+          id: "gpt-5.6-sol",
+          display_name: "GPT-5.6 Sol",
+          created: 1_713_000_200,
+          owned_by: "openai",
+          input_modalities: ["text"],
+          output_modalities: ["text"],
+          aliases: ["gpt-5.6"],
+          supports_reasoning_effort: true,
+          supported_reasoning_efforts: [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+          ],
+          supported_reasoning_modes: ["standard", "pro"],
         },
       ],
       error: null,
@@ -1524,7 +1576,7 @@ describe("SettingsPage", () => {
       groups.map((group) =>
         group.querySelector(".settings-nav__group-label")?.textContent,
       ),
-    ).toEqual(["Models", "Project", "Desktop", "Data"]);
+    ).toEqual(["General", "Models", "Project", "Desktop", "Data"]);
     expect(
       groups.map((group) =>
         Array.from(group.querySelectorAll(".settings-nav__item-label")).map(
@@ -1532,6 +1584,7 @@ describe("SettingsPage", () => {
         ),
       ),
     ).toEqual([
+      ["Profile"],
       ["Providers", "Model Profiles", "Speech-to-text"],
       ["Commands", "Skills", "Agents", "Hooks", "Channels"],
       ["Appearance", "Notifications"],
@@ -1556,6 +1609,136 @@ describe("SettingsPage", () => {
     expect(
       screen.queryByRole("button", { name: "Add Profile" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("loads and saves the global user profile", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        user_profile: {
+          preferred_name: "Ada",
+          role: "Staff engineer",
+          about: "Builds developer tools.",
+          preferences: "Prefer concise answers.",
+          instructions: "Always report validation.",
+        },
+      }),
+    );
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Profile");
+
+    expect(await screen.findByLabelText("Preferred name")).toHaveValue("Ada");
+    expect(screen.getByLabelText("Role or occupation")).toHaveValue(
+      "Staff engineer",
+    );
+    expect(screen.getByLabelText("About you")).toHaveValue(
+      "Builds developer tools.",
+    );
+    const preferences = screen.getByLabelText("Preferences");
+    await user.clear(preferences);
+    await user.type(preferences, "Lead with the outcome.");
+    await openSettingsTab(user, "Providers");
+    await openSettingsTab(user, "Profile");
+    expect(screen.getByLabelText("Preferences")).toHaveValue(
+      "Lead with the outcome.",
+    );
+    const instructions = screen.getByLabelText("Global instructions");
+    await user.clear(instructions);
+    await user.type(instructions, "Preserve project conventions.");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(updateUserProfile).toHaveBeenCalledWith(
+        {
+          preferred_name: "Ada",
+          role: "Staff engineer",
+          about: "Builds developer tools.",
+          preferences: "Lead with the outcome.",
+          instructions: "Preserve project conventions.",
+        },
+        "rev-1",
+      );
+    });
+  });
+
+  it("preserves global profile edits after a revision conflict", async () => {
+    const user = userEvent.setup();
+    const initial = makeConfigBootstrap({
+      user_profile: {
+        preferred_name: "Ada",
+        role: "",
+        about: "",
+        preferences: "",
+        instructions: "Keep my draft.",
+      },
+    });
+    const changedOnDisk = makeConfigBootstrap({
+      config_revision: "rev-2",
+      user_profile: {
+        preferred_name: "Grace",
+        role: "",
+        about: "",
+        preferences: "",
+        instructions: "Changed elsewhere.",
+      },
+    });
+    vi.mocked(fetchConfigBootstrap)
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValue(changedOnDisk);
+    vi.mocked(updateUserProfile).mockRejectedValueOnce(
+      new ApiError("Config has changed on disk.", 409),
+    );
+    vi.mocked(updateUserProfile).mockResolvedValueOnce({
+      user_profile: {
+        preferred_name: "Ada",
+        role: "",
+        about: "",
+        preferences: "",
+        instructions: "Unsaved local instructions.",
+      },
+      config_revision: "rev-3",
+    });
+    const { queryClient } = renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Profile");
+    const instructions = await screen.findByLabelText("Global instructions");
+    await user.clear(instructions);
+    await user.type(instructions, "Unsaved local instructions.");
+    act(() => {
+      queryClient.setQueryData(["config-bootstrap"], changedOnDisk);
+    });
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    expect(updateUserProfile).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        preferred_name: "Ada",
+        instructions: "Unsaved local instructions.",
+      }),
+      "rev-1",
+    );
+    expect(
+      await screen.findByText(
+        "Settings were changed while you were editing. Please review and resubmit.",
+      ),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Global instructions")).toHaveValue(
+        "Unsaved local instructions.",
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(updateUserProfile).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          preferred_name: "Ada",
+          instructions: "Unsaved local instructions.",
+        }),
+        "rev-2",
+      ),
+    );
   });
 
   it("shows agent cards with preview markdown", async () => {
@@ -3243,6 +3426,161 @@ describe("SettingsPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("uses model reasoning efforts, generic fallback, and custom values", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Model Profiles");
+    await user.click(await screen.findByRole("button", { name: "Add Profile" }));
+    await waitFor(() =>
+      expect(fetchProviderModels).toHaveBeenCalledWith("openai-main"),
+    );
+
+    const reasoningSelect = screen.getByRole("combobox", {
+      name: "Reasoning effort",
+    });
+    let listbox = await openSelectListbox(user, reasoningSelect);
+    expect(
+      within(listbox).getByRole("option", { name: "xhigh" }),
+    ).toBeInTheDocument();
+    expect(
+      within(listbox).queryByRole("option", { name: "minimal" }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    await selectRadixOption(
+      user,
+      screen.getByRole("combobox", { name: "Model" }),
+      "GPT-5.4 mini (gpt-5.4-mini)",
+    );
+
+    listbox = await openSelectListbox(user, reasoningSelect);
+    expect(
+      within(listbox).getByRole("option", { name: "minimal" }),
+    ).toBeInTheDocument();
+    expect(
+      within(listbox).queryByRole("option", { name: "xhigh" }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    await selectRadixOption(
+      user,
+      screen.getByRole("combobox", { name: "Model" }),
+      "GPT-5.4 (gpt-5.4)",
+    );
+    await selectRadixOption(
+      user,
+      screen.getByRole("combobox", { name: "Sub-agent model" }),
+      "GPT-5.4 mini (gpt-5.4-mini)",
+    );
+
+    listbox = await openSelectListbox(user, reasoningSelect);
+    expect(
+      within(listbox).getByRole("option", { name: "low" }),
+    ).toBeInTheDocument();
+    expect(
+      within(listbox).queryByRole("option", { name: "minimal" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(listbox).queryByRole("option", { name: "xhigh" }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    const reasoningField = reasoningSelect.closest('[data-slot="field"]');
+    expect(reasoningField).not.toBeNull();
+    await user.click(
+      within(reasoningField as HTMLElement).getByRole("button", {
+        name: "Custom value",
+      }),
+    );
+    const customInput = within(reasoningField as HTMLElement).getByRole(
+      "textbox",
+    );
+    await user.type(customInput, "focused");
+    expect(customInput).toHaveValue("focused");
+  });
+
+  it("stores OpenAI reasoning mode for models that support it", async () => {
+    const user = userEvent.setup();
+    vi.mocked(createModelProfile).mockResolvedValue({
+      model_profile: makeConfigBootstrap().model_profiles[0],
+      config_revision: "rev-2",
+    });
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Model Profiles");
+    await user.click(await screen.findByRole("button", { name: "Add Profile" }));
+    await waitFor(() =>
+      expect(fetchProviderModels).toHaveBeenCalledWith("openai-main"),
+    );
+
+    expect(
+      screen.queryByRole("combobox", { name: "Reasoning mode" }),
+    ).not.toBeInTheDocument();
+    await user.type(
+      document.querySelector<HTMLInputElement>('input[name="profile-name"]')!,
+      "GPT-5.6 Pro",
+    );
+    await selectRadixOption(
+      user,
+      screen.getByRole("combobox", { name: "Model" }),
+      "GPT-5.6 Sol (gpt-5.6-sol)",
+    );
+
+    const modeSelect = screen.getByRole("combobox", {
+      name: "Reasoning mode",
+    });
+    const listbox = await openSelectListbox(user, modeSelect);
+    expect(
+      within(listbox).getByRole("option", { name: "standard" }),
+    ).toBeInTheDocument();
+    expect(
+      within(listbox).getByRole("option", { name: "pro" }),
+    ).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await selectRadixOption(user, modeSelect, "pro");
+    await user.click(screen.getByRole("button", { name: "Add Profile" }));
+
+    await waitFor(() =>
+      expect(createModelProfile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: "gpt-5.6-sol",
+          reasoning_mode: "pro",
+        }),
+        "rev-1",
+      ),
+    );
+  });
+
+  it("does not offer OpenAI reasoning modes for unknown custom models", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Model Profiles");
+    await user.click(await screen.findByRole("button", { name: "Add Profile" }));
+    await waitFor(() =>
+      expect(fetchProviderModels).toHaveBeenCalledWith("openai-main"),
+    );
+
+    const modelField = screen
+      .getByRole("combobox", { name: "Model" })
+      .closest('[data-slot="field"]');
+    expect(modelField).not.toBeNull();
+    await user.click(
+      within(modelField as HTMLElement).getByRole("button", {
+        name: "Custom value",
+      }),
+    );
+    await user.type(
+      within(modelField as HTMLElement).getByRole("textbox"),
+      "future-openai-model",
+    );
+
+    expect(
+      screen.queryByRole("combobox", { name: "Reasoning mode" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("leaves the sub-agent model blank so the main profile model is used", async () => {
     const user = userEvent.setup();
     vi.mocked(createModelProfile).mockResolvedValue({
@@ -3389,6 +3727,59 @@ describe("SettingsPage", () => {
     );
     expect(modelInput?.value).toBe("legacy-model");
     expect(subAgentModelInput?.value).toBe("legacy-sub-agent");
+  });
+
+  it("preserves an existing reasoning mode when discovery is unavailable", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        model_profiles: [
+          {
+            ...makeConfigBootstrap().model_profiles[0],
+            id: "pro",
+            name: "Pro",
+            model: "gpt-5.6-sol",
+            reasoning_mode: "pro",
+          },
+        ],
+      }),
+    );
+    vi.mocked(fetchProviderModels).mockResolvedValue({
+      provider_id: "openai-main",
+      provider_kind: "openai",
+      discovery_supported: true,
+      manual_entry_required: true,
+      models: [],
+      error: {
+        code: "auth_required",
+        message: "Missing authentication for provider 'openai'.",
+        status_code: null,
+      },
+    });
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Model Profiles");
+    await screen.findByRole("button", { name: "Add Profile" });
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await screen.findByText("Missing authentication for provider 'openai'.");
+    await user.type(
+      document.querySelector<HTMLInputElement>('input[name="profile-name"]')!,
+      " Updated",
+    );
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() =>
+      expect(updateModelProfile).toHaveBeenCalledWith(
+        "pro",
+        expect.objectContaining({
+          name: "Pro Updated",
+          model: "gpt-5.6-sol",
+          reasoning_mode: "pro",
+        }),
+        "rev-1",
+      ),
+    );
   });
 
   it("shows the stale-config banner when the active profile update conflicts", async () => {
