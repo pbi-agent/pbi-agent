@@ -13,6 +13,7 @@ from pbi_agent.config import (
     InternalConfig,
     MaintenanceConfig,
     ModelProfileConfig,
+    OPENAI_REASONING_MODES,
     OPENAI_SERVICE_TIERS,
     PROVIDER_KINDS,
     ProviderConfig,
@@ -132,6 +133,7 @@ class ConfigurationMixin:
             "options": {
                 "provider_kinds": list(PROVIDER_KINDS),
                 "reasoning_efforts": ["low", "medium", "high", "xhigh"],
+                "openai_reasoning_modes": list(OPENAI_REASONING_MODES),
                 "openai_service_tiers": list(OPENAI_SERVICE_TIERS),
                 "provider_metadata": {
                     provider_kind: provider_ui_metadata(provider_kind)
@@ -319,6 +321,7 @@ class ConfigurationMixin:
         model: str | None,
         sub_agent_model: str | None,
         reasoning_effort: str | None,
+        reasoning_mode: str | None,
         max_tokens: int | None,
         service_tier: str | None,
         allowed_tools: tuple[str, ...] | None,
@@ -340,6 +343,7 @@ class ConfigurationMixin:
                 model=model,
                 sub_agent_model=sub_agent_model,
                 reasoning_effort=reasoning_effort,
+                reasoning_mode=reasoning_mode,
                 max_tokens=max_tokens,
                 service_tier=service_tier,
                 allowed_tools=allowed_tools,
@@ -373,6 +377,7 @@ class ConfigurationMixin:
         model: str | None,
         sub_agent_model: str | None,
         reasoning_effort: str | None,
+        reasoning_mode: str | None,
         max_tokens: int | None,
         service_tier: str | None,
         allowed_tools: tuple[str, ...] | None,
@@ -413,6 +418,11 @@ class ConfigurationMixin:
                 reasoning_effort
                 if "reasoning_effort" in fields_set
                 else profile.reasoning_effort
+            ),
+            reasoning_mode=(
+                reasoning_mode
+                if "reasoning_mode" in fields_set
+                else profile.reasoning_mode
             ),
             max_tokens=max_tokens if "max_tokens" in fields_set else profile.max_tokens,
             service_tier=(
@@ -849,6 +859,7 @@ class ConfigurationMixin:
             "aliases": list(model.aliases),
             "supports_reasoning_effort": model.supports_reasoning_effort,
             "supported_reasoning_efforts": list(model.supported_reasoning_efforts),
+            "supported_reasoning_modes": list(model.supported_reasoning_modes),
         }
 
     def _provider_model_error_view(self, error: Any) -> dict[str, Any] | None:
@@ -880,6 +891,7 @@ class ConfigurationMixin:
             "model": profile.model,
             "sub_agent_model": profile.sub_agent_model,
             "reasoning_effort": profile.reasoning_effort,
+            "reasoning_mode": profile.reasoning_mode,
             "max_tokens": profile.max_tokens,
             "service_tier": profile.service_tier,
             "allowed_tools": (

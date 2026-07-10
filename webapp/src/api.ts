@@ -1311,6 +1311,7 @@ export async function createModelProfile(
     model?: string | null;
     sub_agent_model?: string | null;
     reasoning_effort?: string | null;
+    reasoning_mode?: string | null;
     max_tokens?: number | null;
     service_tier?: string | null;
     allowed_tools?: string[] | null;
@@ -1345,6 +1346,7 @@ export async function updateModelProfile(
     model: string | null;
     sub_agent_model: string | null;
     reasoning_effort: string | null;
+    reasoning_mode: string | null;
     max_tokens: number | null;
     service_tier: string | null;
     allowed_tools: string[] | null;

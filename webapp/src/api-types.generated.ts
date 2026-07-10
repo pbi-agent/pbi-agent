@@ -67,7 +67,7 @@ export type CommandViewModel = { id: string; name: string; slash_alias: string; 
 
 export type ConfigBootstrapResponse = { providers: ProviderViewModel[]; model_profiles: ModelProfileViewModel[]; commands: CommandViewModel[]; skills: SkillViewModel[]; agents: AgentViewModel[]; active_profile_id: string | null; stt_provider_id: string | null; maintenance: MaintenanceConfigModel; config_revision: string; options: ConfigOptionsModel };
 
-export type ConfigOptionsModel = { provider_kinds: string[]; reasoning_efforts: string[]; openai_service_tiers: string[]; provider_metadata: Record<string, ProviderKindMetadataModel> };
+export type ConfigOptionsModel = { provider_kinds: string[]; reasoning_efforts: string[]; openai_reasoning_modes: string[]; openai_service_tiers: string[]; provider_metadata: Record<string, ProviderKindMetadataModel> };
 
 export type CreateSessionRequest = { title?: string; profile_id?: string | null };
 
@@ -151,15 +151,15 @@ export type MessageRemovedSseEventPayloadModel = { live_session_id?: string | nu
 
 export type ModelProfileListResponse = { model_profiles: ModelProfileViewModel[]; active_profile_id: string | null; config_revision: string };
 
-export type ModelProfileMutationRequest = { id?: string | null; name: string; provider_id: string; model?: string | null; sub_agent_model?: string | null; reasoning_effort?: string | null; max_tokens?: number | null; service_tier?: string | null; allowed_tools?: string[] | null; max_tool_workers?: number | null; max_retries?: number | null; compact_threshold?: number | null; compact_tail_turns?: number | null; compact_preserve_recent_tokens?: number | null; compact_tool_output_max_chars?: number | null };
+export type ModelProfileMutationRequest = { id?: string | null; name: string; provider_id: string; model?: string | null; sub_agent_model?: string | null; reasoning_effort?: string | null; reasoning_mode?: string | null; max_tokens?: number | null; service_tier?: string | null; allowed_tools?: string[] | null; max_tool_workers?: number | null; max_retries?: number | null; compact_threshold?: number | null; compact_tail_turns?: number | null; compact_preserve_recent_tokens?: number | null; compact_tool_output_max_chars?: number | null };
 
 export type ModelProfileProviderModel = { id: string; name: string; kind: string };
 
 export type ModelProfileResponse = { model_profile: ModelProfileViewModel; config_revision: string };
 
-export type ModelProfileUpdateRequest = { name?: string | null; provider_id?: string | null; model?: string | null; sub_agent_model?: string | null; reasoning_effort?: string | null; max_tokens?: number | null; service_tier?: string | null; allowed_tools?: string[] | null; max_tool_workers?: number | null; max_retries?: number | null; compact_threshold?: number | null; compact_tail_turns?: number | null; compact_preserve_recent_tokens?: number | null; compact_tool_output_max_chars?: number | null };
+export type ModelProfileUpdateRequest = { name?: string | null; provider_id?: string | null; model?: string | null; sub_agent_model?: string | null; reasoning_effort?: string | null; reasoning_mode?: string | null; max_tokens?: number | null; service_tier?: string | null; allowed_tools?: string[] | null; max_tool_workers?: number | null; max_retries?: number | null; compact_threshold?: number | null; compact_tail_turns?: number | null; compact_preserve_recent_tokens?: number | null; compact_tool_output_max_chars?: number | null };
 
-export type ModelProfileViewModel = { id: string; name: string; provider_id: string; provider: ModelProfileProviderModel; model: string | null; sub_agent_model: string | null; reasoning_effort: string | null; max_tokens: number | null; service_tier: string | null; allowed_tools: string[] | null; max_tool_workers: number | null; max_retries: number | null; compact_threshold: number | null; compact_tail_turns: number | null; compact_preserve_recent_tokens: number | null; compact_tool_output_max_chars: number | null; is_active_default: boolean; resolved_runtime: ResolvedRuntimeViewModel };
+export type ModelProfileViewModel = { id: string; name: string; provider_id: string; provider: ModelProfileProviderModel; model: string | null; sub_agent_model: string | null; reasoning_effort: string | null; reasoning_mode: string | null; max_tokens: number | null; service_tier: string | null; allowed_tools: string[] | null; max_tool_workers: number | null; max_retries: number | null; compact_threshold: number | null; compact_tail_turns: number | null; compact_preserve_recent_tokens: number | null; compact_tool_output_max_chars: number | null; is_active_default: boolean; resolved_runtime: ResolvedRuntimeViewModel };
 
 export type NewSessionRequest = { profile_id?: string | null };
 
@@ -207,7 +207,7 @@ export type ProviderModelFetchErrorModel = { code: string; message: string; stat
 
 export type ProviderModelListResponse = { provider_id: string; provider_kind: string; discovery_supported: boolean; manual_entry_required: boolean; models: ProviderModelViewModel[]; error?: ProviderModelFetchErrorModel | null };
 
-export type ProviderModelViewModel = { id: string; display_name?: string | null; created?: number | string | null; owned_by?: string | null; input_modalities?: string[]; output_modalities?: string[]; aliases?: string[]; supports_reasoning_effort?: boolean | null; supported_reasoning_efforts?: string[] };
+export type ProviderModelViewModel = { id: string; display_name?: string | null; created?: number | string | null; owned_by?: string | null; input_modalities?: string[]; output_modalities?: string[]; aliases?: string[]; supports_reasoning_effort?: boolean | null; supported_reasoning_efforts?: string[]; supported_reasoning_modes?: string[] };
 
 export type ProviderMutationRequest = { id?: string | null; name: string; kind: string; auth_mode?: string | null; api_key?: string | null; api_key_env?: string | null; responses_url?: string | null; generic_api_url?: string | null; google_cloud_project?: string | null; google_cloud_location?: string | null };
 

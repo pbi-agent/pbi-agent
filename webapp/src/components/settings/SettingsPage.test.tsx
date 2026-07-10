@@ -28,6 +28,7 @@ import {
   setSttProvider,
   startProviderAuthFlow,
   updateMaintenanceConfig,
+  updateModelProfile,
 } from "../../api";
 import type { ConfigBootstrapPayload } from "../../types";
 import {
@@ -251,6 +252,7 @@ function makeConfigBootstrap(
         model: "gpt-5.4",
         sub_agent_model: null,
         reasoning_effort: "high",
+        reasoning_mode: null,
         max_tokens: null,
         service_tier: null,
         allowed_tools: null,
@@ -290,6 +292,7 @@ function makeConfigBootstrap(
         model: "gpt-5.4-mini",
         sub_agent_model: null,
         reasoning_effort: "medium",
+        reasoning_mode: null,
         max_tokens: null,
         service_tier: null,
         allowed_tools: null,
@@ -335,6 +338,7 @@ function makeConfigBootstrap(
         "elevenlabs",
       ],
       reasoning_efforts: ["low", "medium", "high", "xhigh"],
+      openai_reasoning_modes: ["standard", "pro"],
       openai_service_tiers: [],
       provider_metadata: {
         openai: {
@@ -939,6 +943,7 @@ describe("SettingsPage", () => {
           aliases: [],
           supports_reasoning_effort: true,
           supported_reasoning_efforts: ["low", "medium", "high", "xhigh"],
+          supported_reasoning_modes: [],
         },
         {
           id: "gpt-5.4-mini",
@@ -956,6 +961,26 @@ describe("SettingsPage", () => {
             "medium",
             "high",
           ],
+          supported_reasoning_modes: [],
+        },
+        {
+          id: "gpt-5.6-sol",
+          display_name: "GPT-5.6 Sol",
+          created: 1_713_000_200,
+          owned_by: "openai",
+          input_modalities: ["text"],
+          output_modalities: ["text"],
+          aliases: ["gpt-5.6"],
+          supports_reasoning_effort: true,
+          supported_reasoning_efforts: [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+          ],
+          supported_reasoning_modes: ["standard", "pro"],
         },
       ],
       error: null,
@@ -3325,6 +3350,87 @@ describe("SettingsPage", () => {
     expect(customInput).toHaveValue("focused");
   });
 
+  it("stores OpenAI reasoning mode for models that support it", async () => {
+    const user = userEvent.setup();
+    vi.mocked(createModelProfile).mockResolvedValue({
+      model_profile: makeConfigBootstrap().model_profiles[0],
+      config_revision: "rev-2",
+    });
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Model Profiles");
+    await user.click(await screen.findByRole("button", { name: "Add Profile" }));
+    await waitFor(() =>
+      expect(fetchProviderModels).toHaveBeenCalledWith("openai-main"),
+    );
+
+    expect(
+      screen.queryByRole("combobox", { name: "Reasoning mode" }),
+    ).not.toBeInTheDocument();
+    await user.type(
+      document.querySelector<HTMLInputElement>('input[name="profile-name"]')!,
+      "GPT-5.6 Pro",
+    );
+    await selectRadixOption(
+      user,
+      screen.getByRole("combobox", { name: "Model" }),
+      "GPT-5.6 Sol (gpt-5.6-sol)",
+    );
+
+    const modeSelect = screen.getByRole("combobox", {
+      name: "Reasoning mode",
+    });
+    const listbox = await openSelectListbox(user, modeSelect);
+    expect(
+      within(listbox).getByRole("option", { name: "standard" }),
+    ).toBeInTheDocument();
+    expect(
+      within(listbox).getByRole("option", { name: "pro" }),
+    ).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await selectRadixOption(user, modeSelect, "pro");
+    await user.click(screen.getByRole("button", { name: "Add Profile" }));
+
+    await waitFor(() =>
+      expect(createModelProfile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: "gpt-5.6-sol",
+          reasoning_mode: "pro",
+        }),
+        "rev-1",
+      ),
+    );
+  });
+
+  it("does not offer OpenAI reasoning modes for unknown custom models", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Model Profiles");
+    await user.click(await screen.findByRole("button", { name: "Add Profile" }));
+    await waitFor(() =>
+      expect(fetchProviderModels).toHaveBeenCalledWith("openai-main"),
+    );
+
+    const modelField = screen
+      .getByRole("combobox", { name: "Model" })
+      .closest('[data-slot="field"]');
+    expect(modelField).not.toBeNull();
+    await user.click(
+      within(modelField as HTMLElement).getByRole("button", {
+        name: "Custom value",
+      }),
+    );
+    await user.type(
+      within(modelField as HTMLElement).getByRole("textbox"),
+      "future-openai-model",
+    );
+
+    expect(
+      screen.queryByRole("combobox", { name: "Reasoning mode" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("leaves the sub-agent model blank so the main profile model is used", async () => {
     const user = userEvent.setup();
     vi.mocked(createModelProfile).mockResolvedValue({
@@ -3471,6 +3577,59 @@ describe("SettingsPage", () => {
     );
     expect(modelInput?.value).toBe("legacy-model");
     expect(subAgentModelInput?.value).toBe("legacy-sub-agent");
+  });
+
+  it("preserves an existing reasoning mode when discovery is unavailable", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        model_profiles: [
+          {
+            ...makeConfigBootstrap().model_profiles[0],
+            id: "pro",
+            name: "Pro",
+            model: "gpt-5.6-sol",
+            reasoning_mode: "pro",
+          },
+        ],
+      }),
+    );
+    vi.mocked(fetchProviderModels).mockResolvedValue({
+      provider_id: "openai-main",
+      provider_kind: "openai",
+      discovery_supported: true,
+      manual_entry_required: true,
+      models: [],
+      error: {
+        code: "auth_required",
+        message: "Missing authentication for provider 'openai'.",
+        status_code: null,
+      },
+    });
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Model Profiles");
+    await screen.findByRole("button", { name: "Add Profile" });
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await screen.findByText("Missing authentication for provider 'openai'.");
+    await user.type(
+      document.querySelector<HTMLInputElement>('input[name="profile-name"]')!,
+      " Updated",
+    );
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() =>
+      expect(updateModelProfile).toHaveBeenCalledWith(
+        "pro",
+        expect.objectContaining({
+          name: "Pro Updated",
+          model: "gpt-5.6-sol",
+          reasoning_mode: "pro",
+        }),
+        "rev-1",
+      ),
+    );
   });
 
   it("shows the stale-config banner when the active profile update conflicts", async () => {

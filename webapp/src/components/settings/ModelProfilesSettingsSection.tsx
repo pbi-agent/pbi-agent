@@ -48,6 +48,9 @@ function ProfileCard({
   if (r.reasoning_effort && r.reasoning_effort !== "none") {
     runtimeParts.push(r.reasoning_effort);
   }
+  if (profile.reasoning_mode) {
+    runtimeParts.push(profile.reasoning_mode);
+  }
   if (r.service_tier) {
     runtimeParts.push(r.service_tier);
   }

@@ -34,6 +34,7 @@ class ProviderAuthModeMetadataModel(BaseModel):
 class ConfigOptionsModel(BaseModel):
     provider_kinds: list[str]
     reasoning_efforts: list[str]
+    openai_reasoning_modes: list[str]
     openai_service_tiers: list[str]
     provider_metadata: dict[str, ProviderKindMetadataModel]
 
@@ -126,6 +127,7 @@ class ProviderModelViewModel(BaseModel):
     aliases: list[str] = Field(default_factory=list)
     supports_reasoning_effort: bool | None = None
     supported_reasoning_efforts: list[str] = Field(default_factory=list)
+    supported_reasoning_modes: list[str] = Field(default_factory=list)
 
 
 class ProviderModelListResponse(BaseModel):
@@ -259,6 +261,7 @@ class ModelProfileViewModel(BaseModel):
     model: str | None
     sub_agent_model: str | None
     reasoning_effort: str | None
+    reasoning_mode: str | None
     max_tokens: int | None
     service_tier: str | None
     allowed_tools: list[str] | None
@@ -279,6 +282,7 @@ class ModelProfileMutationRequest(BaseModel):
     model: str | None = None
     sub_agent_model: str | None = None
     reasoning_effort: str | None = None
+    reasoning_mode: str | None = None
     max_tokens: int | None = Field(default=None, ge=1)
     service_tier: str | None = None
     allowed_tools: list[str] | None = None
@@ -296,6 +300,7 @@ class ModelProfileUpdateRequest(BaseModel):
     model: str | None = None
     sub_agent_model: str | None = None
     reasoning_effort: str | None = None
+    reasoning_mode: str | None = None
     max_tokens: int | None = Field(default=None, ge=1)
     service_tier: str | None = None
     allowed_tools: list[str] | None = None

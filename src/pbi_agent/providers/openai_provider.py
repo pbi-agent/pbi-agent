@@ -1197,6 +1197,8 @@ class OpenAIProvider(Provider):
                 "summary": "auto",
             },
         }
+        if self._settings.provider == "openai" and self._settings.reasoning_mode:
+            body["reasoning"]["mode"] = self._settings.reasoning_mode
         if request_options.tool_choice is not None:
             body["tool_choice"] = request_options.tool_choice
         if request_options.use_session_prompt_cache_key and session_id:

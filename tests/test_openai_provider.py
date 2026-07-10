@@ -266,14 +266,14 @@ def test_azure_request_headers_use_api_key_header() -> None:
 
 
 def test_openai_build_request_body_uses_http_responses_shape() -> None:
-    provider = OpenAIProvider(_make_settings())
+    provider = OpenAIProvider(_make_settings(model="gpt-5.6-sol", reasoning_mode="pro"))
 
     body = provider._build_request_body(
         input_items=[{"role": "user", "content": "hello"}],
         instructions="be concise",
     )
 
-    assert body["model"] == DEFAULT_MODEL
+    assert body["model"] == "gpt-5.6-sol"
     assert body["max_output_tokens"] == DEFAULT_MAX_TOKENS
     assert body["stream"] is False
     assert body["store"] is True
@@ -283,7 +283,11 @@ def test_openai_build_request_body_uses_http_responses_shape() -> None:
     assert body["context_management"] == [
         {"type": "compaction", "compact_threshold": 200000}
     ]
-    assert body["reasoning"] == {"effort": "xhigh", "summary": "auto"}
+    assert body["reasoning"] == {
+        "effort": "xhigh",
+        "summary": "auto",
+        "mode": "pro",
+    }
     assert body["input"] == [{"role": "user", "content": "hello"}]
     assert body["instructions"] == "be concise"
     assert "previous_response_id" not in body
@@ -339,6 +343,23 @@ def test_openai_build_request_body_uses_chatgpt_backend_contract() -> None:
         {"type": "compaction", "compact_threshold": 200000}
     ]
     assert "previous_response_id" not in body
+
+
+def test_openai_build_request_body_does_not_send_reasoning_mode_to_chatgpt() -> None:
+    provider = OpenAIProvider(
+        _make_settings(
+            provider="chatgpt",
+            responses_url=OPENAI_CHATGPT_RESPONSES_URL,
+            reasoning_mode="pro",
+        )
+    )
+
+    body = provider._build_request_body(
+        input_items=[{"role": "user", "content": "hello"}],
+        instructions="be concise",
+    )
+
+    assert body["reasoning"] == {"effort": "xhigh", "summary": "auto"}
 
 
 def test_openai_build_request_body_omits_chatgpt_prompt_cache_key_without_session_id() -> (

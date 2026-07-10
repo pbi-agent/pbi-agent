@@ -273,6 +273,7 @@ def _handle_config_profiles_command(args: argparse.Namespace) -> int:
         table.add_column("Model")
         table.add_column("Sub-Agent")
         table.add_column("Reasoning")
+        table.add_column("Mode")
         for profile in profiles:
             table.add_row(
                 profile.id,
@@ -282,6 +283,7 @@ def _handle_config_profiles_command(args: argparse.Namespace) -> int:
                 profile.model or "",
                 profile.sub_agent_model or "",
                 profile.reasoning_effort or "",
+                profile.reasoning_mode or "",
             )
         console.print(table)
         return 0
@@ -295,6 +297,7 @@ def _handle_config_profiles_command(args: argparse.Namespace) -> int:
                 model=args.model,
                 sub_agent_model=args.sub_agent_model,
                 reasoning_effort=args.reasoning_effort,
+                reasoning_mode=args.reasoning_mode,
                 max_tokens=args.max_tokens,
                 service_tier=args.service_tier,
                 allowed_tools=parse_csv_setting(args.allowed_tools),
@@ -317,6 +320,8 @@ def _handle_config_profiles_command(args: argparse.Namespace) -> int:
             model=args.model,
             sub_agent_model=args.sub_agent_model,
             reasoning_effort=args.reasoning_effort,
+            reasoning_mode=args.reasoning_mode,
+            clear_reasoning_mode=args.clear_reasoning_mode,
             max_tokens=args.max_tokens,
             service_tier=args.service_tier,
             allowed_tools=parse_csv_setting(args.allowed_tools),

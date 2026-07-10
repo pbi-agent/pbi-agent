@@ -494,6 +494,7 @@ export type ProviderModelView = {
   aliases: string[];
   supports_reasoning_effort: boolean | null;
   supported_reasoning_efforts: string[];
+  supported_reasoning_modes: string[];
 };
 
 export type ProviderModelListPayload = {
@@ -559,6 +560,7 @@ export type ProviderUsageLimitsResponse = {
 export type ConfigOptions = {
   provider_kinds: string[];
   reasoning_efforts: string[];
+  openai_reasoning_modes: string[];
   openai_service_tiers: string[];
   provider_metadata: Record<string, ProviderKindMetadata>;
 };
@@ -592,6 +594,7 @@ export type ModelProfileView = {
   model: string | null;
   sub_agent_model: string | null;
   reasoning_effort: string | null;
+  reasoning_mode: string | null;
   max_tokens: number | null;
   service_tier: string | null;
   allowed_tools: string[] | null;

@@ -240,6 +240,7 @@ def create_model_profile(
             model=request.model,
             sub_agent_model=request.sub_agent_model,
             reasoning_effort=request.reasoning_effort,
+            reasoning_mode=request.reasoning_mode,
             max_tokens=request.max_tokens,
             service_tier=request.service_tier,
             allowed_tools=(
@@ -280,6 +281,7 @@ def update_model_profile(
             model=request.model,
             sub_agent_model=request.sub_agent_model,
             reasoning_effort=request.reasoning_effort,
+            reasoning_mode=request.reasoning_mode,
             max_tokens=request.max_tokens,
             service_tier=request.service_tier,
             allowed_tools=(

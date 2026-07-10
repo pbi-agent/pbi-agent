@@ -81,6 +81,7 @@ const profiles: ModelProfileView[] = [
     model: "gpt-5.4",
     sub_agent_model: null,
     reasoning_effort: "high",
+    reasoning_mode: null,
     max_tokens: null,
     service_tier: null,
     allowed_tools: null,

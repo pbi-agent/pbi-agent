@@ -15,6 +15,7 @@ from pbi_agent.auth.models import (
     AUTH_MODE_XAI_ACCOUNT,
 )
 from pbi_agent.config import (
+    OPENAI_REASONING_MODES,
     OPENAI_SERVICE_TIERS,
     PROVIDER_KINDS,
     RUNTIME_PROVIDER_KINDS,
@@ -1006,7 +1007,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     def add_profile_options(
-        target: argparse.ArgumentParser, *, require_provider_id: bool
+        target: argparse.ArgumentParser,
+        *,
+        require_provider_id: bool,
+        allow_reasoning_mode_clear: bool = False,
     ) -> None:
         target.add_argument(
             "--provider-id",
@@ -1026,6 +1030,19 @@ def build_parser() -> argparse.ArgumentParser:
             default=None,
             help="Requested reasoning effort; provider-specific values are accepted.",
         )
+        reasoning_mode_group = target.add_mutually_exclusive_group()
+        reasoning_mode_group.add_argument(
+            "--reasoning-mode",
+            choices=list(OPENAI_REASONING_MODES),
+            default=None,
+            help="OpenAI Responses reasoning mode.",
+        )
+        if allow_reasoning_mode_clear:
+            reasoning_mode_group.add_argument(
+                "--clear-reasoning-mode",
+                action="store_true",
+                help="Clear the saved OpenAI Responses reasoning mode.",
+            )
         target.add_argument("--max-tokens", type=int, default=None)
         target.add_argument(
             "--service-tier",
@@ -1073,7 +1090,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     profiles_update.add_argument("profile_id", help="Model profile ID.")
     profiles_update.add_argument("--name", default=None, help="Display name.")
-    add_profile_options(profiles_update, require_provider_id=False)
+    add_profile_options(
+        profiles_update,
+        require_provider_id=False,
+        allow_reasoning_mode_clear=True,
+    )
 
     profiles_delete = profiles_actions.add_parser(
         "delete",

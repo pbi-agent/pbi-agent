@@ -93,6 +93,7 @@ function makeConfigBootstrap(
         model: "gpt-5.4",
         sub_agent_model: null,
         reasoning_effort: "medium",
+        reasoning_mode: null,
         max_tokens: null,
         service_tier: null,
         allowed_tools: null,
@@ -112,6 +113,7 @@ function makeConfigBootstrap(
     options: {
       provider_kinds: ["chatgpt"],
       reasoning_efforts: ["medium"],
+      openai_reasoning_modes: [],
       openai_service_tiers: [],
       provider_metadata: {
         chatgpt: {

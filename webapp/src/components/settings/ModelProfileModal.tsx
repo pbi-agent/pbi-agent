@@ -68,6 +68,7 @@ interface FormState {
   model: string;
   sub_agent_model: string;
   reasoning_effort: string;
+  reasoning_mode: string;
   max_tokens: string;
   service_tier: string;
   allowed_tools: ToolCategory[];
@@ -88,6 +89,7 @@ function initForm(
       model: profile.model ?? "",
       sub_agent_model: profile.sub_agent_model ?? "",
       reasoning_effort: profile.reasoning_effort ?? "",
+      reasoning_mode: profile.reasoning_mode ?? "",
       max_tokens: profile.max_tokens?.toString() ?? "",
       service_tier: profile.service_tier ?? "",
       allowed_tools: normalizeToolCategories(profile.allowed_tools),
@@ -103,6 +105,7 @@ function initForm(
     model: "",
     sub_agent_model: "",
     reasoning_effort: "",
+    reasoning_mode: "",
     max_tokens: "",
     service_tier: "",
     allowed_tools: [...ALL_TOOL_CATEGORIES],
@@ -119,6 +122,7 @@ export type ProfilePayload = {
   model?: string | null;
   sub_agent_model?: string | null;
   reasoning_effort?: string | null;
+  reasoning_mode?: string | null;
   max_tokens?: number | null;
   service_tier?: string | null;
   allowed_tools?: ToolCategory[] | null;
@@ -219,34 +223,43 @@ function preferredModelMode(
   return matchesKnownModel(value, providerModels) ? "select" : "custom";
 }
 
-function reasoningEffortsForModels(
+type ReasoningCapabilityField =
+  | "supported_reasoning_efforts"
+  | "supported_reasoning_modes";
+
+function compatibleReasoningValuesForModels(
   modelValue: string,
   subAgentModelValue: string,
   providerModels: ProviderModelListPayload | null,
-  genericEfforts: string[],
+  capabilityField: ReasoningCapabilityField,
+  fallbackValues: string[] | null,
 ): string[] {
   const modelValues = [
     modelValue,
     ...(subAgentModelValue.trim() ? [subAgentModelValue] : []),
   ];
-  const effortsByModel = modelValues.map((value) => {
+  const valuesByModel = modelValues.map((value) => {
     const selectedModel = value.trim();
+    if (!selectedModel && fallbackValues === null) {
+      return [];
+    }
     const model = providerModels?.models.find(
       (item) =>
         item.id === selectedModel || item.aliases.includes(selectedModel),
     );
-    const efforts =
-      model && model.supported_reasoning_efforts.length > 0
-        ? model.supported_reasoning_efforts
-        : genericEfforts;
-    return [...new Set(efforts)];
+    const configuredValues = model?.[capabilityField] ?? [];
+    const values =
+      configuredValues.length > 0
+        ? configuredValues
+        : (fallbackValues ?? []);
+    return [...new Set(values)];
   });
-  return effortsByModel
+  return valuesByModel
     .slice(1)
     .reduce(
-      (compatible, efforts) =>
-        compatible.filter((effort) => efforts.includes(effort)),
-      effortsByModel[0] ?? [],
+      (compatible, values) =>
+        compatible.filter((value) => values.includes(value)),
+      valuesByModel[0] ?? [],
     );
 }
 
@@ -443,10 +456,11 @@ export function ModelProfileModal({
   }, [form.sub_agent_model, providerModels]);
   const reasoningEfforts = useMemo(
     () =>
-      reasoningEffortsForModels(
+      compatibleReasoningValuesForModels(
         form.model,
         form.sub_agent_model,
         providerModels,
+        "supported_reasoning_efforts",
         options.reasoning_efforts,
       ),
     [
@@ -470,6 +484,26 @@ export function ModelProfileModal({
       })),
     ];
   }, [form.reasoning_effort, reasoningEfforts]);
+  const reasoningModes = useMemo(
+    () =>
+      compatibleReasoningValuesForModels(
+        form.model,
+        form.sub_agent_model,
+        providerModels,
+        "supported_reasoning_modes",
+        null,
+      ),
+    [form.model, form.sub_agent_model, providerModels],
+  );
+  const reasoningModeAvailable =
+    selectedProvider?.kind === "openai" && reasoningModes.length > 0;
+  const reasoningModeTargetUnchanged =
+    selectedProvider?.kind === "openai" &&
+    Boolean(profile?.reasoning_mode) &&
+    form.provider_id === profile?.provider_id &&
+    form.model.trim() === (profile?.model ?? "").trim() &&
+    form.sub_agent_model.trim() ===
+      (profile?.sub_agent_model ?? "").trim();
 
   useEffect(() => {
     let cancelled = false;
@@ -511,10 +545,11 @@ export function ModelProfileModal({
           setReasoningEffortMode(
             preferredValueMode(
               currentForm.reasoning_effort,
-              reasoningEffortsForModels(
+              compatibleReasoningValuesForModels(
                 currentForm.model,
                 currentForm.sub_agent_model,
                 payload,
+                "supported_reasoning_efforts",
                 options.reasoning_efforts,
               ),
             ),
@@ -560,6 +595,9 @@ export function ModelProfileModal({
     if (!newMeta?.supports_service_tier) {
       updates.service_tier = "";
     }
+    if (newProvider?.kind !== "openai") {
+      updates.reasoning_mode = "";
+    }
     set(updates);
   }
 
@@ -585,6 +623,10 @@ export function ModelProfileModal({
       model: form.model.trim() || null,
       sub_agent_model: form.sub_agent_model.trim() || null,
       reasoning_effort: form.reasoning_effort.trim() || null,
+      reasoning_mode:
+        reasoningModeAvailable || reasoningModeTargetUnchanged
+        ? form.reasoning_mode || null
+        : null,
       max_tokens: toInt(form.max_tokens),
       service_tier: kindMeta?.supports_service_tier
         ? form.service_tier || null
@@ -769,6 +811,39 @@ export function ModelProfileModal({
                   />
                 </Field>
               </div>
+
+              {reasoningModeAvailable && (
+                <Field>
+                  <FieldLabel>Reasoning mode</FieldLabel>
+                  <Select
+                    value={toSelectValue(form.reasoning_mode)}
+                    onValueChange={(value) =>
+                      set({ reasoning_mode: fromSelectValue(value) })
+                    }
+                  >
+                    <SelectTrigger
+                      aria-label="Reasoning mode"
+                      className="task-form__select"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={EMPTY_SELECT_VALUE}>
+                        Provider default
+                      </SelectItem>
+                      {reasoningModes.map((mode) => (
+                        <SelectItem key={mode} value={mode}>
+                          {mode}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>
+                    GPT-5.6 supports standard and pro mode. Pro can use more
+                    model work, latency, and tokens.
+                  </FieldDescription>
+                </Field>
+              )}
 
               {kindMeta?.supports_service_tier && (
                 <Field>

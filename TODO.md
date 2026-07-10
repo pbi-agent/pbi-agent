@@ -1,5 +1,5 @@
-- [x] Inspect official Codex reasoning-effort model metadata and current discovery/UI contracts
-- [x] Add model-specific effort options with generic fallback
-- [x] Preserve arbitrary custom reasoning-effort values end to end
-- [x] Add focused backend and frontend tests
+- [x] Inspect OpenAI/ChatGPT discovery, profile persistence, request payloads, and official Codex compatibility
+- [x] Add generic provider/model capability rules with OpenAI reasoning effort metadata
+- [x] Add OpenAI-only profile reasoning mode and request forwarding
+- [x] Add backend/frontend tests and regenerate API/static artifacts
 - [x] Run validation and update MEMORY.md

@@ -383,6 +383,7 @@ function makeConfigBootstrap(
         model: "gpt-5.4",
         sub_agent_model: null,
         reasoning_effort: "high",
+        reasoning_mode: null,
         max_tokens: null,
         service_tier: null,
         allowed_tools: null,
@@ -421,6 +422,7 @@ function makeConfigBootstrap(
     options: {
       provider_kinds: ["openai"],
       reasoning_efforts: ["high"],
+      openai_reasoning_modes: ["standard", "pro"],
       openai_service_tiers: [],
       provider_metadata: {
         openai: {

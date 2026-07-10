@@ -1976,6 +1976,10 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
             "review",
         ]
         assert bootstrap_payload["maintenance"] == {"retention_days": 30}
+        assert bootstrap_payload["options"]["openai_reasoning_modes"] == [
+            "standard",
+            "pro",
+        ]
         assert bootstrap_payload["commands"][1]["path"] == ".agents/commands/plan.md"
         assert "config_revision" in bootstrap_payload
         revision = bootstrap_payload["config_revision"]
@@ -2032,8 +2036,9 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
             json={
                 "name": "Analysis",
                 "provider_id": "openai-main",
-                "model": "gpt-5.4-2026-03-05",
+                "model": "gpt-5.6-sol",
                 "reasoning_effort": "focused",
+                "reasoning_mode": "pro",
                 "allowed_tools": ["read", "web"],
             },
         )
@@ -2046,16 +2051,17 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
         )
         assert (
             profile_payload["model_profile"]["resolved_runtime"]["model"]
-            == "gpt-5.4-2026-03-05"
+            == "gpt-5.6-sol"
         )
         assert (
             profile_payload["model_profile"]["resolved_runtime"]["sub_agent_model"]
-            == "gpt-5.4-2026-03-05"
+            == "gpt-5.6-sol"
         )
         assert (
             profile_payload["model_profile"]["resolved_runtime"]["reasoning_effort"]
             == "focused"
         )
+        assert profile_payload["model_profile"]["reasoning_mode"] == "pro"
         assert profile_payload["model_profile"]["allowed_tools"] == ["read", "web"]
         assert profile_payload["model_profile"]["resolved_runtime"][
             "allowed_tools"
@@ -11687,6 +11693,11 @@ def test_provider_model_discovery_endpoint_returns_openai_models(
                         "created": 1_713_000_100,
                         "owned_by": "openai",
                     },
+                    {
+                        "id": "gpt-5.6-sol",
+                        "created": 1_713_000_200,
+                        "owned_by": "openai",
+                    },
                 ]
             }
         )
@@ -11714,10 +11725,33 @@ def test_provider_model_discovery_endpoint_returns_openai_models(
     assert payload["provider_kind"] == "openai"
     assert payload["discovery_supported"] is True
     assert payload["manual_entry_required"] is False
-    assert [item["id"] for item in payload["models"]] == ["gpt-5.4", "gpt-5.4-mini"]
+    assert [item["id"] for item in payload["models"]] == [
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.6-sol",
+    ]
     assert payload["models"][0]["owned_by"] == "openai"
     assert payload["models"][0]["supports_reasoning_effort"] is True
-    assert payload["models"][0]["supported_reasoning_efforts"] == []
+    assert payload["models"][0]["supported_reasoning_efforts"] == [
+        "none",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+    ]
+    assert payload["models"][0]["supported_reasoning_modes"] == []
+    assert payload["models"][2]["supported_reasoning_efforts"] == [
+        "none",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+    ]
+    assert payload["models"][2]["supported_reasoning_modes"] == [
+        "standard",
+        "pro",
+    ]
     assert payload["error"] is None
     assert requests_seen[0].full_url == "https://api.openai.com/v1/models"
     assert requests_seen[0].headers["Authorization"] == "Bearer env-openai-key"
@@ -11846,6 +11880,7 @@ def test_provider_model_discovery_endpoint_lists_chatgpt_openai_models(
             "aliases": [],
             "supports_reasoning_effort": True,
             "supported_reasoning_efforts": ["minimal", "medium", "xhigh"],
+            "supported_reasoning_modes": [],
         }
     ]
     assert payload["error"] is None
@@ -12004,6 +12039,7 @@ def test_provider_model_discovery_endpoint_discovers_github_copilot_models(
             "aliases": ["2026-04-01"],
             "supports_reasoning_effort": None,
             "supported_reasoning_efforts": [],
+            "supported_reasoning_modes": [],
         },
         {
             "id": "gpt-5.4",
@@ -12015,6 +12051,7 @@ def test_provider_model_discovery_endpoint_discovers_github_copilot_models(
             "aliases": ["2026-04-01"],
             "supports_reasoning_effort": True,
             "supported_reasoning_efforts": ["low", "medium", "high"],
+            "supported_reasoning_modes": [],
         },
     ]
     assert requests_seen[0].full_url == "https://api.githubcopilot.com/models"
@@ -12199,6 +12236,7 @@ def test_provider_model_discovery_normalizes_google_payload(
             "aliases": ["gemini-2.5-flash-preview-001", "2.5"],
             "supports_reasoning_effort": True,
             "supported_reasoning_efforts": [],
+            "supported_reasoning_modes": [],
         }
     ]
     assert payload["error"] is None
@@ -12318,6 +12356,7 @@ def test_provider_model_discovery_normalizes_xai_and_anthropic_payloads(
             "aliases": ["grok-4.20"],
             "supports_reasoning_effort": True,
             "supported_reasoning_efforts": [],
+            "supported_reasoning_modes": [],
         }
     ]
 

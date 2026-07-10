@@ -13,6 +13,7 @@ from typing import Any
 from dotenv import load_dotenv
 
 from pbi_agent.frontmatter import FrontmatterParseError, parse_simple_frontmatter
+from pbi_agent.models.capabilities import reasoning_capabilities_for_model
 from pbi_agent.tools.availability import BUILTIN_TOOL_CATEGORIES
 from pbi_agent.tools.availability import UI_ONLY_TOOL_CATEGORIES
 
@@ -51,6 +52,7 @@ DEFAULT_GOOGLE_GCP_SUB_AGENT_MODEL = "gemini-2.5-flash"
 DEFAULT_ANTHROPIC_SUB_AGENT_MODEL = "claude-sonnet-4-6"
 DEFAULT_MAX_TOKENS = 16384
 OPENAI_SERVICE_TIERS = ("auto", "default", "flex", "priority")
+OPENAI_REASONING_MODES = ("standard", "pro")
 PROVIDER_API_KEY_ENVS = {
     "openai": "OPENAI_API_KEY",
     "azure": "AZURE_API_KEY",
@@ -135,6 +137,23 @@ def missing_api_key_message(provider: str) -> str:
     )
 
 
+def _validate_reasoning_mode_models(
+    *,
+    provider_kind: str,
+    reasoning_mode: str,
+    model: str,
+    sub_agent_model: str | None,
+) -> None:
+    model_ids = dict.fromkeys((model, sub_agent_model or model))
+    for model_id in model_ids:
+        capabilities = reasoning_capabilities_for_model(provider_kind, model_id)
+        if reasoning_mode not in capabilities.modes:
+            raise ConfigError(
+                f"Reasoning mode '{reasoning_mode}' is not supported by "
+                f"{provider_kind} model '{model_id}'."
+            )
+
+
 @dataclass(slots=True)
 class Settings:
     api_key: str = ""
@@ -147,6 +166,7 @@ class Settings:
     max_tool_workers: int = 4
     max_retries: int = 3
     reasoning_effort: str = "medium"
+    reasoning_mode: str | None = None
     compact_threshold: int = 200000
     compact_tail_turns: int = 2
     compact_preserve_recent_tokens: int = 8000
@@ -209,6 +229,25 @@ class Settings:
         self.reasoning_effort = self.reasoning_effort.strip()
         if not self.reasoning_effort:
             raise ConfigError("--reasoning-effort cannot be empty.")
+        if self.reasoning_mode is not None:
+            self.reasoning_mode = self.reasoning_mode.strip() or None
+        if self.reasoning_mode is not None and self.provider != "openai":
+            raise ConfigError(
+                "Reasoning mode is only supported with the OpenAI provider."
+            )
+        if (
+            self.reasoning_mode is not None
+            and self.reasoning_mode not in OPENAI_REASONING_MODES
+        ):
+            allowed = ", ".join(OPENAI_REASONING_MODES)
+            raise ConfigError(f"Reasoning mode must be one of: {allowed}.")
+        if self.reasoning_mode is not None:
+            _validate_reasoning_mode_models(
+                provider_kind=self.provider,
+                reasoning_mode=self.reasoning_mode,
+                model=self.model,
+                sub_agent_model=self.sub_agent_model,
+            )
         if self.compact_threshold < 0:
             raise ConfigError("--compact-threshold must be >= 0.")
         if self.compact_tail_turns < 0:
@@ -244,6 +283,7 @@ class Settings:
             "max_tool_workers": self.max_tool_workers,
             "max_retries": self.max_retries,
             "reasoning_effort": self.reasoning_effort,
+            "reasoning_mode": self.reasoning_mode,
             "compact_threshold": self.compact_threshold,
             "compact_tail_turns": self.compact_tail_turns,
             "compact_preserve_recent_tokens": self.compact_preserve_recent_tokens,
@@ -306,6 +346,7 @@ class ModelProfileConfig:
     model: str | None = None
     sub_agent_model: str | None = None
     reasoning_effort: str | None = None
+    reasoning_mode: str | None = None
     max_tokens: int | None = None
     service_tier: str | None = None
     allowed_tools: tuple[str, ...] | None = None
@@ -334,6 +375,26 @@ class ModelProfileConfig:
             )
         if self.reasoning_effort is not None:
             self.reasoning_effort = self.reasoning_effort.strip() or None
+        if self.reasoning_mode is not None:
+            self.reasoning_mode = self.reasoning_mode.strip() or None
+        if self.reasoning_mode is not None and provider_kind not in {None, "openai"}:
+            raise ConfigError(
+                "Reasoning mode is only supported with the OpenAI provider."
+            )
+        if (
+            self.reasoning_mode is not None
+            and self.reasoning_mode not in OPENAI_REASONING_MODES
+        ):
+            allowed = ", ".join(OPENAI_REASONING_MODES)
+            raise ConfigError(f"Reasoning mode must be one of: {allowed}.")
+        if self.reasoning_mode is not None and provider_kind is not None:
+            model = self.model or _default_model(provider_kind)
+            _validate_reasoning_mode_models(
+                provider_kind=provider_kind,
+                reasoning_mode=self.reasoning_mode,
+                model=model,
+                sub_agent_model=self.sub_agent_model,
+            )
         if self.max_tokens is not None and self.max_tokens < 1:
             raise ConfigError("--max-tokens must be >= 1.")
         if self.max_tool_workers is not None and self.max_tool_workers < 1:
@@ -1166,6 +1227,8 @@ def update_model_profile_config(
     model: str | None = None,
     sub_agent_model: str | None = None,
     reasoning_effort: str | None = None,
+    reasoning_mode: str | None = None,
+    clear_reasoning_mode: bool = False,
     max_tokens: int | None = None,
     service_tier: str | None = None,
     allowed_tools: tuple[str, ...] | None = None,
@@ -1177,6 +1240,10 @@ def update_model_profile_config(
     compact_tool_output_max_chars: int | None = None,
     expected_revision: str | None = None,
 ) -> tuple[ModelProfileConfig, str]:
+    if clear_reasoning_mode and reasoning_mode is not None:
+        raise ConfigError(
+            "Cannot set and clear the reasoning mode in the same profile update."
+        )
     config = load_internal_config()
     profiles = _profile_map(config)
     profile = profiles.get(slugify(profile_id))
@@ -1195,6 +1262,13 @@ def update_model_profile_config(
             reasoning_effort
             if reasoning_effort is not None
             else profile.reasoning_effort
+        ),
+        reasoning_mode=(
+            None
+            if clear_reasoning_mode
+            else (
+                reasoning_mode if reasoning_mode is not None else profile.reasoning_mode
+            )
         ),
         max_tokens=max_tokens if max_tokens is not None else profile.max_tokens,
         service_tier=(
@@ -1455,6 +1529,11 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         or (selected_profile.reasoning_effort if selected_profile else None)
         or _default_reasoning_effort(provider_kind)
     )
+    reasoning_mode = (
+        selected_profile.reasoning_mode
+        if selected_profile is not None and provider_kind == "openai"
+        else None
+    )
     compact_threshold = _resolve_int_setting(
         cli_value=getattr(args, "compact_threshold", None),
         env_name="PBI_AGENT_COMPACT_THRESHOLD",
@@ -1526,6 +1605,7 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         max_tool_workers=max_tool_workers,
         max_retries=max_retries,
         reasoning_effort=reasoning_effort,
+        reasoning_mode=reasoning_mode,
         compact_threshold=compact_threshold,
         compact_tail_turns=compact_tail_turns,
         compact_preserve_recent_tokens=compact_preserve_recent_tokens,
@@ -1722,6 +1802,7 @@ def _settings_from_runtime_parts(
             profile.reasoning_effort if profile else None,
             _default_reasoning_effort(provider.kind),
         ),
+        reasoning_mode=profile.reasoning_mode if profile else None,
         compact_threshold=_coalesce(
             profile.compact_threshold if profile else None,
             200000,
@@ -1830,6 +1911,7 @@ def _concrete_profile_for_saved_profile(
             profile.reasoning_effort,
             _default_reasoning_effort(provider_kind),
         ),
+        reasoning_mode=profile.reasoning_mode,
         max_tokens=_coalesce(profile.max_tokens, DEFAULT_MAX_TOKENS),
         service_tier=profile.service_tier,
         allowed_tools=profile.allowed_tools,
@@ -1860,6 +1942,7 @@ def _concrete_profile_for_settings(
         model=settings.model,
         sub_agent_model=settings.sub_agent_model,
         reasoning_effort=settings.reasoning_effort,
+        reasoning_mode=settings.reasoning_mode,
         max_tokens=settings.max_tokens,
         service_tier=settings.service_tier,
         allowed_tools=settings.allowed_tools,
@@ -1946,6 +2029,7 @@ def _profile_from_payload(
         model=_optional_string(payload.get("model")),
         sub_agent_model=_optional_string(payload.get("sub_agent_model")),
         reasoning_effort=_optional_string(payload.get("reasoning_effort")),
+        reasoning_mode=_optional_string(payload.get("reasoning_mode")),
         max_tokens=_optional_int(payload.get("max_tokens")),
         service_tier=_optional_string(payload.get("service_tier")),
         allowed_tools=_optional_string_tuple(payload.get("allowed_tools")),
