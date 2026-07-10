@@ -94,6 +94,11 @@ INTERNAL_CONFIG_PATH_ENV = "PBI_AGENT_INTERNAL_CONFIG_PATH"
 PROFILE_ID_ENV = "PBI_AGENT_PROFILE_ID"
 HOOK_TRUST_BYPASS_ENV = "PBI_AGENT_DANGEROUSLY_BYPASS_HOOK_TRUST"
 DEFAULT_INTERNAL_CONFIG_PATH = Path.home() / ".pbi-agent" / "config.json"
+USER_PROFILE_PREFERRED_NAME_MAX_LENGTH = 200
+USER_PROFILE_ROLE_MAX_LENGTH = 500
+USER_PROFILE_ABOUT_MAX_LENGTH = 4_000
+USER_PROFILE_PREFERENCES_MAX_LENGTH = 8_000
+USER_PROFILE_INSTRUCTIONS_MAX_LENGTH = 12_000
 SLUG_RE = re.compile(r"[^a-z0-9]+")
 SLASH_ALIAS_RE = re.compile(r"^/[a-z0-9][a-z0-9-]*$")
 RESERVED_COMMAND_ALIASES = frozenset(
@@ -477,10 +482,51 @@ class CommandManifestError(ValueError):
 
 
 @dataclass(slots=True)
+class UserProfileConfig:
+    preferred_name: str = ""
+    role: str = ""
+    about: str = ""
+    preferences: str = ""
+    instructions: str = ""
+
+    def validate(self) -> None:
+        fields = (
+            (
+                "preferred_name",
+                "Preferred name",
+                USER_PROFILE_PREFERRED_NAME_MAX_LENGTH,
+            ),
+            ("role", "Role", USER_PROFILE_ROLE_MAX_LENGTH),
+            ("about", "About", USER_PROFILE_ABOUT_MAX_LENGTH),
+            (
+                "preferences",
+                "Preferences",
+                USER_PROFILE_PREFERENCES_MAX_LENGTH,
+            ),
+            (
+                "instructions",
+                "Global instructions",
+                USER_PROFILE_INSTRUCTIONS_MAX_LENGTH,
+            ),
+        )
+        for field_name, label, max_length in fields:
+            value = getattr(self, field_name)
+            if not isinstance(value, str):
+                raise ConfigError(f"{label} must be text.")
+            value = value.strip()
+            if len(value) > max_length:
+                raise ConfigError(
+                    f"{label} must be {max_length:,} characters or fewer."
+                )
+            setattr(self, field_name, value)
+
+
+@dataclass(slots=True)
 class InternalConfig:
     providers: list[ProviderConfig] = field(default_factory=list)
     model_profiles: list[ModelProfileConfig] = field(default_factory=list)
     commands: list[CommandConfig] = field(default_factory=list)
+    user_profile: UserProfileConfig = field(default_factory=UserProfileConfig)
     web: WebConfig = field(default_factory=lambda: WebConfig())
     maintenance: MaintenanceConfig = field(default_factory=lambda: MaintenanceConfig())
 
@@ -963,6 +1009,7 @@ def load_internal_config() -> InternalConfig:
     payload = _read_internal_config_payload()
     providers_payload = payload.get("providers")
     profiles_payload = payload.get("model_profiles")
+    user_profile_payload = payload.get("user_profile")
     web_payload = payload.get("web")
     maintenance_payload = payload.get("maintenance")
 
@@ -1000,11 +1047,13 @@ def load_internal_config() -> InternalConfig:
         if profile is not None:
             profiles.append(profile)
 
+    user_profile = _user_profile_config_from_payload(user_profile_payload)
     web = _web_config_from_payload(web_payload)
     maintenance = _maintenance_config_from_payload(maintenance_payload)
     return InternalConfig(
         providers=providers,
         model_profiles=profiles,
+        user_profile=user_profile,
         web=web,
         maintenance=maintenance,
     )
@@ -1380,6 +1429,32 @@ def update_maintenance_config(
     updated.validate()
     config = load_internal_config()
     config.maintenance = updated
+    revision = save_internal_config_with_revision(
+        config,
+        expected_revision=expected_revision,
+    )
+    return updated, revision
+
+
+def update_user_profile_config(
+    *,
+    preferred_name: str,
+    role: str,
+    about: str,
+    preferences: str,
+    instructions: str,
+    expected_revision: str | None = None,
+) -> tuple[UserProfileConfig, str]:
+    updated = UserProfileConfig(
+        preferred_name=preferred_name,
+        role=role,
+        about=about,
+        preferences=preferences,
+        instructions=instructions,
+    )
+    updated.validate()
+    config = load_internal_config()
+    config.user_profile = updated
     revision = save_internal_config_with_revision(
         config,
         expected_revision=expected_revision,
@@ -2066,6 +2141,36 @@ def _web_config_from_payload(payload: object) -> WebConfig:
     )
 
 
+def _user_profile_config_from_payload(payload: object) -> UserProfileConfig:
+    if not isinstance(payload, dict):
+        return UserProfileConfig()
+    preferred_name = payload.get("preferred_name", "")
+    role = payload.get("role", "")
+    about = payload.get("about", "")
+    preferences = payload.get("preferences", "")
+    instructions = payload.get("instructions", "")
+    if (
+        not isinstance(preferred_name, str)
+        or not isinstance(role, str)
+        or not isinstance(about, str)
+        or not isinstance(preferences, str)
+        or not isinstance(instructions, str)
+    ):
+        return UserProfileConfig()
+    config = UserProfileConfig(
+        preferred_name=preferred_name,
+        role=role,
+        about=about,
+        preferences=preferences,
+        instructions=instructions,
+    )
+    try:
+        config.validate()
+    except ConfigError:
+        return UserProfileConfig()
+    return config
+
+
 def _maintenance_config_from_payload(payload: object) -> MaintenanceConfig:
     if not isinstance(payload, dict):
         return MaintenanceConfig()
@@ -2141,6 +2246,7 @@ def _internal_config_payload(config: InternalConfig) -> dict[str, Any]:
     return {
         "providers": [asdict(provider) for provider in config.providers],
         "model_profiles": [asdict(profile) for profile in config.model_profiles],
+        "user_profile": asdict(config.user_profile),
         "web": {
             "active_profile_id": config.web.active_profile_id,
             "stt_provider_id": config.web.stt_provider_id,

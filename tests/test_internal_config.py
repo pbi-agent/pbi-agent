@@ -25,6 +25,8 @@ from pbi_agent.config import (
     MaintenanceConfig,
     ModelProfileConfig,
     ProviderConfig,
+    USER_PROFILE_PREFERRED_NAME_MAX_LENGTH,
+    UserProfileConfig,
     WebConfig,
     create_model_profile_config,
     create_provider_config,
@@ -46,6 +48,7 @@ from pbi_agent.config import (
     select_stt_provider,
     update_maintenance_config,
     update_model_profile_config,
+    update_user_profile_config,
     validate_allowed_tools,
 )
 
@@ -118,6 +121,58 @@ def test_internal_config_rejects_invalid_maintenance_days(
 
     with pytest.raises(ConfigError):
         update_maintenance_config(retention_days=0)
+
+
+def test_internal_config_user_profile_defaults_and_round_trips(
+    tmp_path, monkeypatch
+) -> None:
+    path = tmp_path / "config.json"
+    monkeypatch.setenv("PBI_AGENT_INTERNAL_CONFIG_PATH", str(path))
+
+    assert load_internal_config().user_profile == UserProfileConfig()
+
+    updated, revision = update_user_profile_config(
+        preferred_name="  Ada  ",
+        role="  Staff engineer  ",
+        about="  Builds developer tools.  ",
+        preferences="  Prefer concise answers.  ",
+        instructions="  Always include validation results.  ",
+    )
+
+    assert updated == UserProfileConfig(
+        preferred_name="Ada",
+        role="Staff engineer",
+        about="Builds developer tools.",
+        preferences="Prefer concise answers.",
+        instructions="Always include validation results.",
+    )
+    assert load_internal_config().user_profile == updated
+    assert load_internal_config_snapshot()[1] == revision
+    assert json.loads(path.read_text(encoding="utf-8"))["user_profile"] == {
+        "preferred_name": "Ada",
+        "role": "Staff engineer",
+        "about": "Builds developer tools.",
+        "preferences": "Prefer concise answers.",
+        "instructions": "Always include validation results.",
+    }
+
+
+def test_internal_config_rejects_oversized_user_profile_fields(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv(
+        "PBI_AGENT_INTERNAL_CONFIG_PATH",
+        str(tmp_path / "config.json"),
+    )
+
+    with pytest.raises(ConfigError, match="Preferred name must be"):
+        update_user_profile_config(
+            preferred_name="x" * (USER_PROFILE_PREFERRED_NAME_MAX_LENGTH + 1),
+            role="",
+            about="",
+            preferences="",
+            instructions="",
+        )
 
 
 def _write_command(root: Path, name: str, content: str) -> Path:

@@ -46,6 +46,7 @@ from pbi_agent.config import (
     ProviderConfig,
     create_model_profile_config,
     create_provider_config,
+    update_user_profile_config,
 )
 from pbi_agent.agents.project_installer import ProjectAgentInstallResult
 from pbi_agent.commands.project_installer import ProjectCommandInstallResult
@@ -448,6 +449,48 @@ def test_run_single_turn_executes_tool_loop_and_aggregates_usage(monkeypatch) ->
             3.5,
         )
     ]
+
+
+def test_run_single_turn_hook_context_keeps_global_user_profile(
+    monkeypatch, tmp_path
+) -> None:
+    provider = _ProviderStub()
+    display = _DisplaySpy()
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=3)
+    monotonic_values = iter([10.0, 13.5])
+    update_user_profile_config(
+        preferred_name="Ada",
+        role="",
+        about="",
+        preferences="",
+        instructions="Always report validation.",
+    )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.hooks.SessionHookCoordinator.run_session_start",
+        lambda *_args, **_kwargs: "startup context",
+    )
+
+    run_single_turn(
+        "Inspect the workspace",
+        settings,
+        display,
+        workspace_root=tmp_path,
+    )
+
+    instructions = str(provider.request_calls[0]["instructions"])
+    assert "<user_profile>" in instructions
+    assert "Preferred name: Ada" in instructions
+    assert "Always report validation." in instructions
+    assert "<hook_context>\nstartup context\n</hook_context>" in instructions
 
 
 def test_run_single_turn_replays_resumed_history_by_default(
@@ -2327,6 +2370,13 @@ def test_run_session_loop_applies_session_start_context_once(
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
     monotonic_values = iter([5.0, 6.5, 10.0, 11.0])
     session_start_session_ids: list[str | None] = []
+    update_user_profile_config(
+        preferred_name="Ada",
+        role="",
+        about="",
+        preferences="",
+        instructions="Always report validation.",
+    )
 
     class FakeHookRuntime:
         stop_hook_active = False
@@ -2356,6 +2406,8 @@ def test_run_session_loop_applies_session_start_context_once(
     assert exit_code == 0
     assert session_start_session_ids and session_start_session_ids[0]
     assert "startup context" in str(provider.request_instructions[0])
+    assert "<user_profile>" in str(provider.request_instructions[0])
+    assert "Always report validation." in str(provider.request_instructions[0])
     assert "startup context" not in str(provider.request_instructions[1])
 
 
@@ -3302,6 +3354,53 @@ def test_run_session_loop_handles_reload_command_locally(monkeypatch) -> None:
         "reloaded; restart the session after changing MCP config."
     ]
     assert display.assistant_start_calls == 0
+
+
+def test_run_session_loop_reload_refreshes_hook_prompt_fallback(
+    monkeypatch, tmp_path
+) -> None:
+    from pbi_agent.hooks.runtime import HookRuntimeResult
+    from pbi_agent.hooks.schemas import HookEventName
+
+    provider = _ChatProviderStub()
+    display = _SessionDisplaySpy([RELOAD_COMMAND, "hello", "quit"])
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+    prompt_values = iter(["initial prompt", "updated prompt"])
+    monotonic_values = iter([5.0, 6.5])
+
+    class FakeHookRuntime:
+        stop_hook_active = False
+
+        def __init__(self, **kwargs: object) -> None:
+            del kwargs
+
+        def run(self, event: HookEventName, **kwargs: object) -> HookRuntimeResult:
+            del kwargs
+            if event == HookEventName.USER_PROMPT_SUBMIT:
+                return HookRuntimeResult(additional_context=["prompt context"])
+            return HookRuntimeResult()
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.get_system_prompt",
+        lambda **_: next(prompt_values),
+    )
+    monkeypatch.setattr("pbi_agent.agent.session.HookRuntime", FakeHookRuntime)
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+
+    exit_code = run_session_loop(settings, display, workspace_root=tmp_path)
+
+    assert exit_code == 0
+    assert provider.system_prompts == ["updated prompt"]
+    assert provider.request_instructions == [
+        "updated prompt\n\n<hook_context>\nprompt context\n</hook_context>"
+    ]
 
 
 def test_run_session_loop_uses_transient_renderer_for_temporary_commands(

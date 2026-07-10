@@ -65,7 +65,7 @@ export type CommandListResponse = { commands: CommandViewModel[]; config_revisio
 
 export type CommandViewModel = { id: string; name: string; slash_alias: string; description: string; instructions: string; path: string; model_profile_id: string | null; allowed_tools: string[] | null; skills: string[] | null; sub_agents: string[] | null };
 
-export type ConfigBootstrapResponse = { providers: ProviderViewModel[]; model_profiles: ModelProfileViewModel[]; commands: CommandViewModel[]; skills: SkillViewModel[]; agents: AgentViewModel[]; active_profile_id: string | null; stt_provider_id: string | null; maintenance: MaintenanceConfigModel; config_revision: string; options: ConfigOptionsModel };
+export type ConfigBootstrapResponse = { providers: ProviderViewModel[]; model_profiles: ModelProfileViewModel[]; commands: CommandViewModel[]; skills: SkillViewModel[]; agents: AgentViewModel[]; user_profile: UserProfileConfigModel; active_profile_id: string | null; stt_provider_id: string | null; maintenance: MaintenanceConfigModel; config_revision: string; options: ConfigOptionsModel };
 
 export type ConfigOptionsModel = { provider_kinds: string[]; reasoning_efforts: string[]; openai_reasoning_modes: string[]; openai_service_tiers: string[]; provider_metadata: Record<string, ProviderKindMetadataModel> };
 
@@ -371,6 +371,10 @@ export type UsageUpdatedSseEventModel = { seq: number; created_at: string; type:
 
 export type UsageUpdatedSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; scope: "session" | "turn"; usage: TokenUsagePayloadModel; elapsed_seconds?: number | null; sub_agent_id?: string | null };
 
+export type UserProfileConfigModel = { preferred_name: string; role: string; about: string; preferences: string; instructions: string };
+
+export type UserProfileConfigResponse = { user_profile: UserProfileConfigModel; config_revision: string };
+
 export type UserQuestionsRequestedSseEventModel = { seq: number; created_at: string; type: "user_questions_requested"; payload: PendingUserQuestionsModel };
 
 export type UserQuestionsResolvedSseEventModel = { seq: number; created_at: string; type: "user_questions_resolved"; payload: UserQuestionsResolvedSseEventPayloadModel };
@@ -440,6 +444,7 @@ export type ApiOperationResponses = {
   "POST /api/config/model-profiles": ModelProfileResponse;
   "DELETE /api/config/model-profiles/{profile_id}": void;
   "PATCH /api/config/model-profiles/{profile_id}": ModelProfileResponse;
+  "PUT /api/config/profile": UserProfileConfigResponse;
   "GET /api/config/providers": ProviderListResponse;
   "POST /api/config/providers": ProviderResponse;
   "DELETE /api/config/providers/{provider_id}": void;
@@ -521,6 +526,7 @@ export type ApiJsonRequestBodies = {
   "PUT /api/config/maintenance": MaintenanceConfigModel;
   "POST /api/config/model-profiles": ModelProfileMutationRequest;
   "PATCH /api/config/model-profiles/{profile_id}": ModelProfileUpdateRequest;
+  "PUT /api/config/profile": UserProfileConfigModel;
   "POST /api/config/providers": ProviderMutationRequest;
   "PATCH /api/config/providers/{provider_id}": ProviderUpdateRequest;
   "POST /api/config/skills/candidates": SkillCandidateRequest;

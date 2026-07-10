@@ -24,6 +24,7 @@ import type {
   SseControlEventModel,
   SseEventModel,
   TokenUsagePayloadModel,
+  UserProfileConfigModel,
 } from "./api-types.generated";
 
 export type SessionLifecycleStatus = NonNullable<SessionRecordModel["status"]>;
@@ -644,6 +645,7 @@ export type ConfigBootstrapPayload = {
   commands: CommandView[];
   skills: SkillView[];
   agents: AgentView[];
+  user_profile: UserProfile;
   active_profile_id: string | null;
   stt_provider_id: string | null;
   maintenance: MaintenanceConfig;
@@ -654,6 +656,8 @@ export type ConfigBootstrapPayload = {
 export type MaintenanceConfig = {
   retention_days: number;
 };
+
+export type UserProfile = UserProfileConfigModel;
 
 export type TimelineMessageItem = {
   kind: "message";

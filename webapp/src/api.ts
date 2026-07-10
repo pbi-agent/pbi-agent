@@ -40,6 +40,7 @@ import type {
   SkillMentionSearchPayload,
   LiveSession,
   UserQuestionAnswer,
+  UserProfile,
   MaintenanceConfig,
   ModelProfileView,
   ObservabilityEvent,
@@ -94,6 +95,7 @@ type MaintenanceConfigResponsePayload = {
   maintenance: MaintenanceConfig;
   config_revision: string;
 };
+type UserProfileResponsePayload = ApiResponse<"PUT /api/config/profile">;
 type SessionRunsResponsePayload = { runs: RunSession[] };
 type RunDetailResponsePayload = {
   run: RunSession;
@@ -1463,6 +1465,22 @@ export async function updateMaintenanceConfig(
       body: jsonBody("PUT /api/config/maintenance", {
         retention_days: retentionDays,
       }),
+    },
+  );
+}
+
+export async function updateUserProfile(
+  profile: UserProfile,
+  configRevision: string,
+): Promise<UserProfileResponsePayload> {
+  const payload: ApiJsonRequestBodies["PUT /api/config/profile"] = profile;
+  return apiRequest<"PUT /api/config/profile", UserProfileResponsePayload>(
+    "PUT /api/config/profile",
+    "/api/config/profile",
+    {
+      method: "PUT",
+      headers: { "If-Match": configRevision },
+      body: jsonBody("PUT /api/config/profile", payload),
     },
   );
 }

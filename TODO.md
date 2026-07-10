@@ -1,4 +1,6 @@
-- [x] Review the uncommitted GPT-5.6 pricing and cache-write changes for correctness and quality
-- [-] Fix any review findings (none reported)
-- [x] Repeat both reviews until no findings remain
-- [x] Run relevant validation and record task history
+- [x] Define the global profile persistence, API, and prompt contract
+- [x] Add backend profile config, API schemas/routes, and prompt injection
+- [x] Add the Settings → Profile UI and typed frontend API integration
+- [x] Add/update backend and frontend tests and generated API types
+- [x] Run relevant Python/frontend validation and review the changes
+- [x] Update task memory and summarize remaining risk

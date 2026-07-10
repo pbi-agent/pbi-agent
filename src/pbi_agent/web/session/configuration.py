@@ -18,6 +18,7 @@ from pbi_agent.config import (
     PROVIDER_KINDS,
     ProviderConfig,
     ResolvedRuntime,
+    UserProfileConfig,
     create_model_profile_config,
     create_provider_config,
     delete_model_profile_config,
@@ -38,6 +39,7 @@ from pbi_agent.config import (
     select_stt_provider,
     slugify,
     update_maintenance_config as save_maintenance_config,
+    update_user_profile_config as save_user_profile_config,
 )
 from pbi_agent.agent.sub_agent_discovery import ProjectSubAgent
 from pbi_agent.agents.project_catalog import discover_installed_project_agents
@@ -126,6 +128,7 @@ class ConfigurationMixin:
             "commands": self._installed_command_views(),
             "skills": self._installed_skill_views(),
             "agents": self._installed_agent_views(),
+            "user_profile": self._user_profile_view(config.user_profile),
             "active_profile_id": config.web.active_profile_id,
             "stt_provider_id": config.web.stt_provider_id,
             "maintenance": self._maintenance_view(config.maintenance),
@@ -154,6 +157,29 @@ class ConfigurationMixin:
         )
         return {
             "maintenance": self._maintenance_view(config),
+            "config_revision": revision,
+        }
+
+    def update_user_profile(
+        self,
+        *,
+        preferred_name: str,
+        role: str,
+        about: str,
+        preferences: str,
+        instructions: str,
+        expected_revision: str,
+    ) -> dict[str, Any]:
+        config, revision = save_user_profile_config(
+            preferred_name=preferred_name,
+            role=role,
+            about=about,
+            preferences=preferences,
+            instructions=instructions,
+            expected_revision=expected_revision,
+        )
+        return {
+            "user_profile": self._user_profile_view(config),
             "config_revision": revision,
         }
 
@@ -1100,6 +1126,15 @@ class ConfigurationMixin:
 
     def _maintenance_view(self, config: MaintenanceConfig) -> dict[str, Any]:
         return {"retention_days": config.retention_days}
+
+    def _user_profile_view(self, config: UserProfileConfig) -> dict[str, Any]:
+        return {
+            "preferred_name": config.preferred_name,
+            "role": config.role,
+            "about": config.about,
+            "preferences": config.preferences,
+            "instructions": config.instructions,
+        }
 
     def _provider_map(self, config: InternalConfig) -> dict[str, ProviderConfig]:
         return {provider.id: provider for provider in config.providers}

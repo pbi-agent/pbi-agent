@@ -117,15 +117,15 @@ def _reload_provider_initialization(
     workspace: Path | None = None,
     *,
     workspace_directory_key: str | None = None,
-) -> None:
-    provider.set_system_prompt(
-        get_system_prompt(
-            settings=provider.settings,
-            cwd=workspace,
-            workspace_directory_key=workspace_directory_key,
-        )
+) -> str:
+    system_prompt = get_system_prompt(
+        settings=provider.settings,
+        cwd=workspace,
+        workspace_directory_key=workspace_directory_key,
     )
+    provider.set_system_prompt(system_prompt)
     provider.refresh_tools()
+    return system_prompt
 
 
 def _format_extension_run_markdown(name: str, result: Any) -> str:

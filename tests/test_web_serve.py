@@ -1970,6 +1970,13 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
         assert bootstrap_payload["providers"] == []
         assert bootstrap_payload["model_profiles"] == []
         assert bootstrap_payload["stt_provider_id"] is None
+        assert bootstrap_payload["user_profile"] == {
+            "preferred_name": "",
+            "role": "",
+            "about": "",
+            "preferences": "",
+            "instructions": "",
+        }
         assert [item["id"] for item in bootstrap_payload["commands"]] == [
             "implement",
             "plan",
@@ -1983,6 +1990,27 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
         assert bootstrap_payload["commands"][1]["path"] == ".agents/commands/plan.md"
         assert "config_revision" in bootstrap_payload
         revision = bootstrap_payload["config_revision"]
+
+        profile_response = client.put(
+            "/api/config/profile",
+            headers={"If-Match": revision},
+            json={
+                "preferred_name": " Ada ",
+                "role": " Staff engineer ",
+                "about": " Builds developer tools. ",
+                "preferences": " Prefer concise answers. ",
+                "instructions": " Always report validation. ",
+            },
+        )
+        assert profile_response.status_code == 200
+        assert profile_response.json()["user_profile"] == {
+            "preferred_name": "Ada",
+            "role": "Staff engineer",
+            "about": "Builds developer tools.",
+            "preferences": "Prefer concise answers.",
+            "instructions": "Always report validation.",
+        }
+        revision = profile_response.json()["config_revision"]
 
         maintenance_response = client.put(
             "/api/config/maintenance",
@@ -2084,6 +2112,11 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
         refreshed_payload = refreshed.json()
         assert refreshed_payload["active_profile_id"] == "analysis"
         assert refreshed_payload["stt_provider_id"] is None
+        assert refreshed_payload["user_profile"]["preferred_name"] == "Ada"
+        assert (
+            refreshed_payload["user_profile"]["instructions"]
+            == "Always report validation."
+        )
         assert refreshed_payload["maintenance"] == {"retention_days": 14}
         assert {item["id"] for item in refreshed_payload["providers"]} == {
             "openai-main",

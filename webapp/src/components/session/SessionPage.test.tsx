@@ -347,6 +347,13 @@ function makeConfigBootstrap(
     active_profile_id: "analysis",
     stt_provider_id: null,
     maintenance: { retention_days: 30 },
+    user_profile: {
+      preferred_name: "",
+      role: "",
+      about: "",
+      preferences: "",
+      instructions: "",
+    },
     providers: [
       {
         id: "openai-main",

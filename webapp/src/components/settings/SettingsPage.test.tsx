@@ -29,6 +29,7 @@ import {
   startProviderAuthFlow,
   updateMaintenanceConfig,
   updateModelProfile,
+  updateUserProfile,
 } from "../../api";
 import type { ConfigBootstrapPayload } from "../../types";
 import {
@@ -180,6 +181,7 @@ vi.mock("../../api", async (importOriginal) => {
     refreshProviderAuth: vi.fn(),
     logoutProviderAuth: vi.fn(),
     updateMaintenanceConfig: vi.fn(),
+    updateUserProfile: vi.fn(),
   };
 });
 
@@ -191,6 +193,13 @@ function makeConfigBootstrap(
     active_profile_id: "analysis",
     stt_provider_id: null,
     maintenance: { retention_days: 30 },
+    user_profile: {
+      preferred_name: "",
+      role: "",
+      about: "",
+      preferences: "",
+      instructions: "",
+    },
     providers: [
       {
         id: "openai-main",
@@ -927,6 +936,16 @@ describe("SettingsPage", () => {
       maintenance: { retention_days: 14 },
       config_revision: "rev-2",
     });
+    vi.mocked(updateUserProfile).mockResolvedValue({
+      user_profile: {
+        preferred_name: "Ada",
+        role: "Staff engineer",
+        about: "Builds developer tools.",
+        preferences: "Prefer concise answers.",
+        instructions: "Always report validation.",
+      },
+      config_revision: "rev-2",
+    });
     vi.mocked(fetchProviderModels).mockResolvedValue({
       provider_id: "openai-main",
       provider_kind: "openai",
@@ -1557,7 +1576,7 @@ describe("SettingsPage", () => {
       groups.map((group) =>
         group.querySelector(".settings-nav__group-label")?.textContent,
       ),
-    ).toEqual(["Models", "Project", "Desktop", "Data"]);
+    ).toEqual(["General", "Models", "Project", "Desktop", "Data"]);
     expect(
       groups.map((group) =>
         Array.from(group.querySelectorAll(".settings-nav__item-label")).map(
@@ -1565,6 +1584,7 @@ describe("SettingsPage", () => {
         ),
       ),
     ).toEqual([
+      ["Profile"],
       ["Providers", "Model Profiles", "Speech-to-text"],
       ["Commands", "Skills", "Agents", "Hooks", "Channels"],
       ["Appearance", "Notifications"],
@@ -1589,6 +1609,136 @@ describe("SettingsPage", () => {
     expect(
       screen.queryByRole("button", { name: "Add Profile" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("loads and saves the global user profile", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        user_profile: {
+          preferred_name: "Ada",
+          role: "Staff engineer",
+          about: "Builds developer tools.",
+          preferences: "Prefer concise answers.",
+          instructions: "Always report validation.",
+        },
+      }),
+    );
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Profile");
+
+    expect(await screen.findByLabelText("Preferred name")).toHaveValue("Ada");
+    expect(screen.getByLabelText("Role or occupation")).toHaveValue(
+      "Staff engineer",
+    );
+    expect(screen.getByLabelText("About you")).toHaveValue(
+      "Builds developer tools.",
+    );
+    const preferences = screen.getByLabelText("Preferences");
+    await user.clear(preferences);
+    await user.type(preferences, "Lead with the outcome.");
+    await openSettingsTab(user, "Providers");
+    await openSettingsTab(user, "Profile");
+    expect(screen.getByLabelText("Preferences")).toHaveValue(
+      "Lead with the outcome.",
+    );
+    const instructions = screen.getByLabelText("Global instructions");
+    await user.clear(instructions);
+    await user.type(instructions, "Preserve project conventions.");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(updateUserProfile).toHaveBeenCalledWith(
+        {
+          preferred_name: "Ada",
+          role: "Staff engineer",
+          about: "Builds developer tools.",
+          preferences: "Lead with the outcome.",
+          instructions: "Preserve project conventions.",
+        },
+        "rev-1",
+      );
+    });
+  });
+
+  it("preserves global profile edits after a revision conflict", async () => {
+    const user = userEvent.setup();
+    const initial = makeConfigBootstrap({
+      user_profile: {
+        preferred_name: "Ada",
+        role: "",
+        about: "",
+        preferences: "",
+        instructions: "Keep my draft.",
+      },
+    });
+    const changedOnDisk = makeConfigBootstrap({
+      config_revision: "rev-2",
+      user_profile: {
+        preferred_name: "Grace",
+        role: "",
+        about: "",
+        preferences: "",
+        instructions: "Changed elsewhere.",
+      },
+    });
+    vi.mocked(fetchConfigBootstrap)
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValue(changedOnDisk);
+    vi.mocked(updateUserProfile).mockRejectedValueOnce(
+      new ApiError("Config has changed on disk.", 409),
+    );
+    vi.mocked(updateUserProfile).mockResolvedValueOnce({
+      user_profile: {
+        preferred_name: "Ada",
+        role: "",
+        about: "",
+        preferences: "",
+        instructions: "Unsaved local instructions.",
+      },
+      config_revision: "rev-3",
+    });
+    const { queryClient } = renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Profile");
+    const instructions = await screen.findByLabelText("Global instructions");
+    await user.clear(instructions);
+    await user.type(instructions, "Unsaved local instructions.");
+    act(() => {
+      queryClient.setQueryData(["config-bootstrap"], changedOnDisk);
+    });
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    expect(updateUserProfile).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        preferred_name: "Ada",
+        instructions: "Unsaved local instructions.",
+      }),
+      "rev-1",
+    );
+    expect(
+      await screen.findByText(
+        "Settings were changed while you were editing. Please review and resubmit.",
+      ),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Global instructions")).toHaveValue(
+        "Unsaved local instructions.",
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(updateUserProfile).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          preferred_name: "Ada",
+          instructions: "Unsaved local instructions.",
+        }),
+        "rev-2",
+      ),
+    );
   });
 
   it("shows agent cards with preview markdown", async () => {

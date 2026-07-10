@@ -4,6 +4,13 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from pbi_agent.config import (
+    USER_PROFILE_ABOUT_MAX_LENGTH,
+    USER_PROFILE_INSTRUCTIONS_MAX_LENGTH,
+    USER_PROFILE_PREFERENCES_MAX_LENGTH,
+    USER_PROFILE_PREFERRED_NAME_MAX_LENGTH,
+    USER_PROFILE_ROLE_MAX_LENGTH,
+)
 from pbi_agent.web.api.deps import NonEmptyString
 
 
@@ -350,6 +357,19 @@ class MaintenanceConfigResponse(BaseModel):
     config_revision: str
 
 
+class UserProfileConfigModel(BaseModel):
+    preferred_name: str = Field(max_length=USER_PROFILE_PREFERRED_NAME_MAX_LENGTH)
+    role: str = Field(max_length=USER_PROFILE_ROLE_MAX_LENGTH)
+    about: str = Field(max_length=USER_PROFILE_ABOUT_MAX_LENGTH)
+    preferences: str = Field(max_length=USER_PROFILE_PREFERENCES_MAX_LENGTH)
+    instructions: str = Field(max_length=USER_PROFILE_INSTRUCTIONS_MAX_LENGTH)
+
+
+class UserProfileConfigResponse(BaseModel):
+    user_profile: UserProfileConfigModel
+    config_revision: str
+
+
 class CommandViewModel(BaseModel):
     id: str
     name: str
@@ -524,6 +544,7 @@ class ConfigBootstrapResponse(BaseModel):
     commands: list[CommandViewModel]
     skills: list[SkillViewModel]
     agents: list[AgentViewModel]
+    user_profile: UserProfileConfigModel
     active_profile_id: str | None
     stt_provider_id: str | None
     maintenance: MaintenanceConfigModel

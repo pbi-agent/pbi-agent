@@ -18,7 +18,7 @@ from pbi_agent.tools.availability import (
 from pbi_agent.tools.registry import get_tool_specs
 
 if TYPE_CHECKING:
-    from pbi_agent.config import CommandConfig, Settings
+    from pbi_agent.config import CommandConfig, Settings, UserProfileConfig
 
 _DEFAULT_SYSTEM_PROMPT_PREAMBLE = """
 You are task assistant. Treat every user task/question as workspace-related: inspect context and use available tools to achieve the outcome.
@@ -186,6 +186,33 @@ def _append_project_rules(base_prompt: str, cwd: Path | None = None) -> str:
     if rules is None:
         return base_prompt
     return f"{base_prompt}\n\n<project_rules>\n{rules}\n</project_rules>"
+
+
+def _format_user_profile(profile: "UserProfileConfig") -> str | None:
+    lines: list[str] = []
+    if profile.preferred_name:
+        lines.append(f"Preferred name: {profile.preferred_name}")
+    if profile.role:
+        lines.append(f"Role: {profile.role}")
+    if profile.about:
+        lines.extend(("About the user:", profile.about))
+    if profile.preferences:
+        lines.extend(("Preferences:", profile.preferences))
+    if profile.instructions:
+        lines.extend(("Global instructions:", profile.instructions))
+    if not lines:
+        return None
+    return "\n".join(("<user_profile>", *lines, "</user_profile>"))
+
+
+def _append_user_profile(base_prompt: str) -> str:
+    """Append the globally configured user profile when it has content."""
+    from pbi_agent.config import load_internal_config
+
+    profile_section = _format_user_profile(load_internal_config().user_profile)
+    if profile_section is None:
+        return base_prompt
+    return f"{base_prompt}\n\n{profile_section}"
 
 
 def _append_workspace_memory(base_prompt: str, cwd: Path | None = None) -> str:
@@ -369,10 +396,12 @@ def get_system_prompt(
     excluded_names = _active_tool_excluded_names(settings, excluded_tools)
     active_names = {spec.name for spec in get_tool_specs(excluded_names=excluded_names)}
     prompt = _append_project_rules(
-        _resolve_base_prompt(
-            settings=settings,
-            excluded_tools=excluded_tools,
-            cwd=cwd,
+        _append_user_profile(
+            _resolve_base_prompt(
+                settings=settings,
+                excluded_tools=excluded_tools,
+                cwd=cwd,
+            )
         ),
         cwd,
     )
@@ -425,6 +454,7 @@ def get_sub_agent_system_prompt(
             excluded_tools=excluded_tools,
             cwd=cwd,
         )
+    base = _append_user_profile(base)
     prompt = _append_project_rules(f"{base}\n\n{_SUB_AGENT_PROMPT}", cwd)
     excluded_names = _active_tool_excluded_names(settings, excluded_tools)
     active_names = {spec.name for spec in get_tool_specs(excluded_names=excluded_names)}
