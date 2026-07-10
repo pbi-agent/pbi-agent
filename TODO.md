@@ -1,6 +1,6 @@
-- [x] Define the global profile persistence, API, and prompt contract
-- [x] Add backend profile config, API schemas/routes, and prompt injection
-- [x] Add the Settings → Profile UI and typed frontend API integration
-- [x] Add/update backend and frontend tests and generated API types
-- [x] Run relevant Python/frontend validation and review the changes
-- [x] Update task memory and summarize remaining risk
+- [x] Inspect workspace, authentication, release history, and reconcile all local/remote commits
+- [x] Create the next minor release branch and release-scoped changelog/version edits
+- [x] Run the required full release validation suite
+- [x] Stage, review, commit, push, and open the release PR
+- [x] Verify checks, merge the PR, and confirm tag, GitHub Release, and PyPI publish
+- [x] Update task memory and report the release outcome
