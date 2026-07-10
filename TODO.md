@@ -1,6 +1,5 @@
-- [x] Inspect current sessions DB schema for observability cached/reasoning columns
-- [x] Trace ChatGPT/OpenAI usage flow into observability events
-- [x] Patch missing cached/reasoning trace propagation if needed
-- [x] Add focused regression coverage
-- [x] Run targeted validation
-- [x] Update task memory
+- [x] Locate ChatGPT/Codex version identifier in this repo
+- [x] Inspect official ~/codex version identifier
+- [x] Update internal version id and tests/docs if needed
+- [x] Run focused validation
+- [x] Update MEMORY.md

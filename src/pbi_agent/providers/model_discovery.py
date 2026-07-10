@@ -15,6 +15,7 @@ from pbi_agent.auth.service import build_runtime_request_auth, refresh_runtime_a
 from pbi_agent.config import ConfigError, Settings, missing_api_key_message
 from pbi_agent.providers.anthropic_provider import ANTHROPIC_VERSION
 from pbi_agent.providers.chatgpt_codex_backend import (
+    CHATGPT_CODEX_VERSION,
     CHATGPT_ORIGINATOR,
     chatgpt_user_agent,
 )
@@ -33,7 +34,7 @@ _SUPPORTED_DISCOVERY_PROVIDERS = frozenset(
         "generic",
     }
 )
-_OPENAI_CHATGPT_MIN_CLIENT_VERSION = "0.124.0"
+_OPENAI_CHATGPT_MIN_CLIENT_VERSION = CHATGPT_CODEX_VERSION
 _OAUTH_REFRESH_SKEW_SECS = 3600
 _MANUAL_ENTRY_ONLY_REASONS: dict[str, str] = {}
 _XAI_ACCOUNT_CURATED_MODELS: tuple[str, ...] = (
