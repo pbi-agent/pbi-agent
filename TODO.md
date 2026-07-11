@@ -1,7 +1,4 @@
-- [x] Worker: implement configurable prompt-enhancement model profile
-- [x] Main: inspect worker diff and run focused validation
-- [x] Reviewer round 1: review implementation
-- [x] Code-quality-reviewer round 1: review maintainability
-- [x] Final validation
+- [x] Raise the sub-agent elapsed timeout to 1800 seconds
+- [x] Update timeout documentation
+- [x] Run focused validation
 - [x] Update memory
-- [x] Handoff

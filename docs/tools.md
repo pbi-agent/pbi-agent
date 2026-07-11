@@ -202,7 +202,7 @@ Runtime behavior:
 - The child inherits the parent tool catalog, but `sub_agent` itself is disabled inside the child, so nested sub-agent calls fail fast even if `sub-agent` is included in `allowed_tools`.
 - OpenAI and Google reuse the parent conversation checkpoint when available; other providers fall back to replaying the visible parent transcript plus the current live user turn.
 - Unknown `agent_type` values are rejected before the child session starts.
-- The child session is bounded to `200` provider requests or `1200` elapsed seconds, whichever happens first.
+- The child session is bounded to `400` provider requests or `1800` elapsed seconds, whichever happens first.
 
 See [Project Sub-agents](/customization/sub-agents#sub-agent-tool-visibility)
 for sub-agent `allowed_tools` frontmatter.
