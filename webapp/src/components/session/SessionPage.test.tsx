@@ -346,6 +346,7 @@ function makeConfigBootstrap(
     config_revision: "rev-1",
     active_profile_id: "analysis",
     stt_provider_id: null,
+    prompt_enhancement_profile_id: null,
     maintenance: { retention_days: 30 },
     user_profile: {
       preferred_name: "",
@@ -679,7 +680,10 @@ describe("SessionPage", () => {
       scan_status: "ready",
       is_stale: false,
       file_count: 2,
+      index_generation: "test-generation",
+      index_revision: 1,
       truncated: false,
+      search_approximated: false,
       error: null,
     });
     vi.mocked(refreshWorkspaceFileTree).mockResolvedValue({
@@ -687,7 +691,10 @@ describe("SessionPage", () => {
       scan_status: "ready",
       is_stale: false,
       file_count: 1,
+      index_generation: "test-generation",
+      index_revision: 1,
       truncated: false,
+      search_approximated: false,
       error: null,
     });
     vi.mocked(fetchWorkspaceFilePreview).mockResolvedValue({
@@ -770,7 +777,10 @@ describe("SessionPage", () => {
       scan_status: "ready",
       is_stale: false,
       file_count: 2,
+      index_generation: "test-generation",
+      index_revision: 1,
       truncated: false,
+      search_approximated: false,
       error: null,
       git_repository: true,
     });
@@ -903,7 +913,10 @@ describe("SessionPage", () => {
         scan_status: "scanning",
         is_stale: false,
         file_count: 0,
+        index_generation: "test-generation",
+        index_revision: 0,
         truncated: false,
+        search_approximated: false,
         error: null,
       })
       .mockResolvedValueOnce({
@@ -911,7 +924,10 @@ describe("SessionPage", () => {
         scan_status: "ready",
         is_stale: false,
         file_count: 1,
+        index_generation: "test-generation",
+        index_revision: 1,
         truncated: false,
+        search_approximated: false,
         error: null,
       });
     renderSessionRoute("/sessions/session-1");
@@ -956,7 +972,10 @@ describe("SessionPage", () => {
       scan_status: "ready",
       is_stale: false,
       file_count: 1,
+      index_generation: "test-generation",
+      index_revision: 1,
       truncated: false,
+      search_approximated: false,
       error: null,
     });
 

@@ -304,6 +304,7 @@ class PromptEnhancementService:
         workspace_root: Path,
         default_runtime: ResolvedRuntime,
         resolve_runtime: Callable[[str | None], ResolvedRuntime],
+        resolve_configured_runtime: Callable[[], ResolvedRuntime | None],
         resolve_saved_session_runtime: _SavedRuntimeResolver,
         find_live_session: Callable[[str], _LiveSessionWithRuntime | None],
     ) -> None:
@@ -311,6 +312,7 @@ class PromptEnhancementService:
         self._workspace_root = workspace_root
         self._default_runtime = default_runtime
         self._resolve_runtime = resolve_runtime
+        self._resolve_configured_runtime = resolve_configured_runtime
         self._resolve_saved_session_runtime = resolve_saved_session_runtime
         self._find_live_session = find_live_session
 
@@ -347,6 +349,9 @@ class PromptEnhancementService:
             return PromptEnhancementResult(text=enhanced_text, session=updated)
 
     def _runtime(self, session_id: str | None) -> ResolvedRuntime:
+        configured_runtime = self._resolve_configured_runtime()
+        if configured_runtime is not None:
+            return configured_runtime
         if session_id is None:
             return self._resolve_runtime(None)
         live_session = self._find_live_session(session_id)

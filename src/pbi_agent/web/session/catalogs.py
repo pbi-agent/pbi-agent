@@ -19,6 +19,10 @@ from pbi_agent.web.input_mentions import (
     WorkspaceFileIndex,
     WorkspaceFileTreePayload,
 )
+from pbi_agent.web.mention_suggestions import (
+    MentionSuggestionPayload,
+    combine_mention_suggestions,
+)
 from pbi_agent.web.session.state import LiveSessionState
 from pbi_agent.web.skill_mentions import search_skill_mentions
 from pbi_agent.workspace_context import WorkspaceContext
@@ -78,8 +82,42 @@ class CatalogsMixin:
         query: str,
         *,
         limit: int = 20,
+        refresh: bool = False,
+        exact: bool = False,
     ) -> MentionSearchPayload:
-        return self._catalogs_manager()._mention_index.search(query, limit=limit)
+        return self._catalogs_manager()._mention_index.search(
+            query,
+            limit=limit,
+            refresh=refresh,
+            exact=exact,
+        )
+
+    def search_mentions(
+        self,
+        query: str,
+        *,
+        limit: int = 20,
+        refresh: bool = False,
+    ) -> MentionSuggestionPayload:
+        manager = self._catalogs_manager()
+        bounded_limit = max(1, min(limit, 200))
+        files = manager._mention_index.search(
+            query,
+            limit=bounded_limit,
+            refresh=refresh,
+        )
+        agents = search_agent_mentions(
+            query,
+            root=manager._workspace_root,
+            limit=bounded_limit,
+            directory_key=manager._directory_key,
+        )
+        return combine_mention_suggestions(
+            query,
+            files=files,
+            agents=agents,
+            limit=bounded_limit,
+        )
 
     def workspace_file_tree(self) -> WorkspaceFileTreePayload:
         return self._catalogs_manager()._mention_index.tree_snapshot()

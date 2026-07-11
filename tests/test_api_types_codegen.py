@@ -136,11 +136,19 @@ def test_generated_api_types_include_operation_contracts() -> None:
     assert "export type ApiOperationPathParams =" in generated
     assert '"GET /api/runs/{run_session_id}": { run_session_id: string }' in generated
     assert "export type ApiOperationQueryParams =" in generated
-    assert '"GET /api/files/search": { q?: string; limit?: number }' in generated
+    assert (
+        '"GET /api/files/search": { q?: string; limit?: number; refresh?: boolean; exact?: boolean }'
+        in generated
+    )
+    assert (
+        '"GET /api/mentions/search": { q?: string; limit?: number; refresh?: boolean }'
+        in generated
+    )
     assert '"GET /api/files/diff": { path: string }' in generated
     assert '"GET /api/files/preview": { path: string }' in generated
     assert '"GET /api/files/diff": WorkspaceFileDiffResponse' in generated
     assert '"GET /api/files/tree": WorkspaceFileTreeResponse' in generated
+    assert '"GET /api/mentions/search": MentionSuggestionSearchResponse' in generated
     assert '"POST /api/files/tree/refresh": WorkspaceFileTreeResponse' in generated
 
 

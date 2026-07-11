@@ -42,6 +42,7 @@ import type {
   UserQuestionAnswer,
   UserProfile,
   MaintenanceConfig,
+  MentionSuggestionSearchPayload,
   ModelProfileView,
   ObservabilityEvent,
   ProviderAuthFlowResponse,
@@ -69,6 +70,7 @@ type SessionListResponsePayload = { sessions: SessionRecord[] };
 type SessionResponsePayload = { session: SessionRecord };
 type LiveSessionResponsePayload = { session: LiveSession };
 type FileMentionSearchResponsePayload = FileMentionSearchPayload;
+type MentionSuggestionSearchResponsePayload = MentionSuggestionSearchPayload;
 type WorkspaceFileTreeResponsePayload = WorkspaceFileTreePayload;
 type WorkspaceFilePreviewResponsePayload = WorkspaceFilePreviewPayload;
 type WorkspaceFileDiffResponsePayload = WorkspaceFileDiffPayload;
@@ -88,6 +90,8 @@ type ActiveModelProfileResponsePayload = {
   config_revision: string;
 };
 type SttProviderResponsePayload = ApiResponse<"PUT /api/config/stt-provider">;
+type PromptEnhancementProfileResponsePayload =
+  ApiResponse<"PUT /api/config/prompt-enhancement-profile">;
 type SttTranscriptionResponsePayload = ApiResponse<"POST /api/stt/transcribe">;
 type PromptEnhancementPayload = ApiJsonRequestBodies["POST /api/prompt/enhance"];
 type PromptEnhancementResponsePayload = ApiResponse<"POST /api/prompt/enhance">;
@@ -513,11 +517,14 @@ export async function fetchSessionDetail(sessionId: string): Promise<SessionDeta
 export async function searchFileMentions(
   query: string,
   limit = 8,
-  init?: RequestInit,
+  options?: RequestInit & { exact?: boolean; refresh?: boolean },
 ): Promise<FileMentionSearchPayload> {
+  const { exact, refresh, ...requestInit } = options ?? {};
   const params = queryString("GET /api/files/search", {
     q: query,
     limit,
+    refresh: refresh || undefined,
+    exact: exact || undefined,
   });
   const result = await apiRequest<
     "GET /api/files/search",
@@ -525,9 +532,30 @@ export async function searchFileMentions(
   >(
     "GET /api/files/search",
     `/api/files/search${params}`,
-    init,
+    options ? requestInit : undefined,
   );
   return result;
+}
+
+export async function searchMentions(
+  query: string,
+  limit = 8,
+  options?: RequestInit & { refresh?: boolean },
+): Promise<MentionSuggestionSearchPayload> {
+  const { refresh, ...requestInit } = options ?? {};
+  const params = queryString("GET /api/mentions/search", {
+    q: query,
+    limit,
+    refresh: refresh || undefined,
+  });
+  return apiRequest<
+    "GET /api/mentions/search",
+    MentionSuggestionSearchResponsePayload
+  >(
+    "GET /api/mentions/search",
+    `/api/mentions/search${params}`,
+    options ? requestInit : undefined,
+  );
 }
 
 export async function fetchWorkspaceFileTree(): Promise<WorkspaceFileTreePayload> {
@@ -1430,6 +1458,27 @@ export async function setSttProvider(
       method: "PUT",
       headers: { "If-Match": configRevision },
       body: jsonBody("PUT /api/config/stt-provider", payload),
+    },
+  );
+}
+
+export async function setPromptEnhancementProfile(
+  profileId: string | null,
+  configRevision: string,
+): Promise<PromptEnhancementProfileResponsePayload> {
+  const payload: ApiJsonRequestBodies["PUT /api/config/prompt-enhancement-profile"] = {
+    profile_id: profileId,
+  };
+  return apiRequest<
+    "PUT /api/config/prompt-enhancement-profile",
+    PromptEnhancementProfileResponsePayload
+  >(
+    "PUT /api/config/prompt-enhancement-profile",
+    "/api/config/prompt-enhancement-profile",
+    {
+      method: "PUT",
+      headers: { "If-Match": configRevision },
+      body: jsonBody("PUT /api/config/prompt-enhancement-profile", payload),
     },
   );
 }

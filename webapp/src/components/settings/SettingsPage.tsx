@@ -11,6 +11,7 @@ import {
   logoutProviderAuth,
   refreshProviderAuth,
   setActiveModelProfile,
+  setPromptEnhancementProfile,
   setSttProvider,
   updateMaintenanceConfig,
   updateModelProfile,
@@ -49,6 +50,7 @@ import { ProviderAuthFlowModal } from "./ProviderAuthFlowModal";
 import { ProviderUsageLimitsDialog } from "./ProviderUsageLimitsDialog";
 import { ProvidersSettingsSection } from "./ProvidersSettingsSection";
 import { ProfileSettingsSection } from "./ProfileSettingsSection";
+import { PromptEnhancementSettingsSection } from "./PromptEnhancementSettingsSection";
 import type { ProviderPayload } from "./ProviderModal";
 import { ProviderModal } from "./ProviderModal";
 import { SkillsSettingsSection } from "./SkillsSettingsSection";
@@ -78,6 +80,7 @@ type SettingsTabId =
   | "appearance"
   | "notifications"
   | "providers"
+  | "prompt-enhancement"
   | "speech"
   | "model-profiles"
   | "skills"
@@ -118,6 +121,11 @@ const SETTINGS_NAV_GROUPS: Array<{
           id: "speech",
           label: "Speech-to-text",
           description: "Dictation provider",
+        },
+        {
+          id: "prompt-enhancement",
+          label: "Prompt enhancement",
+          description: "Composer model profile",
         },
       ],
     },
@@ -349,6 +357,17 @@ export function SettingsPage() {
     }
   }
 
+  async function handleSetPromptEnhancementProfile(
+    profileId: string | null,
+  ): Promise<void> {
+    try {
+      await setPromptEnhancementProfile(profileId, getRevision());
+      await invalidateBoth();
+    } catch (err) {
+      wrapStale(err);
+    }
+  }
+
   async function handleSaveMaintenance(retentionDays: number): Promise<void> {
     try {
       await updateMaintenanceConfig(retentionDays, getRevision());
@@ -457,6 +476,7 @@ export function SettingsPage() {
     user_profile,
     active_profile_id,
     stt_provider_id,
+    prompt_enhancement_profile_id,
     maintenance,
     options,
   } = configData;
@@ -574,6 +594,14 @@ export function SettingsPage() {
                         options={options}
                         sttProviderId={stt_provider_id}
                         onSave={handleSetSttProvider}
+                      />
+                    )}
+
+                    {activeTab === "prompt-enhancement" && (
+                      <PromptEnhancementSettingsSection
+                        profiles={model_profiles}
+                        profileId={prompt_enhancement_profile_id}
+                        onSave={handleSetPromptEnhancementProfile}
                       />
                     )}
 

@@ -36,6 +36,7 @@ from pbi_agent.config import (
     resolve_runtime_for_provider_id,
     resolve_web_runtime,
     select_active_model_profile,
+    select_prompt_enhancement_profile,
     select_stt_provider,
     slugify,
     update_maintenance_config as save_maintenance_config,
@@ -131,6 +132,7 @@ class ConfigurationMixin:
             "user_profile": self._user_profile_view(config.user_profile),
             "active_profile_id": config.web.active_profile_id,
             "stt_provider_id": config.web.stt_provider_id,
+            "prompt_enhancement_profile_id": config.web.prompt_enhancement_profile_id,
             "maintenance": self._maintenance_view(config.maintenance),
             "config_revision": revision,
             "options": {
@@ -537,6 +539,26 @@ class ConfigurationMixin:
             "stt_provider_id": stt_provider_id,
             "config_revision": revision,
         }
+
+    def set_prompt_enhancement_profile(
+        self,
+        profile_id: str | None,
+        *,
+        expected_revision: str,
+    ) -> dict[str, Any]:
+        selected_id, revision = select_prompt_enhancement_profile(
+            profile_id, expected_revision=expected_revision
+        )
+        return {
+            "prompt_enhancement_profile_id": selected_id,
+            "config_revision": revision,
+        }
+
+    def _resolve_prompt_enhancement_runtime(self) -> ResolvedRuntime | None:
+        profile_id = load_internal_config().web.prompt_enhancement_profile_id
+        if profile_id is None:
+            return None
+        return self._resolve_runtime(profile_id)
 
     def list_project_commands(self) -> dict[str, Any]:
         _, revision = load_internal_config_snapshot()

@@ -147,6 +147,7 @@ class SavedSessionsMixin:
             [str], LiveSessionState | None
         ]
         _publish_task_updated: Callable[[KanbanTaskRecord], None]
+        _resolve_prompt_enhancement_runtime: Callable[[], ResolvedRuntime | None]
         _resolve_runtime: Callable[[str | None], ResolvedRuntime]
         _resolve_saved_session_runtime: _ResolveSavedSessionRuntime
         _serialize_live_session: Callable[[LiveSessionState], dict[str, Any]]
@@ -306,6 +307,7 @@ class SavedSessionsMixin:
             workspace_root=self._workspace_root,
             default_runtime=self._default_runtime,
             resolve_runtime=self._resolve_runtime,
+            resolve_configured_runtime=self._resolve_prompt_enhancement_runtime,
             resolve_saved_session_runtime=self._resolve_saved_session_runtime,
             find_live_session=self._find_live_session_for_saved_session,
         ).enhance_prompt(

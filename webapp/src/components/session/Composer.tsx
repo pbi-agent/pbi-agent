@@ -16,7 +16,7 @@ import {
   TerminalIcon,
   XIcon,
 } from "lucide-react";
-import { searchAgentMentions, searchFileMentions, searchSkillMentions, searchSlashCommands } from "../../api";
+import { searchSlashCommands } from "../../api";
 import type { AgentMentionItem, FileMentionItem, QueuedFollowUp, SkillMentionItem, SlashCommandItem } from "../../types";
 import { cn } from "../../lib/utils";
 import { createWavRecorder, type WavRecorder } from "../../lib/audioRecorder";
@@ -28,6 +28,10 @@ import {
   type ComposerDictationState,
 } from "./ComposerActions";
 import { useFileExistence } from "../../hooks/useFileExistence";
+import {
+  useComposerCompletions,
+  type CompletionItem,
+} from "../../hooks/useComposerCompletions";
 import { useSkillCatalog } from "../../hooks/useSkillCatalog";
 import { Button } from "../ui/button";
 import {
@@ -51,6 +55,9 @@ interface ComposerProps {
   inputEnabled: boolean;
   sessionEnded: boolean;
   liveSessionId: string | null;
+  workspaceKey?: string | null;
+  workspaceFileIndexGeneration?: string | null;
+  workspaceFileIndexRevision?: number | null;
   /** Chronological oldest-to-newest user input text for the current conversation. */
   inputHistory?: string[];
   canCreateSession?: boolean;
@@ -81,30 +88,6 @@ type ActiveCompletionRange = {
   end: number;
   query: string;
 };
-
-type CompletionMode = "mention" | "skill" | "slash";
-
-type CompletionItem =
-  | {
-      kind: "mention";
-      key: string;
-      mention: FileMentionItem;
-    }
-  | {
-      kind: "agent";
-      key: string;
-      agent: AgentMentionItem;
-    }
-  | {
-      kind: "skill";
-      key: string;
-      skill: SkillMentionItem;
-    }
-  | {
-      kind: "slash";
-      key: string;
-      command: SlashCommandItem;
-    };
 
 type PendingImage = {
   id: string;
@@ -158,8 +141,6 @@ const SUPPORTED_IMAGE_EXTENSIONS = [
   ".heif",
 ];
 const TOKEN_BOUNDARY_PATTERN = /[\s()[\]{}'"`,;]/;
-const FILE_MENTION_POLL_INTERVAL_MS = 500;
-const COMPLETION_RESULT_LIMIT = 8;
 const SLASH_COMMAND_COMPLETION_LIMIT = 200;
 
 function slashCommandKindLabel(kind: SlashCommandItem["kind"]): string {
@@ -412,6 +393,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   inputEnabled,
   sessionEnded,
   liveSessionId,
+  workspaceKey = null,
+    workspaceFileIndexGeneration = null,
+  workspaceFileIndexRevision = null,
   inputHistory = [],
   canCreateSession = false,
   supportsImageInputs,
@@ -441,24 +425,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const [attachmentMessage, setAttachmentMessage] = useState<string | null>(null);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [cursorIndex, setCursorIndex] = useState(0);
-  const [completionMode, setCompletionMode] = useState<CompletionMode | null>(null);
-  const [completionItems, setCompletionItems] = useState<CompletionItem[]>([]);
-  const [completionOpen, setCompletionOpen] = useState(false);
-  const [completionLoading, setCompletionLoading] = useState(false);
-  const [completionError, setCompletionError] = useState<string | null>(null);
-  const [completionStatusMessage, setCompletionStatusMessage] = useState<string | null>(null);
-  const [completionSelectedIndex, setCompletionSelectedIndex] = useState(0);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [historyDraft, setHistoryDraft] = useState<string | null>(null);
   const [dictationState, setDictationState] = useState<ComposerDictationState>("idle");
   const [followUpChoicesOpen, setFollowUpChoicesOpen] = useState(false);
   const [followUpSelectedIndex, setFollowUpSelectedIndex] = useState(0);
-  const completionRequestIdRef = useRef(0);
   const completionItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const activeCompletionRef = useRef<{
-    mode: CompletionMode | null;
-    query: string | null;
-  }>({ mode: null, query: null });
   const pendingImagesRef = useRef<PendingImage[]>([]);
   const dictationRecorderRef = useRef<WavRecorder | null>(null);
   const refocusAfterSubmitRef = useRef(false);
@@ -500,13 +472,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     () => collectComposerFileTokens(input, isShellMode),
     [input, isShellMode],
   );
-  const { isFileKnown } = useFileExistence(fileTokens);
-  const shellCommandPreview = shellInput.slice(1).trim();
-  const highlightSegments = parseComposerHighlightSegments(input, {
-    skillNames,
-    isFileKnown,
-    isShellMode,
-  });
   const activeSlashCommand = parseActiveSlashCommand(input, cursorIndex);
   const activeMention = activeSlashCommand
     ? null
@@ -522,17 +487,76 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         ? "skill"
         : null;
   const activeCompletionQuery = activeSlashCommand?.query ?? activeMention?.query ?? activeSkillTag?.query ?? null;
-
-  const closeCompletions = useCallback(() => {
-    completionRequestIdRef.current += 1;
-    setCompletionMode(null);
-    setCompletionItems([]);
-    setCompletionOpen(false);
-    setCompletionLoading(false);
-    setCompletionError(null);
-    setCompletionStatusMessage(null);
-    setCompletionSelectedIndex(0);
-  }, []);
+  const mentionActivationSequenceRef = useRef(0);
+  const mentionActivationRef = useRef<{
+    workspaceKey: string | null;
+    start: number;
+    query: string;
+  } | null>(null);
+  let activeMentionTokenKey: string | null = null;
+  if (activeMention) {
+    const previous = mentionActivationRef.current;
+    const continuesPreviousToken =
+      previous?.workspaceKey === workspaceKey
+      && previous.start === activeMention.start
+      && (
+        activeMention.query.startsWith(previous.query)
+        || previous.query.startsWith(activeMention.query)
+      );
+    if (!continuesPreviousToken) {
+      mentionActivationSequenceRef.current += 1;
+    }
+    activeMentionTokenKey =
+      `${workspaceKey ?? ""}:${activeMention.start}:${mentionActivationSequenceRef.current}`;
+    mentionActivationRef.current = {
+      workspaceKey,
+      start: activeMention.start,
+      query: activeMention.query,
+    };
+  } else {
+    mentionActivationRef.current = null;
+  }
+  const {
+    completionMode,
+    completionItems,
+    completionOpen,
+    completionLoading,
+    completionError,
+    completionStatusMessage,
+    completionSelectedIndex,
+    fileIndexGeneration: observedFileIndexGeneration,
+    fileIndexRevision: observedFileIndexRevision,
+    setCompletionSelectedIndex,
+    closeCompletions,
+  } = useComposerCompletions({
+    enabled: canSend || canDraftFollowUp,
+    mode: activeCompletionMode,
+    query: activeCompletionQuery,
+    mentionTokenKey: activeMentionTokenKey,
+    workspaceKey,
+    fileIndexGeneration: workspaceFileIndexGeneration,
+  });
+  const effectiveFileIndexGeneration =
+    observedFileIndexGeneration ?? workspaceFileIndexGeneration;
+  const effectiveFileIndexRevision =
+    observedFileIndexGeneration === null
+      ? workspaceFileIndexRevision
+      : observedFileIndexGeneration === workspaceFileIndexGeneration
+        && workspaceFileIndexRevision !== null
+        && observedFileIndexRevision !== null
+        ? Math.max(observedFileIndexRevision, workspaceFileIndexRevision)
+        : observedFileIndexRevision;
+  const { isFileKnown } = useFileExistence(fileTokens, {
+    workspaceKey,
+    indexGeneration: effectiveFileIndexGeneration,
+    indexRevision: effectiveFileIndexRevision,
+  });
+  const shellCommandPreview = shellInput.slice(1).trim();
+  const highlightSegments = parseComposerHighlightSegments(input, {
+    skillNames,
+    isFileKnown,
+    isShellMode,
+  });
 
   const resetHistoryBrowsing = useCallback(() => {
     setHistoryIndex(null);
@@ -548,13 +572,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     highlightRef.current.scrollTop = textareaRef.current.scrollTop;
     highlightRef.current.scrollLeft = textareaRef.current.scrollLeft;
   }, []);
-
-  useEffect(() => {
-    activeCompletionRef.current = {
-      mode: activeCompletionMode,
-      query: activeCompletionQuery,
-    };
-  }, [activeCompletionMode, activeCompletionQuery]);
 
   useEffect(() => {
     syncHighlightScroll();
@@ -707,6 +724,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const isPromptEnhancementPending = composerActions.isPromptEnhancementPending;
   const promptEnhancementPending = composerActions.promptEnhancementPending;
   const composerInputAvailable = (canSend || canDraftFollowUp) && !promptEnhancementPending;
+  useEffect(() => {
+    if (!composerInputAvailable) {
+      closeCompletions();
+    }
+  }, [closeCompletions, composerInputAvailable]);
   const showFollowUpSubmitButton =
     canDraftFollowUp && input.trim().length > 0;
   const showActionStopButton = showStopButton && !showFollowUpSubmitButton;
@@ -1106,154 +1128,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   );
 
   useEffect(() => {
-    if (
-      !composerInputAvailable ||
-      activeCompletionMode === null ||
-      activeCompletionQuery === null
-    ) {
-      completionRequestIdRef.current += 1;
-      closeCompletions();
-      return undefined;
-    }
-
-    setCompletionOpen(true);
-    setCompletionMode(activeCompletionMode);
-    setCompletionError(null);
-    setCompletionStatusMessage(null);
-    setCompletionLoading(true);
-    setCompletionItems([]);
-    setCompletionSelectedIndex(0);
-
-    const requestId = completionRequestIdRef.current + 1;
-    completionRequestIdRef.current = requestId;
-    const requestMode = activeCompletionMode;
-    const requestQuery = activeCompletionQuery;
-    let cancelled = false;
-    let timeoutId: number | undefined;
-
-    const isCurrentRequest = () =>
-      !cancelled &&
-      completionRequestIdRef.current === requestId &&
-      activeCompletionRef.current.mode === requestMode &&
-      activeCompletionRef.current.query === requestQuery;
-
-    const scheduleSearch = (delayMs: number) => {
-      timeoutId = window.setTimeout(() => {
-        void runSearch();
-      }, delayMs);
-    };
-
-    const runSearch = async () => {
-      if (!isCurrentRequest()) return;
-      try {
-        const payload =
-          requestMode === "slash"
-            ? {
-                items: (
-                  await searchSlashCommands(
-                    requestQuery,
-                    SLASH_COMMAND_COMPLETION_LIMIT,
-                  )
-                ).map((command): CompletionItem => ({
-                  kind: "slash",
-                  key: command.name,
-                  command,
-                })),
-                loading: false,
-                statusMessage: null,
-                errorMessage: null,
-                shouldPoll: false,
-              }
-            : requestMode === "skill"
-              ? await searchSkillMentions(
-                  requestQuery,
-                  COMPLETION_RESULT_LIMIT,
-                ).then((result) => ({
-                  items: result.items.map((skill): CompletionItem => ({
-                    kind: "skill",
-                    key: skill.name,
-                    skill,
-                  })),
-                  loading: false,
-                  statusMessage: null,
-                  errorMessage: null,
-                  shouldPoll: false,
-                }))
-              : await Promise.all([
-                  searchAgentMentions(requestQuery, COMPLETION_RESULT_LIMIT),
-                  searchFileMentions(requestQuery, COMPLETION_RESULT_LIMIT),
-                ]).then(([agentResult, fileResult]) => ({
-                  items: [
-                    ...agentResult.items.map(
-                      (agent): CompletionItem => ({
-                        kind: "agent",
-                        key: `agent:${agent.name}`,
-                        agent,
-                      }),
-                    ),
-                    ...fileResult.items.map(
-                      (mention): CompletionItem => ({
-                        kind: "mention",
-                        key: `file:${mention.path}`,
-                        mention,
-                      }),
-                    ),
-                  ].slice(0, COMPLETION_RESULT_LIMIT),
-                  loading: fileResult.scan_status === "scanning" && fileResult.items.length === 0 && agentResult.items.length === 0,
-                  statusMessage: fileResult.is_stale
-                    ? "Refreshing file index..."
-                    : fileResult.scan_status === "scanning"
-                      ? "Indexing files..."
-                      : null,
-                  errorMessage:
-                    fileResult.scan_status === "failed"
-                      ? fileResult.error ?? "Unable to index workspace files"
-                      : null,
-                  shouldPoll: fileResult.scan_status === "scanning",
-                }));
-        if (!isCurrentRequest()) return;
-        setCompletionItems(payload.items);
-        setCompletionLoading(payload.loading);
-        setCompletionStatusMessage(payload.statusMessage);
-        setCompletionError(payload.errorMessage);
-        setCompletionSelectedIndex((previousIndex) =>
-          payload.items.length === 0
-            ? 0
-            : Math.min(previousIndex, payload.items.length - 1),
-        );
-        if (payload.shouldPoll) {
-          scheduleSearch(FILE_MENTION_POLL_INTERVAL_MS);
-        }
-      } catch {
-        if (!isCurrentRequest()) return;
-        setCompletionLoading(false);
-        setCompletionStatusMessage(null);
-        setCompletionError(
-          requestMode === "slash"
-            ? "Unable to load commands"
-            : requestMode === "skill"
-              ? "Unable to load skills"
-              : "Unable to load files and agents",
-        );
-      }
-    };
-
-    scheduleSearch(activeCompletionMode === "slash" ? 60 : 120);
-
-    return () => {
-      cancelled = true;
-      if (timeoutId !== undefined) {
-        window.clearTimeout(timeoutId);
-      }
-    };
-  }, [
-    activeCompletionMode,
-    activeCompletionQuery,
-    closeCompletions,
-    composerInputAvailable,
-  ]);
-
-  useEffect(() => {
     if (!completionOpen) return;
     completionItemRefs.current[completionSelectedIndex]?.scrollIntoView?.({
       block: "nearest",
@@ -1466,7 +1340,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     [appendFiles, isShellMode],
   );
 
-  const showCompletionStatus = completionStatusMessage !== null && completionItems.length > 0;
+  const completionListStatus = completionError ?? completionStatusMessage;
+  const showCompletionStatus =
+    completionListStatus !== null && completionItems.length > 0;
   const showCompletionEmptyState =
     completionItems.length === 0 &&
     (completionLoading || completionError !== null || completionOpen);
@@ -1742,7 +1618,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           ) : null}
           {showCompletionStatus ? (
             <div className="composer__completion-status">
-              {completionStatusMessage}
+                {completionListStatus}
             </div>
           ) : null}
         </div>

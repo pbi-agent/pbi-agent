@@ -348,6 +348,15 @@ class SttProviderResponse(BaseModel):
     config_revision: str
 
 
+class PromptEnhancementProfileRequest(BaseModel):
+    profile_id: str | None = None
+
+
+class PromptEnhancementProfileResponse(BaseModel):
+    prompt_enhancement_profile_id: str | None
+    config_revision: str
+
+
 class MaintenanceConfigModel(BaseModel):
     retention_days: int = Field(ge=1)
 
@@ -547,6 +556,7 @@ class ConfigBootstrapResponse(BaseModel):
     user_profile: UserProfileConfigModel
     active_profile_id: str | None
     stt_provider_id: str | None
+    prompt_enhancement_profile_id: str | None
     maintenance: MaintenanceConfigModel
     config_revision: str
     options: ConfigOptionsModel

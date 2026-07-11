@@ -29,6 +29,17 @@ class FileMentionItemModel(BaseModel):
     kind: Literal["file", "image"]
 
 
+class AgentMentionItemModel(BaseModel):
+    name: str
+    description: str
+    path: str
+    enabled: bool
+
+
+class AgentMentionSuggestionItemModel(AgentMentionItemModel):
+    kind: Literal["agent"]
+
+
 class WorkspaceFileTreeItemModel(FileMentionItemModel):
     git_status: Literal["M", "A", "D", "R", "U", "?"] | None = None
 
@@ -41,6 +52,22 @@ class FileMentionSearchResponse(BaseModel):
     scan_status: ScanStatus
     is_stale: bool
     file_count: int
+    index_generation: str
+    index_revision: int
+    truncated: bool
+    search_approximated: bool
+    error: str | None = None
+
+
+class MentionSuggestionSearchResponse(BaseModel):
+    items: list[FileMentionItemModel | AgentMentionSuggestionItemModel]
+    scan_status: ScanStatus
+    is_stale: bool
+    file_count: int
+    index_generation: str
+    index_revision: int
+    truncated: bool
+    search_approximated: bool
     error: str | None = None
 
 
@@ -49,7 +76,10 @@ class WorkspaceFileTreeResponse(BaseModel):
     scan_status: ScanStatus
     is_stale: bool
     file_count: int
+    index_generation: str
+    index_revision: int
     truncated: bool = False
+    search_approximated: bool = False
     error: str | None = None
     git_repository: bool = False
     git_status_version: str | None = None
@@ -106,13 +136,6 @@ class SkillMentionItemModel(BaseModel):
 
 class SkillMentionSearchResponse(BaseModel):
     items: list[SkillMentionItemModel]
-
-
-class AgentMentionItemModel(BaseModel):
-    name: str
-    description: str
-    path: str
-    enabled: bool
 
 
 class AgentMentionSearchResponse(BaseModel):

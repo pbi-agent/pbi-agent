@@ -908,6 +908,7 @@ def test_workspace_file_tree_refresh_and_preview(monkeypatch, tmp_path: Path) ->
         assert "ignored.txt" not in paths
         assert payload["scan_status"] == "ready"
         assert payload["file_count"] == len(payload["items"])
+        assert payload["index_revision"] >= 1
 
         preview = client.get("/api/files/preview", params={"path": "src/app.py"})
         assert preview.status_code == 200
@@ -1970,6 +1971,7 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
         assert bootstrap_payload["providers"] == []
         assert bootstrap_payload["model_profiles"] == []
         assert bootstrap_payload["stt_provider_id"] is None
+        assert bootstrap_payload["prompt_enhancement_profile_id"] is None
         assert bootstrap_payload["user_profile"] == {
             "preferred_name": "",
             "role": "",
@@ -2296,6 +2298,52 @@ def test_config_stt_provider_endpoint_selects_rejects_and_delete_clears() -> Non
         assert delete_response.status_code == 204
 
         assert client.get("/api/config/bootstrap").json()["stt_provider_id"] is None
+
+
+def test_config_prompt_enhancement_profile_endpoint_selects_and_clears() -> None:
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        revision = client.get("/api/config/bootstrap").json()["config_revision"]
+        provider_response = client.post(
+            "/api/config/providers",
+            headers={"If-Match": revision},
+            json={"name": "OpenAI Main", "kind": "openai", "api_key": "test-key"},
+        )
+        assert provider_response.status_code == 200
+        revision = provider_response.json()["config_revision"]
+        profile_response = client.post(
+            "/api/config/model-profiles",
+            headers={"If-Match": revision},
+            json={
+                "name": "Enhancer",
+                "provider_id": "openai-main",
+                "model": "gpt-5-mini",
+            },
+        )
+        assert profile_response.status_code == 200
+        revision = profile_response.json()["config_revision"]
+
+        select_response = client.put(
+            "/api/config/prompt-enhancement-profile",
+            headers={"If-Match": revision},
+            json={"profile_id": "enhancer"},
+        )
+        assert select_response.status_code == 200
+        assert select_response.json()["prompt_enhancement_profile_id"] == "enhancer"
+        revision = select_response.json()["config_revision"]
+        assert (
+            client.get("/api/config/bootstrap").json()["prompt_enhancement_profile_id"]
+            == "enhancer"
+        )
+
+        clear_response = client.put(
+            "/api/config/prompt-enhancement-profile",
+            headers={"If-Match": revision},
+            json={"profile_id": None},
+        )
+        assert clear_response.status_code == 200
+        assert clear_response.json()["prompt_enhancement_profile_id"] is None
 
 
 def test_command_list_endpoint_returns_command_files(
@@ -2990,6 +3038,10 @@ def test_file_search_endpoint_returns_workspace_matches(tmp_path, monkeypatch) -
             if payload["scan_status"] == "ready":
                 break
             response = client.get("/api/files/search", params={"q": "ma", "limit": 10})
+        exact_response = client.get(
+            "/api/files/search",
+            params={"q": "main.py", "exact": True},
+        )
 
     assert response.status_code == 200
     payload = response.json()
@@ -3000,7 +3052,93 @@ def test_file_search_endpoint_returns_workspace_matches(tmp_path, monkeypatch) -
     assert payload["scan_status"] == "ready"
     assert payload["is_stale"] is False
     assert payload["file_count"] >= 3
+    assert payload["index_revision"] >= 1
+    assert payload["truncated"] is False
     assert payload["error"] is None
+    assert exact_response.status_code == 200
+    assert exact_response.json()["items"] == [{"path": "main.py", "kind": "file"}]
+
+
+def test_file_search_refresh_discovers_new_workspace_file(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "main.py").write_text("print('main')\n", encoding="utf-8")
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = client.get("/api/files/search", params={"q": "main"})
+        for _ in range(20):
+            initial = response.json()
+            if initial["scan_status"] == "ready":
+                break
+            response = client.get("/api/files/search", params={"q": "main"})
+
+        initial_revision = initial["index_revision"]
+        (tmp_path / "new_module.py").write_text(
+            "print('new')\n",
+            encoding="utf-8",
+        )
+        response = client.get(
+            "/api/files/search",
+            params={"q": "new_module", "refresh": True},
+        )
+        for _ in range(20):
+            refreshed = response.json()
+            if (
+                refreshed["scan_status"] == "ready"
+                and refreshed["index_revision"] > initial_revision
+            ):
+                break
+            response = client.get(
+                "/api/files/search",
+                params={"q": "new_module"},
+            )
+
+    assert response.status_code == 200
+    assert refreshed["items"] == [{"path": "new_module.py", "kind": "file"}]
+    assert refreshed["index_revision"] > initial_revision
+
+
+def test_mixed_mention_search_returns_globally_ranked_files_and_agents(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "target.py").write_text("print('target')\n", encoding="utf-8")
+    _write_agent(
+        tmp_path / ".agents" / "agents",
+        "reviewer",
+        "Reviews target.py changes",
+        "Review the requested changes.",
+    )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/mentions/search",
+            params={"q": "target.py", "refresh": True},
+        )
+        for _ in range(20):
+            payload = response.json()
+            if payload["scan_status"] == "ready":
+                break
+            response = client.get(
+                "/api/mentions/search",
+                params={"q": "target.py"},
+            )
+
+    assert response.status_code == 200
+    assert payload["items"][0] == {"path": "target.py", "kind": "file"}
+    assert payload["items"][1] == {
+        "kind": "agent",
+        "name": "reviewer",
+        "description": "Reviews target.py changes",
+        "path": ".agents/agents/reviewer.md",
+        "enabled": True,
+    }
+    assert payload["index_revision"] >= 1
 
 
 def test_skill_search_endpoint_returns_installed_project_skills(

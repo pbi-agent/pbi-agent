@@ -1,6 +1,4 @@
-- [x] Define the global profile persistence, API, and prompt contract
-- [x] Add backend profile config, API schemas/routes, and prompt injection
-- [x] Add the Settings → Profile UI and typed frontend API integration
-- [x] Add/update backend and frontend tests and generated API types
-- [x] Run relevant Python/frontend validation and review the changes
-- [x] Update task memory and summarize remaining risk
+- [x] Raise the sub-agent elapsed timeout to 1800 seconds
+- [x] Update timeout documentation
+- [x] Run focused validation
+- [x] Update memory

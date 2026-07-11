@@ -82,6 +82,7 @@ function makeConfigBootstrap(
     config_revision: "rev-1",
     active_profile_id: "profile-1",
     stt_provider_id: null,
+    prompt_enhancement_profile_id: null,
     maintenance: { retention_days: 30 },
     user_profile: {
       preferred_name: "",
