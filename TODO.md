@@ -1,7 +1,7 @@
-- [x] Implement refreshable workspace mention index with revision tracking and scan coalescing
-- [x] Extend file-search API/schema/generated frontend contract
-- [x] Refresh once per active `@` token and improve mixed agent/file ranking
-- [x] Scope and invalidate file-existence cache by workspace/index revision
-- [x] Add focused backend and frontend tests
-- [x] Run required validation and review changes
-- [x] Update task memory and summarize
+- [x] Worker: implement configurable prompt-enhancement model profile
+- [x] Main: inspect worker diff and run focused validation
+- [x] Reviewer round 1: review implementation
+- [x] Code-quality-reviewer round 1: review maintainability
+- [x] Final validation
+- [x] Update memory
+- [x] Handoff

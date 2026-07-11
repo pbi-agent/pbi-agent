@@ -1971,6 +1971,7 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
         assert bootstrap_payload["providers"] == []
         assert bootstrap_payload["model_profiles"] == []
         assert bootstrap_payload["stt_provider_id"] is None
+        assert bootstrap_payload["prompt_enhancement_profile_id"] is None
         assert bootstrap_payload["user_profile"] == {
             "preferred_name": "",
             "role": "",
@@ -2297,6 +2298,52 @@ def test_config_stt_provider_endpoint_selects_rejects_and_delete_clears() -> Non
         assert delete_response.status_code == 204
 
         assert client.get("/api/config/bootstrap").json()["stt_provider_id"] is None
+
+
+def test_config_prompt_enhancement_profile_endpoint_selects_and_clears() -> None:
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        revision = client.get("/api/config/bootstrap").json()["config_revision"]
+        provider_response = client.post(
+            "/api/config/providers",
+            headers={"If-Match": revision},
+            json={"name": "OpenAI Main", "kind": "openai", "api_key": "test-key"},
+        )
+        assert provider_response.status_code == 200
+        revision = provider_response.json()["config_revision"]
+        profile_response = client.post(
+            "/api/config/model-profiles",
+            headers={"If-Match": revision},
+            json={
+                "name": "Enhancer",
+                "provider_id": "openai-main",
+                "model": "gpt-5-mini",
+            },
+        )
+        assert profile_response.status_code == 200
+        revision = profile_response.json()["config_revision"]
+
+        select_response = client.put(
+            "/api/config/prompt-enhancement-profile",
+            headers={"If-Match": revision},
+            json={"profile_id": "enhancer"},
+        )
+        assert select_response.status_code == 200
+        assert select_response.json()["prompt_enhancement_profile_id"] == "enhancer"
+        revision = select_response.json()["config_revision"]
+        assert (
+            client.get("/api/config/bootstrap").json()["prompt_enhancement_profile_id"]
+            == "enhancer"
+        )
+
+        clear_response = client.put(
+            "/api/config/prompt-enhancement-profile",
+            headers={"If-Match": revision},
+            json={"profile_id": None},
+        )
+        assert clear_response.status_code == 200
+        assert clear_response.json()["prompt_enhancement_profile_id"] is None
 
 
 def test_command_list_endpoint_returns_command_files(

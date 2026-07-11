@@ -535,6 +535,7 @@ class InternalConfig:
 class WebConfig:
     active_profile_id: str | None = None
     stt_provider_id: str | None = None
+    prompt_enhancement_profile_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -1373,6 +1374,8 @@ def delete_model_profile_config(
     ]
     if config.web.active_profile_id == normalized_id:
         config.web.active_profile_id = None
+    if config.web.prompt_enhancement_profile_id == normalized_id:
+        config.web.prompt_enhancement_profile_id = None
     return save_internal_config_with_revision(
         config, expected_revision=expected_revision
     )
@@ -1418,6 +1421,25 @@ def select_stt_provider(
         config, expected_revision=expected_revision
     )
     return config.web.stt_provider_id, revision
+
+
+def select_prompt_enhancement_profile(
+    profile_id: str | None,
+    *,
+    expected_revision: str | None = None,
+) -> tuple[str | None, str]:
+    config = load_internal_config()
+    if profile_id is None:
+        config.web.prompt_enhancement_profile_id = None
+    else:
+        profile = _profile_map(config).get(slugify(profile_id))
+        if profile is None:
+            raise ConfigError(f"Unknown profile ID '{profile_id}'.")
+        config.web.prompt_enhancement_profile_id = profile.id
+    revision = save_internal_config_with_revision(
+        config, expected_revision=expected_revision
+    )
+    return config.web.prompt_enhancement_profile_id, revision
 
 
 def update_maintenance_config(
@@ -2135,9 +2157,15 @@ def _web_config_from_payload(payload: object) -> WebConfig:
     stt_provider_id = payload.get("stt_provider_id")
     if stt_provider_id is not None and not isinstance(stt_provider_id, str):
         return WebConfig()
+    prompt_enhancement_profile_id = payload.get("prompt_enhancement_profile_id")
+    if prompt_enhancement_profile_id is not None and not isinstance(
+        prompt_enhancement_profile_id, str
+    ):
+        return WebConfig()
     return WebConfig(
         active_profile_id=active_profile_id,
         stt_provider_id=stt_provider_id,
+        prompt_enhancement_profile_id=prompt_enhancement_profile_id,
     )
 
 
@@ -2250,6 +2278,7 @@ def _internal_config_payload(config: InternalConfig) -> dict[str, Any]:
         "web": {
             "active_profile_id": config.web.active_profile_id,
             "stt_provider_id": config.web.stt_provider_id,
+            "prompt_enhancement_profile_id": config.web.prompt_enhancement_profile_id,
         },
         "maintenance": {"retention_days": config.maintenance.retention_days},
     }

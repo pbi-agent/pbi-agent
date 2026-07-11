@@ -7,7 +7,15 @@ from typing import Any
 from fastapi.testclient import TestClient
 import pytest
 
-from pbi_agent.config import ResolvedRuntime, Settings
+from pbi_agent.config import (
+    ModelProfileConfig,
+    ProviderConfig,
+    ResolvedRuntime,
+    Settings,
+    create_model_profile_config,
+    create_provider_config,
+    select_prompt_enhancement_profile,
+)
 from pbi_agent.models.messages import CompletedResponse, TokenUsage
 from pbi_agent.observability import RunTracer
 from pbi_agent.session_store import SESSION_DB_PATH_ENV, SessionStore
@@ -229,6 +237,69 @@ def test_prompt_enhancement_without_session_uses_default_runtime(
     assert runtime.settings.model == "gpt-5.4"
     with SessionStore() as store:
         assert store.list_all_sessions() == []
+
+
+def test_prompt_enhancement_selected_profile_overrides_session_and_preserves_context(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    calls = _install_fake_provider(monkeypatch)
+    create_provider_config(
+        ProviderConfig(
+            id="openai-enhancer",
+            name="OpenAI Enhancer",
+            kind="openai",
+            api_key="enhancer-key",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="enhancer",
+            name="Enhancer",
+            provider_id="openai-enhancer",
+            model="gpt-5-mini",
+        )
+    )
+
+    with SessionStore() as store:
+        session_id = store.create_session(
+            str(workspace),
+            "xai",
+            "grok-4",
+            "Saved session",
+            provider_id="xai-main",
+        )
+        store.add_message(session_id, "user", "Existing context with @file")
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        select_prompt_enhancement_profile("enhancer")
+        blank_response = client.post(
+            "/api/prompt/enhance",
+            json={"text": "blank session draft"},
+        )
+        assert blank_response.status_code == 200
+        blank_runtime = calls["open"]["runtime"]
+        assert blank_runtime.profile_id == "enhancer"
+        assert blank_runtime.settings.model == "gpt-5-mini"
+
+        response = client.post(
+            "/api/prompt/enhance",
+            json={"session_id": session_id, "text": "rough draft"},
+        )
+
+    assert response.status_code == 200
+    runtime = calls["open"]["runtime"]
+    assert runtime.profile_id == "enhancer"
+    assert runtime.settings.provider == "openai"
+    assert runtime.settings.model == "gpt-5-mini"
+    prompt_input = calls["request"]["user_input"].text
+    assert "Existing context with @file" in prompt_input
+    assert "rough draft" in prompt_input
 
 
 def test_prompt_enhancement_strips_only_leading_model_thinking_trace(

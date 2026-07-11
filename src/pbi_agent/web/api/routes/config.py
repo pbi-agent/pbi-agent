@@ -43,6 +43,8 @@ from pbi_agent.web.api.schemas.config import (
     ProviderResponse,
     ProviderUpdateRequest,
     ProviderViewModel,
+    PromptEnhancementProfileRequest,
+    PromptEnhancementProfileResponse,
     SkillCandidateRequest,
     SkillCandidatesResponse,
     SkillEnabledRequest,
@@ -392,6 +394,28 @@ def set_stt_provider(
         raise config_http_error(exc) from exc
     return SttProviderResponse(
         stt_provider_id=payload["stt_provider_id"],
+        config_revision=str(payload["config_revision"]),
+    )
+
+
+@router.put(
+    "/prompt-enhancement-profile",
+    response_model=PromptEnhancementProfileResponse,
+)
+def set_prompt_enhancement_profile(
+    request: PromptEnhancementProfileRequest,
+    manager: SessionManagerDep,
+    expected_revision: ConfigRevisionHeader,
+) -> PromptEnhancementProfileResponse:
+    try:
+        payload = manager.set_prompt_enhancement_profile(
+            request.profile_id,
+            expected_revision=expected_revision,
+        )
+    except Exception as exc:
+        raise config_http_error(exc) from exc
+    return PromptEnhancementProfileResponse(
+        prompt_enhancement_profile_id=payload["prompt_enhancement_profile_id"],
         config_revision=str(payload["config_revision"]),
     )
 

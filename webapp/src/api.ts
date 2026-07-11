@@ -90,6 +90,8 @@ type ActiveModelProfileResponsePayload = {
   config_revision: string;
 };
 type SttProviderResponsePayload = ApiResponse<"PUT /api/config/stt-provider">;
+type PromptEnhancementProfileResponsePayload =
+  ApiResponse<"PUT /api/config/prompt-enhancement-profile">;
 type SttTranscriptionResponsePayload = ApiResponse<"POST /api/stt/transcribe">;
 type PromptEnhancementPayload = ApiJsonRequestBodies["POST /api/prompt/enhance"];
 type PromptEnhancementResponsePayload = ApiResponse<"POST /api/prompt/enhance">;
@@ -1456,6 +1458,27 @@ export async function setSttProvider(
       method: "PUT",
       headers: { "If-Match": configRevision },
       body: jsonBody("PUT /api/config/stt-provider", payload),
+    },
+  );
+}
+
+export async function setPromptEnhancementProfile(
+  profileId: string | null,
+  configRevision: string,
+): Promise<PromptEnhancementProfileResponsePayload> {
+  const payload: ApiJsonRequestBodies["PUT /api/config/prompt-enhancement-profile"] = {
+    profile_id: profileId,
+  };
+  return apiRequest<
+    "PUT /api/config/prompt-enhancement-profile",
+    PromptEnhancementProfileResponsePayload
+  >(
+    "PUT /api/config/prompt-enhancement-profile",
+    "/api/config/prompt-enhancement-profile",
+    {
+      method: "PUT",
+      headers: { "If-Match": configRevision },
+      body: jsonBody("PUT /api/config/prompt-enhancement-profile", payload),
     },
   );
 }

@@ -667,6 +667,7 @@ export type ConfigBootstrapPayload = {
   user_profile: UserProfile;
   active_profile_id: string | null;
   stt_provider_id: string | null;
+  prompt_enhancement_profile_id: string | null;
   maintenance: MaintenanceConfig;
   config_revision: string;
   options: ConfigOptions;

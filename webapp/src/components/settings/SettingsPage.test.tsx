@@ -24,6 +24,7 @@ import {
   setAllSkillsEnabled,
   setActiveModelProfile,
   setAgentEnabled,
+  setPromptEnhancementProfile,
   setSkillEnabled,
   setSttProvider,
   startProviderAuthFlow,
@@ -164,6 +165,7 @@ vi.mock("../../api", async (importOriginal) => {
     updateModelProfile: vi.fn(),
     deleteModelProfile: vi.fn(),
     setActiveModelProfile: vi.fn(),
+    setPromptEnhancementProfile: vi.fn(),
     setSttProvider: vi.fn(),
     startProviderAuthFlow: vi.fn(),
     fetchProviderAuthFlow: vi.fn(),
@@ -192,6 +194,7 @@ function makeConfigBootstrap(
     config_revision: "rev-1",
     active_profile_id: "analysis",
     stt_provider_id: null,
+    prompt_enhancement_profile_id: null,
     maintenance: { retention_days: 30 },
     user_profile: {
       preferred_name: "",
@@ -729,6 +732,10 @@ describe("SettingsPage", () => {
     });
     vi.mocked(setSttProvider).mockResolvedValue({
       stt_provider_id: "deepgram-main",
+      config_revision: "rev-2",
+    });
+    vi.mocked(setPromptEnhancementProfile).mockResolvedValue({
+      prompt_enhancement_profile_id: "analysis",
       config_revision: "rev-2",
     });
     vi.mocked(startProviderAuthFlow).mockResolvedValue({
@@ -1585,7 +1592,7 @@ describe("SettingsPage", () => {
       ),
     ).toEqual([
       ["Profile"],
-      ["Providers", "Model Profiles", "Speech-to-text"],
+      ["Providers", "Model Profiles", "Speech-to-text", "Prompt enhancement"],
       ["Commands", "Skills", "Agents", "Hooks", "Channels"],
       ["Appearance", "Notifications"],
       ["Maintenance"],
@@ -2351,6 +2358,48 @@ describe("SettingsPage", () => {
 
     await waitFor(() =>
       expect(setSttProvider).toHaveBeenCalledWith("google-main", "rev-1"),
+    );
+  });
+
+  it("selects a prompt enhancement model profile automatically", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Prompt enhancement");
+    const profileSelect = await screen.findByRole("combobox", {
+      name: /prompt enhancement model profile/i,
+    });
+    const profileControl = profileSelect.closest(".active-profile-control");
+    expect(profileControl).not.toBeNull();
+    expect(
+      within(profileControl as HTMLElement).getByText("Current model"),
+    ).toBeInTheDocument();
+
+    await selectRadixOption(user, profileSelect, "Analysis (OpenAI Main)");
+
+    await waitFor(() =>
+      expect(setPromptEnhancementProfile).toHaveBeenCalledWith(
+        "analysis",
+        "rev-1",
+      ),
+    );
+  });
+
+  it("clears the prompt enhancement profile back to the current model", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({ prompt_enhancement_profile_id: "analysis" }),
+    );
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Prompt enhancement");
+    const profileSelect = await screen.findByRole("combobox", {
+      name: /prompt enhancement model profile/i,
+    });
+    await selectRadixOption(user, profileSelect, "Current model");
+
+    await waitFor(() =>
+      expect(setPromptEnhancementProfile).toHaveBeenCalledWith(null, "rev-1"),
     );
   });
 

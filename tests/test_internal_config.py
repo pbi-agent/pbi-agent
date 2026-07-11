@@ -45,6 +45,7 @@ from pbi_agent.config import (
     save_internal_config,
     save_internal_config_with_revision,
     select_active_model_profile,
+    select_prompt_enhancement_profile,
     select_stt_provider,
     update_maintenance_config,
     update_model_profile_config,
@@ -678,6 +679,38 @@ def test_select_stt_provider_persists_validates_and_delete_clears_selection(
     delete_provider_config("google-main")
 
     assert load_internal_config().web.stt_provider_id is None
+
+
+def test_select_prompt_enhancement_profile_persists_validates_and_delete_clears() -> (
+    None
+):
+    create_provider_config(
+        ProviderConfig(
+            id="openai-main",
+            name="OpenAI Main",
+            kind="openai",
+            api_key="test-key",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="enhancer",
+            name="Enhancer",
+            provider_id="openai-main",
+            model="gpt-5-mini",
+        )
+    )
+
+    profile_id, _ = select_prompt_enhancement_profile("enhancer")
+
+    assert profile_id == "enhancer"
+    assert load_internal_config().web.prompt_enhancement_profile_id == "enhancer"
+    with pytest.raises(ConfigError, match="Unknown profile ID 'missing'"):
+        select_prompt_enhancement_profile("missing")
+
+    config_module.delete_model_profile_config("enhancer")
+
+    assert load_internal_config().web.prompt_enhancement_profile_id is None
 
 
 def test_select_stt_provider_rejects_xai_account_and_update_clears_selection(

@@ -67,7 +67,7 @@ export type CommandListResponse = { commands: CommandViewModel[]; config_revisio
 
 export type CommandViewModel = { id: string; name: string; slash_alias: string; description: string; instructions: string; path: string; model_profile_id: string | null; allowed_tools: string[] | null; skills: string[] | null; sub_agents: string[] | null };
 
-export type ConfigBootstrapResponse = { providers: ProviderViewModel[]; model_profiles: ModelProfileViewModel[]; commands: CommandViewModel[]; skills: SkillViewModel[]; agents: AgentViewModel[]; user_profile: UserProfileConfigModel; active_profile_id: string | null; stt_provider_id: string | null; maintenance: MaintenanceConfigModel; config_revision: string; options: ConfigOptionsModel };
+export type ConfigBootstrapResponse = { providers: ProviderViewModel[]; model_profiles: ModelProfileViewModel[]; commands: CommandViewModel[]; skills: SkillViewModel[]; agents: AgentViewModel[]; user_profile: UserProfileConfigModel; active_profile_id: string | null; stt_provider_id: string | null; prompt_enhancement_profile_id: string | null; maintenance: MaintenanceConfigModel; config_revision: string; options: ConfigOptionsModel };
 
 export type ConfigOptionsModel = { provider_kinds: string[]; reasoning_efforts: string[]; openai_reasoning_modes: string[]; openai_service_tiers: string[]; provider_metadata: Record<string, ProviderKindMetadataModel> };
 
@@ -178,6 +178,10 @@ export type ProcessingStateModel = { active: boolean; phase?: "starting" | "mode
 export type ProcessingStateSseEventModel = { seq: number; created_at: string; type: "processing_state"; payload: ProcessingStateSseEventPayloadModel };
 
 export type ProcessingStateSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; active: boolean; phase?: "starting" | "model_wait" | "tool_execution" | "finalizing" | "interrupting" | "retry_wait" | null; message?: string | null; active_tool_count?: number | null; sub_agent_id?: string | null };
+
+export type PromptEnhancementProfileRequest = { profile_id?: string | null };
+
+export type PromptEnhancementProfileResponse = { prompt_enhancement_profile_id: string | null; config_revision: string };
 
 export type PromptEnhancementRequest = { text?: string; session_id?: string | null };
 
@@ -449,6 +453,7 @@ export type ApiOperationResponses = {
   "DELETE /api/config/model-profiles/{profile_id}": void;
   "PATCH /api/config/model-profiles/{profile_id}": ModelProfileResponse;
   "PUT /api/config/profile": UserProfileConfigResponse;
+  "PUT /api/config/prompt-enhancement-profile": PromptEnhancementProfileResponse;
   "GET /api/config/providers": ProviderListResponse;
   "POST /api/config/providers": ProviderResponse;
   "DELETE /api/config/providers/{provider_id}": void;
@@ -532,6 +537,7 @@ export type ApiJsonRequestBodies = {
   "POST /api/config/model-profiles": ModelProfileMutationRequest;
   "PATCH /api/config/model-profiles/{profile_id}": ModelProfileUpdateRequest;
   "PUT /api/config/profile": UserProfileConfigModel;
+  "PUT /api/config/prompt-enhancement-profile": PromptEnhancementProfileRequest;
   "POST /api/config/providers": ProviderMutationRequest;
   "PATCH /api/config/providers/{provider_id}": ProviderUpdateRequest;
   "POST /api/config/skills/candidates": SkillCandidateRequest;
