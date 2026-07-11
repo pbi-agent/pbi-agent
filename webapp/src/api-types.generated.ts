@@ -23,6 +23,8 @@ export type AgentMentionItemModel = { name: string; description: string; path: s
 
 export type AgentMentionSearchResponse = { items: AgentMentionItemModel[] };
 
+export type AgentMentionSuggestionItemModel = { name: string; description: string; path: string; enabled: boolean; kind: "agent" };
+
 export type AgentViewModel = { id: string; name: string; description: string; instructions: string; path: string; model_profile_id: string | null; allowed_tools: string[] | null; skills: string[] | null; commands: string[] | null; sub_agents: string[] | null; enabled: boolean };
 
 export type AllRunsResponse = { runs: AllRunsRunModel[]; total_count: number };
@@ -89,7 +91,7 @@ export type ExpandInputResponse = { text: string; file_paths?: string[]; image_p
 
 export type FileMentionItemModel = { path: string; kind: "file" | "image" };
 
-export type FileMentionSearchResponse = { items: FileMentionItemModel[]; scan_status: "idle" | "scanning" | "ready" | "failed"; is_stale: boolean; file_count: number; error?: string | null };
+export type FileMentionSearchResponse = { items: FileMentionItemModel[]; scan_status: "idle" | "scanning" | "ready" | "failed"; is_stale: boolean; file_count: number; index_generation: string; index_revision: number; truncated: boolean; search_approximated: boolean; error?: string | null };
 
 export type ForkSessionRequest = { message_id: string };
 
@@ -134,6 +136,8 @@ export type LiveSessionUpdatedSseEventModel = { seq: number; created_at: string;
 export type MaintenanceConfigModel = { retention_days: number };
 
 export type MaintenanceConfigResponse = { maintenance: MaintenanceConfigModel; config_revision: string };
+
+export type MentionSuggestionSearchResponse = { items: (FileMentionItemModel | AgentMentionSuggestionItemModel)[]; scan_status: "idle" | "scanning" | "ready" | "failed"; is_stale: boolean; file_count: number; index_generation: string; index_revision: number; truncated: boolean; search_approximated: boolean; error?: string | null };
 
 export type MessageAddedSseEventModel = { seq: number; created_at: string; type: "message_added"; payload: MessageAddedSseEventPayloadModel };
 
@@ -397,7 +401,7 @@ export type WorkspaceFilePreviewResponse = { path: string; content?: string | nu
 
 export type WorkspaceFileTreeItemModel = { path: string; kind: "file" | "image"; git_status?: "M" | "A" | "D" | "R" | "U" | "?" | null };
 
-export type WorkspaceFileTreeResponse = { items: WorkspaceFileTreeItemModel[]; scan_status: "idle" | "scanning" | "ready" | "failed"; is_stale: boolean; file_count: number; truncated?: boolean; error?: string | null; git_repository?: boolean; git_status_version?: string | null; git_status_error?: string | null };
+export type WorkspaceFileTreeResponse = { items: WorkspaceFileTreeItemModel[]; scan_status: "idle" | "scanning" | "ready" | "failed"; is_stale: boolean; file_count: number; index_generation: string; index_revision: number; truncated?: boolean; search_approximated?: boolean; error?: string | null; git_repository?: boolean; git_status_version?: string | null; git_status_error?: string | null };
 
 export type WorkspaceListResponse = { workspaces: WorkspaceRecordModel[]; picker_available: boolean };
 
@@ -469,6 +473,7 @@ export type ApiOperationResponses = {
   "POST /api/hooks/disable": HookActionResponse;
   "POST /api/hooks/enable": HookActionResponse;
   "POST /api/hooks/trust": HookActionResponse;
+  "GET /api/mentions/search": MentionSuggestionSearchResponse;
   "POST /api/prompt/enhance": PromptEnhancementResponse;
   "DELETE /api/provider-auth/{provider_id}": ProviderAuthLogoutResponse;
   "GET /api/provider-auth/{provider_id}": ProviderAuthResponse;
@@ -603,7 +608,8 @@ export type ApiOperationQueryParams = {
   "GET /api/events/{stream_id}": { since?: number };
   "GET /api/files/diff": { path: string };
   "GET /api/files/preview": { path: string };
-  "GET /api/files/search": { q?: string; limit?: number };
+  "GET /api/files/search": { q?: string; limit?: number; refresh?: boolean; exact?: boolean };
+  "GET /api/mentions/search": { q?: string; limit?: number; refresh?: boolean };
   "GET /api/runs": { limit?: number; offset?: number; status?: string | null; provider?: string | null; model?: string | null; start_date?: string | null; end_date?: string | null; sort_by?: string; sort_dir?: string; scope?: string };
   "GET /api/runs/{run_session_id}": { scope?: string };
   "GET /api/sessions": { limit?: number; q?: string | null };

@@ -1305,6 +1305,13 @@ export function SessionPage({
               inputEnabled={composerInputEnabled}
               sessionEnded={sessionState?.sessionEnded ?? false}
               liveSessionId={sessionState?.liveSessionId ?? null}
+              workspaceKey={workspaceQueryKey}
+              workspaceFileIndexGeneration={
+                workspaceFileTreeSummaryQuery.data?.index_generation ?? null
+              }
+              workspaceFileIndexRevision={
+                workspaceFileTreeSummaryQuery.data?.index_revision ?? null
+              }
               inputHistory={composerInputHistory}
               canCreateSession={composerCanStartRun}
               supportsImageInputs={providerSupportsImages}

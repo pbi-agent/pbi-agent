@@ -24,6 +24,7 @@ from pbi_agent.web.api.schemas.system import (
     AllRunsRunModel,
     BootstrapResponse,
     AgentMentionItemModel,
+    AgentMentionSuggestionItemModel,
     AgentMentionSearchResponse,
     CreateSessionRequest,
     DailyBucketModel,
@@ -40,6 +41,7 @@ from pbi_agent.web.api.schemas.system import (
     LiveSessionResponse,
     LiveSessionShellCommandRequest,
     LiveSessionSnapshotModel,
+    MentionSuggestionSearchResponse,
     NewSessionRequest,
     ObservabilityEventModel,
     PromptEnhancementRequest,
@@ -70,6 +72,7 @@ from pbi_agent.web.api.schemas.system import (
     WorkspaceSwitchResponse,
     UpdateSessionRequest,
 )
+from pbi_agent.web.agent_mentions import AgentMentionItem
 from pbi_agent.web.git_files import workspace_git_diff, workspace_git_status
 from pbi_agent.web.input_mentions import WorkspaceFileTreePayload, expand_input_mentions
 from pbi_agent.web.session_manager import workspace_picker_available
@@ -570,8 +573,15 @@ def search_file_mentions(
     manager: SessionManagerDep,
     q: MentionQuery = "",
     limit: MentionLimitQuery = 8,
+    refresh: Annotated[bool, Query()] = False,
+    exact: Annotated[bool, Query()] = False,
 ) -> FileMentionSearchResponse:
-    payload = manager.search_file_mentions(q, limit=limit)
+    payload = manager.search_file_mentions(
+        q,
+        limit=limit,
+        refresh=refresh,
+        exact=exact,
+    )
     return FileMentionSearchResponse(
         items=[
             FileMentionItemModel(path=item.path, kind=item.kind)
@@ -580,6 +590,44 @@ def search_file_mentions(
         scan_status=payload.scan_status,
         is_stale=payload.is_stale,
         file_count=payload.file_count,
+        index_generation=payload.index_generation,
+        index_revision=payload.index_revision,
+        truncated=payload.truncated,
+        search_approximated=payload.search_approximated,
+        error=payload.error,
+    )
+
+
+@router.get("/mentions/search", response_model=MentionSuggestionSearchResponse)
+def search_mentions(
+    manager: SessionManagerDep,
+    q: MentionQuery = "",
+    limit: MentionLimitQuery = 8,
+    refresh: Annotated[bool, Query()] = False,
+) -> MentionSuggestionSearchResponse:
+    payload = manager.search_mentions(q, limit=limit, refresh=refresh)
+    return MentionSuggestionSearchResponse(
+        items=[
+            (
+                AgentMentionSuggestionItemModel(
+                    kind="agent",
+                    name=item.name,
+                    description=item.description,
+                    path=item.path,
+                    enabled=item.enabled,
+                )
+                if isinstance(item, AgentMentionItem)
+                else FileMentionItemModel(path=item.path, kind=item.kind)
+            )
+            for item in payload.items
+        ],
+        scan_status=payload.scan_status,
+        is_stale=payload.is_stale,
+        file_count=payload.file_count,
+        index_generation=payload.index_generation,
+        index_revision=payload.index_revision,
+        truncated=payload.truncated,
+        search_approximated=payload.search_approximated,
         error=payload.error,
     )
 
@@ -623,7 +671,10 @@ def _workspace_file_tree_response(
         scan_status=payload.scan_status,
         is_stale=payload.is_stale,
         file_count=payload.file_count,
+        index_generation=payload.index_generation,
+        index_revision=payload.index_revision,
         truncated=payload.truncated,
+        search_approximated=payload.search_approximated,
         error=payload.error,
         git_repository=git_status.is_repository,
         git_status_version=git_status.version,

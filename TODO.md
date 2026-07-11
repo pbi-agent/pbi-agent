@@ -1,6 +1,7 @@
-- [x] Inspect workspace, authentication, release history, and reconcile all local/remote commits
-- [x] Create the next minor release branch and release-scoped changelog/version edits
-- [x] Run the required full release validation suite
-- [x] Stage, review, commit, push, and open the release PR
-- [x] Verify checks, merge the PR, and confirm tag, GitHub Release, and PyPI publish
-- [x] Update task memory and report the release outcome
+- [x] Implement refreshable workspace mention index with revision tracking and scan coalescing
+- [x] Extend file-search API/schema/generated frontend contract
+- [x] Refresh once per active `@` token and improve mixed agent/file ranking
+- [x] Scope and invalidate file-existence cache by workspace/index revision
+- [x] Add focused backend and frontend tests
+- [x] Run required validation and review changes
+- [x] Update task memory and summarize

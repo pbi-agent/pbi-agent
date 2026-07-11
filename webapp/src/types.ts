@@ -230,6 +230,10 @@ export type FileMentionSearchPayload = {
   scan_status: "idle" | "scanning" | "ready" | "failed";
   is_stale: boolean;
   file_count: number;
+  index_generation: string;
+  index_revision: number;
+  truncated: boolean;
+  search_approximated: boolean;
   error: string | null;
 };
 
@@ -281,6 +285,21 @@ export type AgentMentionItem = {
 
 export type AgentMentionSearchPayload = {
   items: AgentMentionItem[];
+};
+
+export type AgentMentionSuggestionItem = AgentMentionItem & {
+  kind: "agent";
+};
+
+export type MentionSuggestionItem =
+  | FileMentionItem
+  | AgentMentionSuggestionItem;
+
+export type MentionSuggestionSearchPayload = Omit<
+  FileMentionSearchPayload,
+  "items"
+> & {
+  items: MentionSuggestionItem[];
 };
 
 export type SlashCommandItem = {
