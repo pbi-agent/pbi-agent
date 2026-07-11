@@ -1,4 +1,8 @@
-- [x] Raise the sub-agent elapsed timeout to 1800 seconds
-- [x] Update timeout documentation
-- [x] Run focused validation
-- [x] Update memory
+- [x] Fetch release refs and reconcile local/remote unreleased commits
+- [x] Determine v0.28.0 release scope and collect PR metadata
+- [x] Create release branch and update version/changelog/sidebar
+- [x] Run required release validation
+- [x] Commit and push release-scoped changes
+- [x] Open and merge the release PR
+- [x] Verify release tag, GitHub Release notes, and package publish
+- [x] Update release task memory
