@@ -1,8 +1,5 @@
-- [x] Fetch release refs and reconcile local/remote unreleased commits
-- [x] Determine v0.28.0 release scope and collect PR metadata
-- [x] Create release branch and update version/changelog/sidebar
-- [x] Run required release validation
-- [x] Commit and push release-scoped changes
-- [x] Open and merge the release PR
-- [x] Verify release tag, GitHub Release notes, and package publish
-- [x] Update release task memory
+- [x] Inspect the failing session's persisted messages, runs, and events
+- [x] Identify and reproduce the crash-resume history mismatch
+- [x] Fix history reconstruction and add regression coverage
+- [x] Run focused and required backend validation
+- [x] Update task memory

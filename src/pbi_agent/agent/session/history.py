@@ -119,7 +119,10 @@ def _refresh_provider_history_from_store(
         messages = []
         history_items = []
         if store is not None and session_id is not None:
-            messages = _messages_for_provider_restore(store.list_messages(session_id))
+            messages = _messages_for_provider_restore(
+                store.list_messages(session_id),
+                preserve_trailing_user=include_tool_history,
+            )
             if include_tool_history:
                 history_items = _history_items_for_provider_restore(
                     store,
@@ -278,7 +281,10 @@ def _resume_session(
     except Exception:
         _log.warning("Failed to restore session state", exc_info=True)
     if messages:
-        provider_messages = _messages_for_provider_restore(messages)
+        provider_messages = _messages_for_provider_restore(
+            messages,
+            preserve_trailing_user=include_tool_history,
+        )
         try:
             if include_tool_history:
                 restore_history_items = getattr(provider, "restore_history_items", None)
@@ -303,6 +309,8 @@ def _resume_session(
 
 def _messages_for_provider_restore(
     messages: list[MessageRecord],
+    *,
+    preserve_trailing_user: bool = False,
 ) -> list[MessageRecord]:
     from pbi_agent.agent.session.compaction import (
         active_context_messages,
@@ -322,7 +330,7 @@ def _messages_for_provider_restore(
             *restored[:latest_summary_index],
             *restored[latest_summary_index + 1 :],
         ]
-    while restored and restored[-1].role == "user":
+    while restored and restored[-1].role == "user" and not preserve_trailing_user:
         restored.pop()
     return restored
 
@@ -353,17 +361,62 @@ def _message_tool_history_items_for_provider_restore(
 ) -> list[dict[str, Any]]:
     history_items: list[dict[str, Any]] = []
     run_tool_histories = _tool_history_by_run(store, session_id)
-    run_index = 0
+    histories_by_message_id = _run_histories_for_messages(
+        run_tool_histories,
+        messages,
+    )
     pending_user = False
+    pending_message: MessageRecord | None = None
     for message in messages:
+        if message.role == "user" and pending_user:
+            run_history = (
+                histories_by_message_id.get(pending_message.id)
+                if pending_message is not None
+                else None
+            )
+            if run_history is not None:
+                run, items, _intermediate_text, _user_text = run_history
+                history_items.extend(
+                    _interrupted_generic_run_items(
+                        run,
+                        pending_message,
+                        items,
+                    )
+                )
+            else:
+                history_items.pop()
         history_items.append({"type": "message", "message": message})
         if message.role == "user":
             pending_user = True
+            pending_message = message
         elif message.role == "assistant" and pending_user:
-            if run_index < len(run_tool_histories):
-                history_items[-1:-1] = run_tool_histories[run_index]
-                run_index += 1
+            run_history = (
+                histories_by_message_id.get(pending_message.id)
+                if pending_message is not None
+                else None
+            )
+            if run_history is not None:
+                run, items, _intermediate_text, _user_text = run_history
+                history_items[-1:-1] = _completed_generic_run_items(items)
             pending_user = False
+            pending_message = None
+    if pending_user:
+        run_history = (
+            histories_by_message_id.get(pending_message.id)
+            if pending_message is not None
+            else None
+        )
+        if run_history is not None:
+            run, items, _intermediate_text, _user_text = run_history
+            history_items.extend(
+                _interrupted_generic_run_items(
+                    run,
+                    pending_message,
+                    items,
+                )
+            )
+        else:
+            history_items.pop()
     return history_items
 
 
@@ -413,7 +466,7 @@ def _response_history_items_for_provider_restore(
         return []
 
     history_items: list[dict[str, Any]] = []
-    run_index = 0
+    histories_by_message_id = _run_histories_for_messages(run_histories, messages)
     used_response_history = False
     pending_user: MessageRecord | None = None
     current_provider = _provider_history_name(provider)
@@ -421,20 +474,42 @@ def _response_history_items_for_provider_restore(
     for message in messages:
         if message.role == "user":
             if pending_user is not None:
-                return []
+                run_history = histories_by_message_id.get(pending_user.id)
+                if run_history is None:
+                    return []
+                run, events, completed_tool_results, _user_text = run_history
+                if (
+                    current_provider is not None
+                    and _run_provider_name(run) != current_provider
+                ):
+                    return []
+                turn_items = _response_history_items_for_run(
+                    events,
+                    pending_user,
+                    completed_tool_results=completed_tool_results,
+                    require_completed_tool_exchange=True,
+                )
+                if not turn_items:
+                    return []
+                history_items.extend(turn_items)
+                used_response_history = True
             pending_user = message
             continue
         if message.role == "assistant" and pending_user is not None:
-            if run_index >= len(run_histories):
+            run_history = histories_by_message_id.get(pending_user.id)
+            if run_history is None:
                 return []
-            run, events = run_histories[run_index]
-            run_index += 1
+            run, events, completed_tool_results, _user_text = run_history
             if (
                 current_provider is not None
                 and _run_provider_name(run) != current_provider
             ):
                 return []
-            turn_items = _response_history_items_for_run(events, pending_user)
+            turn_items = _response_history_items_for_run(
+                events,
+                pending_user,
+                completed_tool_results=completed_tool_results,
+            )
             if turn_items:
                 history_items.extend(turn_items)
                 used_response_history = True
@@ -447,7 +522,22 @@ def _response_history_items_for_provider_restore(
         history_items.append({"type": "message", "message": message})
 
     if pending_user is not None:
-        return []
+        run_history = histories_by_message_id.get(pending_user.id)
+        if run_history is None:
+            return []
+        run, events, completed_tool_results, _user_text = run_history
+        if current_provider is not None and _run_provider_name(run) != current_provider:
+            return []
+        turn_items = _response_history_items_for_run(
+            events,
+            pending_user,
+            completed_tool_results=completed_tool_results,
+            require_completed_tool_exchange=True,
+        )
+        if not turn_items:
+            return []
+        history_items.extend(turn_items)
+        used_response_history = True
 
     return history_items if used_response_history else []
 
@@ -455,22 +545,32 @@ def _response_history_items_for_provider_restore(
 def _response_model_call_history_by_run(
     store: SessionStore,
     session_id: str,
-) -> list[tuple[Any, list[Any]]]:
-    histories: list[tuple[Any, list[Any]]] = []
+) -> list[tuple[Any, list[Any], dict[str, Any], str]]:
+    histories: list[tuple[Any, list[Any], dict[str, Any], str]] = []
     for run in store.list_run_sessions(session_id):
         if run.parent_run_session_id or run.agent_name not in {None, "main"}:
             continue
         if run.agent_type not in {"session_turn", "single_turn"}:
             continue
+        run_events = store.list_observability_events(run_session_id=run.run_session_id)
         events = [
             event
-            for event in store.list_observability_events(
-                run_session_id=run.run_session_id
-            )
+            for event in run_events
             if event.event_type == "model_call" and event.success != 0
         ]
-        if events:
-            histories.append((run, events))
+        completed_tool_results = {
+            event.tool_call_id: event
+            for event in run_events
+            if event.event_type == "tool_call" and event.tool_call_id
+        }
+        histories.append(
+            (
+                run,
+                events,
+                completed_tool_results,
+                _run_user_input_text(events),
+            )
+        )
     return histories
 
 
@@ -479,15 +579,88 @@ def _run_provider_name(run: Any) -> str | None:
     return provider_name or None
 
 
+def _run_histories_for_messages(
+    histories: list[tuple[Any, ...]],
+    messages: list[MessageRecord],
+) -> dict[int, tuple[Any, ...]]:
+    ordered = sorted(histories, key=lambda item: (item[0].started_at, item[0].id))
+    upper_bound = len(ordered)
+    matched: dict[int, tuple[Any, ...]] = {}
+    user_messages = [message for message in messages if message.role == "user"]
+    for message in reversed(user_messages):
+        candidates = list(enumerate(ordered[:upper_bound]))
+        exact = [
+            (index, history)
+            for index, history in candidates
+            if isinstance(history[-1], str)
+            and history[-1].strip() == message.content.strip()
+        ]
+        provider_exact = [
+            (index, history)
+            for index, history in exact
+            if message.provider_id
+            and message.provider_id in {history[0].provider_id, history[0].provider}
+        ]
+        available = provider_exact or exact or candidates
+        if not available:
+            continue
+        index, history = available[-1]
+        matched[message.id] = history
+        upper_bound = index
+    return matched
+
+
+def _run_user_input_text(events: list[Any]) -> str:
+    for event in events:
+        payload = _json_field(event.request_payload_json)
+        if not isinstance(payload, dict):
+            continue
+        request_items = _request_input_items(payload)
+        for item in reversed(request_items):
+            if str(item.get("role") or "").lower() == "user":
+                return _input_item_text(item.get("content"))
+        messages = payload.get("messages")
+        if isinstance(messages, list):
+            for message in reversed(messages):
+                if (
+                    isinstance(message, dict)
+                    and str(message.get("role") or "").lower() == "user"
+                ):
+                    return _input_item_text(message.get("content"))
+        contents = payload.get("contents")
+        if isinstance(contents, list):
+            for content in reversed(contents):
+                if (
+                    isinstance(content, dict)
+                    and str(content.get("role") or "").lower() == "user"
+                ):
+                    return _parts_text(content.get("parts"))
+        steps = payload.get("steps")
+        if isinstance(steps, list):
+            for step in reversed(steps):
+                if isinstance(step, dict) and step.get("type") == "user_input":
+                    return _input_item_text(step.get("content"))
+    return ""
+
+
 def _response_history_items_for_run(
     events: list[Any],
     user_message: MessageRecord,
+    *,
+    completed_tool_results: dict[str, Any] | None = None,
+    require_completed_tool_exchange: bool = False,
 ) -> list[dict[str, Any]]:
     history_items: list[dict[str, Any]] = []
     turn_items: list[dict[str, Any]] = []
     item_batches: list[tuple[list[dict[str, Any]], list[dict[str, Any]]]] = []
     first_model_call = True
     saw_assistant_message_output = False
+    request_output_ids = {
+        call_id
+        for event in events
+        for item in _request_input_items(_json_field(event.request_payload_json))
+        if (call_id := _response_tool_output_call_id(item)) is not None
+    }
 
     for event in events:
         request_items = _request_input_items(_json_field(event.request_payload_json))
@@ -504,6 +677,14 @@ def _response_history_items_for_run(
 
         response_items = _provider_response_output_items(
             _json_field(event.response_payload_json)
+        )
+        response_items.extend(
+            _missing_response_tool_outputs(
+                response_items,
+                turn_items,
+                completed_tool_results or {},
+                request_output_ids,
+            )
         )
         saw_assistant_message_output = saw_assistant_message_output or any(
             _is_assistant_message_output_item(item) for item in response_items
@@ -529,7 +710,53 @@ def _response_history_items_for_run(
                 )
             )
         )
-    return history_items if saw_assistant_message_output else []
+    if require_completed_tool_exchange and not completed_call_ids:
+        return []
+    if not saw_assistant_message_output and not require_completed_tool_exchange:
+        return []
+    return history_items
+
+
+def _missing_response_tool_outputs(
+    response_items: list[dict[str, Any]],
+    previous_items: list[dict[str, Any]],
+    completed_tool_results: dict[str, Any],
+    request_output_ids: set[str],
+) -> list[dict[str, Any]]:
+    existing_output_ids = {
+        call_id
+        for item in [*previous_items, *response_items]
+        if (call_id := _response_tool_output_call_id(item)) is not None
+    }
+    outputs: list[dict[str, Any]] = []
+    for item in response_items:
+        call_id = _response_tool_input_call_id(item)
+        if (
+            call_id is None
+            or call_id in existing_output_ids
+            or call_id in request_output_ids
+            or call_id not in completed_tool_results
+        ):
+            continue
+        event = completed_tool_results[call_id]
+        output = _json_field(event.tool_output_json)
+        outputs.append(
+            {
+                "type": (
+                    "custom_tool_call_output"
+                    if item.get("type") == "custom_tool_call"
+                    else "function_call_output"
+                ),
+                "call_id": call_id,
+                "output": (
+                    output
+                    if isinstance(output, str)
+                    else json.dumps(output, separators=(",", ":"))
+                ),
+            }
+        )
+        existing_output_ids.add(call_id)
+    return outputs
 
 
 def _request_input_items(payload: Any) -> list[dict[str, Any]]:
@@ -610,6 +837,16 @@ def _input_item_text(content: Any) -> str:
     return "".join(text_parts)
 
 
+def _parts_text(parts: Any) -> str:
+    if not isinstance(parts, list):
+        return ""
+    return "".join(
+        str(part.get("text") or "")
+        for part in parts
+        if isinstance(part, dict) and not bool(part.get("thought"))
+    )
+
+
 def _new_input_delta(
     request_items: list[dict[str, Any]],
     existing_items: list[dict[str, Any]],
@@ -668,7 +905,7 @@ def _completed_response_tool_call_ids(
     call_ids: set[str] = set()
     output_ids: set[str] = set()
     for delta_items, response_items in item_batches:
-        for item in delta_items:
+        for item in [*delta_items, *response_items]:
             if call_id := _response_tool_output_call_id(item):
                 output_ids.add(call_id)
         for item in response_items:
@@ -743,24 +980,33 @@ def _clone_json_value(value: Any) -> Any:
 def _tool_history_by_run(
     store: SessionStore,
     session_id: str,
-) -> list[list[dict[str, Any]]]:
-    histories: list[list[dict[str, Any]]] = []
+) -> list[tuple[Any, list[dict[str, Any]], str, str]]:
+    histories: list[tuple[Any, list[dict[str, Any]], str, str]] = []
     for run in store.list_run_sessions(session_id):
         if run.parent_run_session_id or run.agent_name not in {None, "main"}:
             continue
+        if run.agent_type not in {"session_turn", "single_turn"}:
+            continue
         run_items: list[dict[str, Any]] = []
         seen_calls: dict[str, dict[str, Any]] = {}
-        for event in store.list_observability_events(run_session_id=run.run_session_id):
+        intermediate_parts: list[str] = []
+        run_events = store.list_observability_events(run_session_id=run.run_session_id)
+        for event in run_events:
             if event.event_type == "model_call":
-                calls = _tool_calls_from_response_payload(
+                response_items = _generic_response_history_items(
                     _json_field(event.response_payload_json)
                 )
-                for call in calls:
-                    seen_calls[call["call_id"]] = call
-                if len(calls) == 1:
-                    run_items.append(calls[0])
-                elif calls:
-                    run_items.append({"type": "tool_call_group", "calls": calls})
+                response_items = _group_response_tool_calls(response_items)
+                for item in response_items:
+                    if item.get("type") == "intermediate_text":
+                        intermediate_parts.append(str(item.get("content") or ""))
+                    elif item.get("type") == "tool_call":
+                        seen_calls[item["call_id"]] = item
+                    elif item.get("type") == "tool_call_group":
+                        for call in item.get("calls", []):
+                            if isinstance(call, dict) and call.get("call_id"):
+                                seen_calls[call["call_id"]] = call
+                    run_items.append(item)
             elif event.event_type == "tool_call" and event.tool_call_id:
                 if event.tool_call_id not in seen_calls:
                     call = {
@@ -787,9 +1033,51 @@ def _tool_history_by_run(
                     }
                 )
         run_items = _filter_incomplete_tool_exchange_items(run_items)
-        if run_items:
-            histories.append(_group_parallel_tool_results(run_items))
+        histories.append(
+            (
+                run,
+                _group_parallel_tool_results(run_items),
+                "\n\n".join(intermediate_parts),
+                _run_user_input_text(run_events),
+            )
+        )
     return histories
+
+
+def _interrupted_generic_run_items(
+    run: Any,
+    user_message: MessageRecord | None,
+    items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    restored: list[dict[str, Any]] = []
+    for index, item in enumerate(items):
+        if item.get("type") != "intermediate_text":
+            restored.append(item)
+            continue
+        content = str(item.get("content") or "")
+        if not content or user_message is None:
+            continue
+        restored.append(
+            {
+                "type": "message",
+                "message": MessageRecord(
+                    id=-(int(run.id) * 1000 + index + 1),
+                    session_id=user_message.session_id,
+                    role="assistant",
+                    content=content,
+                    created_at=run.started_at,
+                    provider_id=run.provider_id,
+                    profile_id=run.profile_id,
+                ),
+            }
+        )
+    return restored
+
+
+def _completed_generic_run_items(
+    items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [item for item in items if item.get("type") != "intermediate_text"]
 
 
 def _filter_incomplete_tool_exchange_items(
@@ -909,6 +1197,113 @@ def _tool_calls_from_response_payload(payload: Any) -> list[dict[str, Any]]:
     return calls
 
 
+def _generic_response_history_items(payload: Any) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+    items: list[dict[str, Any]] = []
+    choices = payload.get("choices")
+    if isinstance(choices, list):
+        for choice in choices:
+            message = choice.get("message") if isinstance(choice, dict) else None
+            if not isinstance(message, dict):
+                continue
+            if text := _input_item_text(message.get("content")):
+                items.append({"type": "intermediate_text", "content": text})
+            items.extend(
+                _tool_calls_from_response_payload({"choices": [{"message": message}]})
+            )
+        return _deduplicate_adjacent_history_items(items)
+    raw_items = _response_output_items(payload)
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") in {"message", "model_output"}:
+            if text := _input_item_text(item.get("content")):
+                items.append({"type": "intermediate_text", "content": text})
+        items.extend(_tool_calls_from_response_payload({"output": [item]}))
+    content = payload.get("content")
+    if isinstance(content, list):
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "text":
+                text = block.get("text")
+                if isinstance(text, str) and text:
+                    items.append({"type": "intermediate_text", "content": text})
+            elif block.get("type") == "tool_use":
+                call_id = block.get("id")
+                if isinstance(call_id, str) and call_id:
+                    items.append(
+                        {
+                            "type": "tool_call",
+                            "call_id": call_id,
+                            "name": str(block.get("name") or ""),
+                            "arguments": block.get("input"),
+                            "kind": "function",
+                        }
+                    )
+    candidates = payload.get("candidates")
+    if isinstance(candidates, list):
+        for candidate in candidates:
+            content = candidate.get("content") if isinstance(candidate, dict) else None
+            parts = content.get("parts") if isinstance(content, dict) else None
+            if not isinstance(parts, list):
+                continue
+            for part in parts:
+                if not isinstance(part, dict) or bool(part.get("thought")):
+                    continue
+                text = part.get("text")
+                if isinstance(text, str) and text:
+                    items.append({"type": "intermediate_text", "content": text})
+                function_call = part.get("functionCall")
+                if not isinstance(function_call, dict):
+                    function_call = part.get("function_call")
+                if isinstance(function_call, dict):
+                    call_id = function_call.get("id") or function_call.get("call_id")
+                    if isinstance(call_id, str) and call_id:
+                        items.append(
+                            {
+                                "type": "tool_call",
+                                "call_id": call_id,
+                                "name": str(function_call.get("name") or ""),
+                                "arguments": function_call.get("args") or {},
+                                "kind": "function",
+                            }
+                        )
+    return _deduplicate_adjacent_history_items(items)
+
+
+def _deduplicate_adjacent_history_items(
+    items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    deduplicated: list[dict[str, Any]] = []
+    for item in items:
+        if deduplicated and item == deduplicated[-1]:
+            continue
+        deduplicated.append(item)
+    return deduplicated
+
+
+def _group_response_tool_calls(
+    items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    grouped: list[dict[str, Any]] = []
+    index = 0
+    while index < len(items):
+        if items[index].get("type") != "tool_call":
+            grouped.append(items[index])
+            index += 1
+            continue
+        calls: list[dict[str, Any]] = []
+        while index < len(items) and items[index].get("type") == "tool_call":
+            calls.append(items[index])
+            index += 1
+        grouped.append(
+            calls[0] if len(calls) == 1 else {"type": "tool_call_group", "calls": calls}
+        )
+    return grouped
+
+
 def _response_output_items(payload: dict[str, Any]) -> list[Any]:
     output = payload.get("output")
     if isinstance(output, list):
@@ -916,6 +1311,9 @@ def _response_output_items(payload: dict[str, Any]) -> list[Any]:
     outputs = payload.get("outputs")
     if isinstance(outputs, list):
         return outputs
+    steps = payload.get("steps")
+    if isinstance(steps, list):
+        return [step for step in steps if isinstance(step, dict)]
     choices = payload.get("choices")
     if not isinstance(choices, list):
         return []

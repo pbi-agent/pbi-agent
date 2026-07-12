@@ -689,6 +689,309 @@ def test_run_single_turn_restores_tool_history_when_enabled(
     ]
 
 
+def test_run_single_turn_restores_completed_tools_from_interrupted_turn(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    provider = _ProviderStub()
+    display = _SessionDisplaySpy([])
+    settings = Settings(api_key="test-key", provider="openai")
+
+    with SessionStore() as store:
+        session_id = store.create_session(str(tmp_path), "openai", DEFAULT_MODEL)
+        store.add_message(session_id, "user", "interrupted request")
+        run_id = store.create_run_session(
+            run_session_id="run-interrupted",
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id=None,
+            profile_id=None,
+            model=DEFAULT_MODEL,
+            status="stale",
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=0,
+            event_type="model_call",
+            request_payload={
+                "input": [{"role": "user", "content": "interrupted request"}],
+            },
+            response_payload={
+                "output": [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "phase": "commentary",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": "I found the relevant module.",
+                            }
+                        ],
+                    },
+                    {
+                        "type": "function_call",
+                        "call_id": "call_complete",
+                        "name": "shell",
+                        "arguments": '{"command": "pwd"}',
+                    },
+                ]
+            },
+            success=True,
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=1,
+            event_type="tool_call",
+            tool_name="shell",
+            tool_call_id="call_complete",
+            tool_input={"command": "pwd"},
+            tool_output={"ok": True, "result": "/workspace"},
+            success=True,
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=2,
+            event_type="model_call",
+            request_payload={
+                "input": [
+                    {
+                        "type": "function_call_output",
+                        "call_id": "call_complete",
+                        "output": '{"ok": true, "result": "/workspace"}',
+                    }
+                ]
+            },
+            response_payload={
+                "output": [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "phase": "commentary",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": "Now I will inspect the file.",
+                            }
+                        ],
+                    },
+                    {
+                        "type": "function_call",
+                        "call_id": "call_incomplete",
+                        "name": "shell",
+                        "arguments": '{"command": "cat app.py"}',
+                    },
+                ]
+            },
+            success=True,
+        )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    run_single_turn(
+        "Continue from the crash",
+        settings,
+        display,
+        resume_session_id=session_id,
+        include_tool_history=True,
+    )
+
+    assert provider.restored_history_items is not None
+    restored_items = [item["item"] for item in provider.restored_history_items]
+    assert [item.get("type", item.get("role")) for item in restored_items] == [
+        "user",
+        "message",
+        "function_call",
+        "function_call_output",
+        "message",
+    ]
+    assert restored_items[0]["content"] == "interrupted request"
+    assert restored_items[3]["call_id"] == "call_complete"
+    assert all(item.get("call_id") != "call_incomplete" for item in restored_items)
+
+
+def test_interrupted_response_history_uses_persisted_tool_result_without_next_model_call(
+    tmp_path,
+) -> None:
+    provider = _ProviderStub()
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(str(tmp_path), "openai", DEFAULT_MODEL)
+        store.add_message(session_id, "user", "interrupted request")
+        messages = store.list_messages(session_id)
+        run_id = store.create_run_session(
+            run_session_id="run-crashed-after-tool",
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id=None,
+            profile_id=None,
+            model=DEFAULT_MODEL,
+            status="stale",
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=0,
+            event_type="model_call",
+            request_payload={
+                "input": [{"role": "user", "content": "interrupted request"}],
+            },
+            response_payload={
+                "output": [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "phase": "commentary",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": "I found the target and will inspect it.",
+                            }
+                        ],
+                    },
+                    {
+                        "type": "function_call",
+                        "call_id": "call_complete",
+                        "name": "shell",
+                        "arguments": '{"command": "pwd"}',
+                    },
+                ]
+            },
+            success=True,
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=1,
+            event_type="tool_call",
+            tool_name="shell",
+            tool_call_id="call_complete",
+            tool_input={"command": "pwd"},
+            tool_output={"ok": True, "result": "/workspace"},
+            success=True,
+        )
+
+        history = session_module.history_items_for_provider_restore(
+            store,
+            session_id,
+            messages,
+            provider=provider,
+        )
+
+    restored_items = [item["item"] for item in history]
+    assert [item.get("type", item.get("role")) for item in restored_items] == [
+        "user",
+        "message",
+        "function_call",
+        "function_call_output",
+    ]
+    assert json.loads(restored_items[-1]["output"]) == {
+        "ok": True,
+        "result": "/workspace",
+    }
+
+
+def test_generic_interrupted_tool_history_stays_aligned_after_no_tool_turn(
+    tmp_path,
+) -> None:
+    provider = _ProviderStub(provider_name="anthropic")
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(str(tmp_path), "anthropic", DEFAULT_MODEL)
+        store.add_message(session_id, "user", "first request")
+        store.add_message(session_id, "assistant", "first answer")
+        store.add_message(session_id, "user", "interrupted request")
+        messages = store.list_messages(session_id)
+        store.create_run_session(
+            run_session_id="run-without-tools",
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="anthropic",
+            provider_id=None,
+            profile_id=None,
+            model=DEFAULT_MODEL,
+            status="completed",
+        )
+        interrupted_run_id = store.create_run_session(
+            run_session_id="run-with-tools",
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="anthropic",
+            provider_id=None,
+            profile_id=None,
+            model=DEFAULT_MODEL,
+            status="stale",
+        )
+        store.add_observability_event(
+            run_session_id=interrupted_run_id,
+            session_id=session_id,
+            step_index=0,
+            event_type="model_call",
+            request_payload={
+                "messages": [
+                    {"role": "user", "content": "interrupted request"},
+                ]
+            },
+            response_payload={
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "I found the module and will inspect it.",
+                    },
+                    {
+                        "type": "tool_use",
+                        "id": "call_interrupted",
+                        "name": "shell",
+                        "input": {"command": "pwd"},
+                    },
+                ]
+            },
+            success=True,
+        )
+        store.add_observability_event(
+            run_session_id=interrupted_run_id,
+            session_id=session_id,
+            step_index=1,
+            event_type="tool_call",
+            tool_name="shell",
+            tool_call_id="call_interrupted",
+            tool_input={"command": "pwd"},
+            tool_output={"ok": True, "result": "/workspace"},
+            success=True,
+        )
+
+        history = session_module.history_items_for_provider_restore(
+            store,
+            session_id,
+            messages,
+            provider=provider,
+        )
+
+    assert [item["type"] for item in history] == [
+        "message",
+        "message",
+        "message",
+        "message",
+        "tool_call",
+        "tool_result",
+    ]
+    assert history[2]["message"].content == "interrupted request"
+    assert history[3]["message"].content == "I found the module and will inspect it."
+    assert history[4]["call_id"] == "call_interrupted"
+    assert history[5]["call_id"] == "call_interrupted"
+
+
 @pytest.mark.parametrize(
     ("source_provider", "target_provider"),
     [
