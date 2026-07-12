@@ -9343,6 +9343,72 @@ def test_saved_session_input_queues_per_turn_tool_history_preference(
     ]
 
 
+@pytest.mark.parametrize("crashed_status", ["interrupted", "stale"])
+def test_crashed_saved_session_automatically_resumes_with_tool_history(
+    tmp_path,
+    monkeypatch,
+    crashed_status,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    worker_preferences: list[bool] = []
+    queued_preferences: list[bool] = []
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Crashed session",
+        )
+        store.create_run_session(
+            run_session_id="crashed-web-run",
+            session_id=session_id,
+            agent_name="main",
+            agent_type="web_session",
+            provider="openai",
+            provider_id=None,
+            profile_id=None,
+            model="gpt-5.4",
+            status=crashed_status,
+            kind="session",
+        )
+
+    def fake_run_session_loop(
+        _settings,
+        display,
+        *,
+        include_tool_history=False,
+        **kwargs,
+    ):
+        del _settings, kwargs
+        worker_preferences.append(include_tool_history)
+        queued = display.user_prompt()
+        assert isinstance(queued, QueuedInput)
+        queued_preferences.append(queued.include_tool_history)
+        return 0
+
+    manager = WebSessionManager(_settings())
+    try:
+        manager.start()
+        with patch(
+            "pbi_agent.web.session.workers.run_session_loop",
+            fake_run_session_loop,
+        ):
+            result = manager.submit_saved_session_input(
+                session_id,
+                text="Continue from the last completed tool",
+            )
+            worker = manager._live_sessions[str(result["live_session_id"])].worker
+            assert worker is not None
+            worker.join(timeout=2)
+    finally:
+        manager.shutdown()
+
+    assert worker_preferences == [True]
+    assert queued_preferences == [True]
+
+
 def test_project_command_model_profile_overrides_submitted_profile(
     tmp_path,
     monkeypatch,

@@ -372,6 +372,9 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
         follow_up_delivery: FollowUpDelivery | None = None,
     ) -> dict[str, Any]:
         self._ensure_saved_session_title(session_id, text)
+        include_tool_history = include_tool_history or (
+            self._saved_session_needs_crash_resume(session_id)
+        )
         live_session = self._find_live_session_for_saved_session(session_id)
         reuse_existing = True
         if live_session is not None and live_session.kind == "task":
@@ -406,6 +409,17 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
             include_tool_history=include_tool_history,
             follow_up_delivery=follow_up_delivery,
         )
+
+    def _saved_session_needs_crash_resume(self, session_id: str) -> bool:
+        with SessionStore() as store:
+            record = store.get_session(session_id)
+            if record is None or record.directory != self._directory_key:
+                raise KeyError(session_id)
+            latest_web_run = store.get_latest_web_session_run(session_id)
+        return latest_web_run is not None and latest_web_run.status in {
+            "interrupted",
+            "stale",
+        }
 
     def _command_profile_id_for_submission(
         self,

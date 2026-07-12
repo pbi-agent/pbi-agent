@@ -1,7 +1,7 @@
 # MEMORY.md
 
 ## Metadata
-- Last compacted: 2026-07-11
+- Last compacted: 2026-07-12
 - Scope: durable repo memory + active-day task events.
 - Format: only `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
 
@@ -29,7 +29,7 @@
 - Model catalog: bundled pricing includes GPT-5.6 Sol/Terra/Luna plus the `gpt-5.6`→Sol alias, `glm-5.2`, `minimax-m3`, `claude-sonnet-5`, `claude-fable-5`, and `claude-mythos-5`; catalog key lookups use longest case-insensitive exact/prefix matching. OpenAI Responses maps `input_tokens_details.cache_write_tokens` into `TokenUsage`, priced as the catalog cache-write bucket.
 - Reasoning efforts: provider model discovery exposes advertised effort strings; profile suggestions use the selected main/sub-agent models' compatible values and fall back to `low`/`medium`/`high`/`xhigh`. Arbitrary non-empty custom values are accepted and forwarded unchanged (while existing generic mappings such as Anthropic `xhigh`→`max` remain). Classic OpenAI `/v1/models` has no capability metadata, so generic provider/model-pattern rules hard-code documented GPT-5/o-series/Codex effort sets and enrich discovery.
 - OpenAI/ChatGPT: Responses use `instructions` + `previous_response_id`; Responses requests include `reasoning.encrypted_content` alongside provider-specific include values. OpenAI profiles alone persist optional `reasoning.mode` (`standard`/`pro`), validated against selected main/sub-agent GPT-5.6 models and forwarded only to the classic OpenAI API; official Codex does not send it to the ChatGPT subscription backend. GitHub Copilot Responses does not support `previous_response_id`; replay local history for user turns and tool follow-ups. ChatGPT subscription prepends system prompt. ChatGPT Codex client/model-discovery minimum is 0.144.1. Codex transport is WebSocket-only with split timeouts/retry events, closes parent sockets before sub-agent runs, caps write/first-event/close waits at 30s/30s/1s, and has no unsupported compression.
-- Saved-session replay: cross-provider replay falls back to canonical message/tool history when raw traces incompatible. Responses replay strips output-only fields before request history. Responses-style providers persist/replay only final assistant output message while live display may show intermediate messages.
+- Saved-session replay: cross-provider replay falls back to canonical message/tool history when raw traces incompatible. Responses replay strips output-only fields before request history. Responses-style providers persist/replay only final assistant output message while live display may show intermediate messages. Continuations after stale or server-shutdown-interrupted web runs restore the interrupted user/intermediate/tool trace, match retained messages to runs, and include only complete tool call/result pairs.
 - Google Interactions: saved-session/stateless replay uses steps input (`user_input`, `model_output`, tool/result steps), not role/content turn-list objects; fresh single turns may use simple string/content input.
 - `google_gcp`: provider wrapper with Vertex/Gemini shape handlers for Gemini `generateContent`, OpenAI Chat Completions, OpenAI Responses/xAI, Anthropic Messages. Uses client-side history for GCP xAI/Responses. Does not advertise native web search until shape-native tools exist. Same-shape runtime changes update active shape/protocol in place so history survives model/max-token/tool changes.
 - `google_gcp` auth/endpoints: derive Vertex project/location from saved provider or CLI before env fallback. API-key-like tokens/envs use `x-goog-api-key` + Gemini express `v1beta1`; express unsupported-token errors retry once with standard Vertex OAuth/ADC using saved project/location. Non-Gemini Vertex shapes skip API-key-like auth and use OAuth2/ADC; forced API-key auth errors early. ADC via `gcloud auth application-default print-access-token`, timeout default 30s overrideable by `PBI_AGENT_GOOGLE_GCP_ACCESS_TOKEN_TIMEOUT`; bearer cached until expiry and refreshed once after expiry errors. Strip `google/` model prefix for Gemini endpoint paths. GCP Responses tool schemas drop unsupported JSON-Schema combinators like `oneOf`.
@@ -56,7 +56,5 @@
 
 ## Detailed Task Events
 
-## 2026-07-11
-- Prompt-enhancement profile: added persisted optional model-profile selection/API/Settings; selected profiles override blank and saved-session enhancement runtimes while preserving context, and `Current model` restores existing fallback. Validation: full Python/frontend checks, API codegen/build, and correctness/quality reviews passed.
-- Sub-agent timeout: raised elapsed runtime cap from 1200s to 1800s and aligned docs (including the existing 400-request cap). Validation: focused Ruff/format, 41 sub-agent tests, docs build, and diff checks passed.
-- Release v0.28.0: included all five local commits since v0.27.0, merged PR #339, and published the tag, corrected GitHub notes, wheel, and sdist. Validation: required local release checks, PR checks, and Release workflow passed.
+## 2026-07-12
+- Crash-resume diagnosis/fix: session `67f4fbc3cdb04ee0b18dd5d4c277d58a` proved reconstruction retained both valid tool exchanges, but clean shutdown status `interrupted` did not activate it; crash detection now accepts `interrupted` and `stale`. Validation: full session/web test files, Ruff/format, basedpyright, and diff check passed.
