@@ -1,5 +1,5 @@
-- [x] Redesign the running shell interruption action
-- [x] Update frontend regression coverage
-- [x] Align the stop button padding with the shared small-button standard
-- [x] Run focused and frontend validation
+- [x] Trace lease renewal and SessionStore initialization lock handling
+- [x] Implement bounded automatic retry/recovery for SQLite lock contention
+- [x] Add regression tests for transient and persistent lock failures
+- [x] Run focused and required Python validation
 - [x] Update task memory

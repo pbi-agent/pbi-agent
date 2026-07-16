@@ -7368,6 +7368,90 @@ def test_manager_start_retries_busy_lease_then_succeeds(monkeypatch, tmp_path) -
     manager.shutdown()
 
 
+def test_manager_lease_heartbeat_recovers_from_locked_store_open(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    manager = WebSessionManager(_settings())
+    recovered = threading.Event()
+    attempts = 0
+
+    def open_store():
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise sqlite3.OperationalError("database is locked")
+        store = SessionStore()
+        recovered.set()
+        return store
+
+    try:
+        with (
+            patch(
+                "pbi_agent.web.session.workers._WEB_MANAGER_LEASE_HEARTBEAT_SECS",
+                0.01,
+            ),
+            patch(
+                "pbi_agent.web.session.workers._WEB_MANAGER_LEASE_BUSY_RETRY_DELAY_SECS",
+                0.01,
+            ),
+            patch(
+                "pbi_agent.web.session.workers.SessionStore",
+                side_effect=open_store,
+            ),
+        ):
+            manager.start()
+            assert recovered.wait(timeout=2)
+            time.sleep(0.04)
+            assert attempts == 2
+            assert manager._lease_thread is not None
+            assert manager._lease_thread.is_alive()
+            assert manager._started is True
+    finally:
+        manager.shutdown()
+
+
+def test_manager_lease_heartbeat_keeps_retrying_while_database_is_locked(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    manager = WebSessionManager(_settings())
+    retried = threading.Event()
+    attempts = 0
+
+    def locked_store():
+        nonlocal attempts
+        attempts += 1
+        if attempts >= 3:
+            retried.set()
+        raise sqlite3.OperationalError("database is locked")
+
+    try:
+        with (
+            patch(
+                "pbi_agent.web.session.workers._WEB_MANAGER_LEASE_HEARTBEAT_SECS",
+                0.01,
+            ),
+            patch(
+                "pbi_agent.web.session.workers._WEB_MANAGER_LEASE_BUSY_RETRY_DELAY_SECS",
+                0.01,
+            ),
+            patch(
+                "pbi_agent.web.session.workers.SessionStore",
+                side_effect=locked_store,
+            ),
+        ):
+            manager.start()
+            assert retried.wait(timeout=2)
+            assert manager._lease_thread is not None
+            assert manager._lease_thread.is_alive()
+            assert manager._started is True
+    finally:
+        manager.shutdown()
+
+
 def test_shutdown_keeps_lease_until_noncooperative_live_worker_stops(
     monkeypatch, tmp_path
 ) -> None:
