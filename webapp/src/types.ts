@@ -732,6 +732,7 @@ export type ApplyPatchToolMetadata = {
   timeout_ms?: number | string;
   exit_code?: number | null;
   timed_out?: boolean;
+  interrupted?: boolean;
 };
 
 export type ToolCallMetadata = Omit<

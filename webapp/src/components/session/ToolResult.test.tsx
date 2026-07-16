@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
 const { highlightCodeMock } = vi.hoisted(() => ({
@@ -55,6 +56,83 @@ describe("ToolResult", () => {
 
       expect(screen.getByText("Running")).toBeInTheDocument();
       expect(screen.queryByText(/Exit undefined/)).not.toBeInTheDocument();
+    });
+
+    it("offers a targeted interrupt action only while the shell is running", async () => {
+      const user = userEvent.setup();
+      const onInterrupt = vi.fn();
+      const { rerender } = render(
+        <ToolResult
+          running
+          text="$ sleep 30"
+          metadata={{
+            tool_name: "shell",
+            call_id: "call-shell",
+            status: "running",
+            arguments: { command: "sleep 30" },
+          }}
+          onInterrupt={onInterrupt}
+        />,
+      );
+
+      expect(screen.getByText("Shell command is still running")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Stop running shell command" }),
+      ).toHaveTextContent("Stop command");
+
+      await user.click(
+        screen.getByRole("button", { name: "Stop running shell command" }),
+      );
+
+      expect(onInterrupt).toHaveBeenCalledWith("call-shell");
+
+      rerender(
+        <ToolResult
+          text="$ sleep 30"
+          metadata={{
+            tool_name: "shell",
+            call_id: "call-shell",
+            status: "failed",
+            success: false,
+            interrupted: true,
+            arguments: { command: "sleep 30" },
+            result: {
+              stdout: "",
+              stderr: "",
+              exit_code: 130,
+              interrupted: true,
+            },
+          }}
+          onInterrupt={onInterrupt}
+        />,
+      );
+
+      expect(
+        screen.queryByRole("button", { name: "Stop running shell command" }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText("Interrupted")).toBeInTheDocument();
+    });
+
+    it("disables the shell interrupt action while the request is pending", () => {
+      render(
+        <ToolResult
+          running
+          interrupting
+          text="$ sleep 30"
+          metadata={{
+            tool_name: "shell",
+            call_id: "call-shell",
+            status: "running",
+            arguments: { command: "sleep 30" },
+          }}
+          onInterrupt={vi.fn()}
+        />,
+      );
+
+      expect(
+        screen.getByRole("button", { name: "Stop running shell command" }),
+      ).toBeDisabled();
+      expect(screen.getByText("Stopping…")).toBeInTheDocument();
     });
 
     it("renders the exit code once the shell tool completes", () => {

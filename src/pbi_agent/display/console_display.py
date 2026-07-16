@@ -98,6 +98,19 @@ class ConsoleDisplay(DisplayProtocol):
     def interrupt_requested(self) -> bool:
         return False
 
+    def request_tool_interrupt(
+        self,
+        call_id: str,
+        *,
+        sub_agent_id: str | None = None,
+    ) -> None:
+        del call_id, sub_agent_id
+        raise RuntimeError("Console tool calls cannot be interrupted remotely.")
+
+    def tool_interrupt_requested(self, call_id: str) -> bool:
+        del call_id
+        return False
+
     def bind_session(self, session_id: str | None) -> None:
         del session_id
 

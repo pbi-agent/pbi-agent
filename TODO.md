@@ -1,5 +1,5 @@
-- [x] Inspect the failing session's persisted messages, runs, and events
-- [x] Identify and reproduce the crash-resume history mismatch
-- [x] Fix history reconstruction and add regression coverage
-- [x] Run focused and required backend validation
+- [x] Redesign the running shell interruption action
+- [x] Update frontend regression coverage
+- [x] Align the stop button padding with the shared small-button standard
+- [x] Run focused and frontend validation
 - [x] Update task memory

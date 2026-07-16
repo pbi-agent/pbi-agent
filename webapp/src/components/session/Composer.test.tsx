@@ -1013,7 +1013,7 @@ describe("Composer", () => {
       onInterrupt: vi.fn(),
     });
 
-    expect(screen.getByRole("button", { name: "Interrupt assistant turn" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Interrupt current run" })).toBeInTheDocument();
 
     await user.type(screen.getByRole("textbox", { name: "Message" }), "while busy");
     await user.click(screen.getByRole("button", { name: "Send message" }));

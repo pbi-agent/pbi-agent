@@ -17,6 +17,7 @@ import {
   fetchWorkspaceFilePreview,
   fetchWorkspaceFileTree,
   interruptSession,
+  interruptSessionToolCall,
   refreshWorkspaceFileTree,
   runSessionShellCommand,
   sendQueuedFollowUp,
@@ -211,7 +212,7 @@ vi.mock("./Composer", async () => {
           {canInterrupt ? (
             <button
               type="button"
-              aria-label="Interrupt assistant turn"
+              aria-label="Interrupt current run"
               disabled={Boolean(isInterrupting)}
               onClick={() => onInterrupt?.()}
             >
@@ -303,6 +304,7 @@ vi.mock("../../api", async (importOriginal) => {
     fetchWorkspaceFilePreview: vi.fn(),
     fetchWorkspaceFileTree: vi.fn(),
     interruptSession: vi.fn(),
+    interruptSessionToolCall: vi.fn(),
     refreshWorkspaceFileTree: vi.fn(),
     runSessionShellCommand: vi.fn(),
   sendQueuedFollowUp: vi.fn(),
@@ -665,6 +667,9 @@ describe("SessionPage", () => {
       makeLiveSession({ live_session_id: "live-processing", session_id: "session-1", last_event_seq: 4 }),
     );
     vi.mocked(interruptSession).mockResolvedValue(
+      makeLiveSession({ live_session_id: "live-processing", session_id: "session-1" }),
+    );
+    vi.mocked(interruptSessionToolCall).mockResolvedValue(
       makeLiveSession({ live_session_id: "live-processing", session_id: "session-1" }),
     );
     vi.mocked(submitSessionQuestionResponse).mockResolvedValue(
@@ -1476,6 +1481,19 @@ describe("SessionPage", () => {
     renderSessionRoute("/sessions/session-1/sub-agents/sub-1");
 
     await screen.findByText("Timeline 1");
+    const onInterruptShellTool = latestSessionTimelineProps()
+      .onInterruptShellTool;
+    expect(onInterruptShellTool).toEqual(expect.any(Function));
+    act(() => {
+      (onInterruptShellTool as (callId: string) => void)("call-child-shell");
+    });
+    await waitFor(() => {
+      expect(interruptSessionToolCall).toHaveBeenCalledWith(
+        "session-1",
+        "call-child-shell",
+        "sub-1",
+      );
+    });
     expect(screen.queryByText("Composer images true")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /interactive mode/i })).not.toBeInTheDocument();
     const { event, dispatchResult } = dispatchWindowKeydown({ key: "Tab", shiftKey: true });
@@ -4223,6 +4241,7 @@ describe("SessionPage", () => {
   });
 
   it("keeps the composer disabled between tool phases until input state enables it", async () => {
+    const user = userEvent.setup();
     vi.mocked(fetchSessionDetail).mockResolvedValue({
       session: makeSessionRecord(),
       history_items: [],
@@ -4252,8 +4271,13 @@ describe("SessionPage", () => {
 
     expect(await screen.findByText("Composer live session live-processing")).toBeInTheDocument();
     expect(screen.getByText("Composer input enabled false")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Interrupt assistant turn" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Interrupt current run" })).toBeEnabled();
     expect(screen.getByText("Connection disconnected")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Interrupt current run" }));
+    await waitFor(() => {
+      expect(interruptSession).toHaveBeenCalledWith("session-1");
+    });
 
     act(() => {
       useSessionStore.setState((state) => {
@@ -4275,7 +4299,44 @@ describe("SessionPage", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Composer input enabled true")).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Interrupt assistant turn" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Interrupt current run" })).not.toBeInTheDocument();
+    });
+  });
+
+  it("routes shell-card interrupts to the targeted model tool call", async () => {
+    vi.mocked(interruptSessionToolCall).mockReturnValue(
+      new Promise(() => {}),
+    );
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord(),
+      history_items: [],
+      active_live_session: makeLiveSession({
+        live_session_id: "live-processing",
+        session_id: "session-1",
+      }),
+      timeline: null,
+      active_run: null,
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+    await screen.findByText("Timeline 0");
+
+    const onInterruptShellTool = latestSessionTimelineProps()
+      .onInterruptShellTool;
+    expect(onInterruptShellTool).toEqual(expect.any(Function));
+    act(() => {
+      (onInterruptShellTool as (callId: string) => void)("call-shell");
+    });
+
+    await waitFor(() => {
+      expect(interruptSessionToolCall).toHaveBeenCalledWith(
+        "session-1",
+        "call-shell",
+        null,
+      );
+      expect(
+        latestSessionTimelineProps().interruptingShellCallId,
+      ).toBe("call-shell");
     });
   });
 

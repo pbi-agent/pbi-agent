@@ -214,6 +214,10 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
         live_session = self._require_live_session(live_session_id)
         if live_session.status == "ended":
             raise RuntimeError("Live session has already ended.")
+        if live_session.display.direct_shell_command_active():
+            raise RuntimeError(
+                "Messages cannot be sent while a shell command is running."
+            )
         if follow_up_delivery is not None:
             self._validate_follow_up_submission(live_session, text)
         if follow_up_delivery == "checkpoint" and self._should_defer_follow_up(
@@ -339,15 +343,27 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
                     "markdown": False,
                 },
             )
-        live_session.display.submit_input(
-            message_text,
-            file_paths=file_paths,
-            images=resolved_images or None,
-            image_attachments=message_image_attachments or None,
-            interactive_mode=interactive_mode,
-            include_tool_history=include_tool_history,
-            item_id=optimistic_item_id,
-        )
+        try:
+            live_session.display.submit_input(
+                message_text,
+                file_paths=file_paths,
+                images=resolved_images or None,
+                image_attachments=message_image_attachments or None,
+                interactive_mode=interactive_mode,
+                include_tool_history=include_tool_history,
+                item_id=optimistic_item_id,
+            )
+        except Exception:
+            if message_text or message_image_attachments:
+                self._publish_live_event(
+                    live_session_id,
+                    "message_removed",
+                    {
+                        "item_id": optimistic_item_id,
+                        "restore_input": message_text,
+                    },
+                )
+            raise
         if should_restore_runtime:
             live_session.display.request_runtime_change(
                 runtime=restore_runtime,
@@ -371,11 +387,17 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
         include_tool_history: bool = False,
         follow_up_delivery: FollowUpDelivery | None = None,
     ) -> dict[str, Any]:
-        self._ensure_saved_session_title(session_id, text)
+        live_session = self._find_live_session_for_saved_session(session_id)
+        if (
+            live_session is not None
+            and live_session.display.direct_shell_command_active()
+        ):
+            raise RuntimeError(
+                "Messages cannot be sent while a shell command is running."
+            )
         include_tool_history = include_tool_history or (
             self._saved_session_needs_crash_resume(session_id)
         )
-        live_session = self._find_live_session_for_saved_session(session_id)
         reuse_existing = True
         if live_session is not None and live_session.kind == "task":
             with SessionStore() as store:
@@ -398,7 +420,7 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
             live_session_id = str(created["live_session_id"])
         else:
             live_session_id = live_session.live_session_id
-        return self.submit_session_input(
+        result = self.submit_session_input(
             live_session_id,
             text=text,
             file_paths=file_paths,
@@ -409,6 +431,8 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
             include_tool_history=include_tool_history,
             follow_up_delivery=follow_up_delivery,
         )
+        self._ensure_saved_session_title(session_id, text)
+        return result
 
     def _saved_session_needs_crash_resume(self, session_id: str) -> bool:
         with SessionStore() as store:
@@ -555,6 +579,9 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
         item = self._latest_live_user_item(live_session)
         item_id = _snapshot_item_id(item) if item is not None else None
         input_text = str((item or {}).get("content") or "")
+        if live_session.display.direct_shell_command_active():
+            live_session.display.request_direct_shell_interrupt()
+            return self._serialize_live_session(live_session)
         live_session.display.request_interrupt(
             item_id=item_id,
             input_text=input_text,
@@ -566,6 +593,24 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
         if live_session is None:
             raise KeyError(session_id)
         return self.interrupt_live_session(live_session.live_session_id)
+
+    def interrupt_saved_session_tool_call(
+        self,
+        session_id: str,
+        *,
+        call_id: str,
+        sub_agent_id: str | None = None,
+    ) -> dict[str, Any]:
+        live_session = self._find_live_session_for_saved_session(session_id)
+        if live_session is None:
+            raise KeyError(session_id)
+        if live_session.status == "ended":
+            raise RuntimeError("Live session has already ended.")
+        live_session.display.request_tool_interrupt(
+            call_id,
+            sub_agent_id=sub_agent_id,
+        )
+        return self._serialize_live_session(live_session)
 
     def run_shell_command(
         self,
@@ -580,13 +625,13 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
         if not normalized_command:
             raise ValueError("Shell command must be a non-empty string.")
         user_content = f"!{normalized_command}"
-        user_message = self._persist_live_session_message(
-            live_session,
-            role="user",
-            content=user_content,
-        )
-        live_session.display.begin_direct_command()
+        shell_token = live_session.display.begin_direct_shell_command()
         try:
+            user_message = self._persist_live_session_message(
+                live_session,
+                role="user",
+                content=user_content,
+            )
             self._publish_live_event(
                 live_session_id,
                 "message_added",
@@ -640,7 +685,7 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
                 },
             )
         finally:
-            live_session.display.finish_direct_command()
+            live_session.display.finish_direct_shell_command(shell_token)
         return self._serialize_live_session(live_session)
 
     def run_saved_session_shell_command(

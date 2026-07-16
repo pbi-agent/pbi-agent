@@ -277,7 +277,7 @@ export function ComposerActionButtons({
               <span className="composer__input-tooltip-trigger">
                 <InputGroupButton
                   type="button"
-                  aria-label="Interrupt assistant turn"
+                  aria-label="Interrupt current run"
                   className="composer__stop"
                   disabled={isInterrupting}
                   onClick={onInterrupt}
@@ -293,7 +293,7 @@ export function ComposerActionButtons({
               </span>
             </TooltipTrigger>
             <TooltipContent side="top">
-              {isInterrupting ? "Interrupting current turn…" : "Stop the assistant"}
+              {isInterrupting ? "Interrupting current run…" : "Stop the current run"}
             </TooltipContent>
           </Tooltip>
         ) : controller.showDictationAction ? (

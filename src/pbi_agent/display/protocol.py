@@ -158,6 +158,15 @@ class DisplayProtocol(Protocol):
 
     def interrupt_requested(self) -> bool: ...
 
+    def request_tool_interrupt(
+        self,
+        call_id: str,
+        *,
+        sub_agent_id: str | None = None,
+    ) -> None: ...
+
+    def tool_interrupt_requested(self, call_id: str) -> bool: ...
+
     def submit_input(
         self,
         value: str,

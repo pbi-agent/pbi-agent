@@ -63,6 +63,7 @@ class ToolContext:
     session_id: str | None = None
     turn_id: str | None = None
     current_model: str | None = None
+    tool_call_id: str | None = None
 
 
 @dataclass(slots=True)

@@ -241,6 +241,7 @@ class ToolCallMetadataModel(BaseModel):
     timeout_ms: int | str | None = None
     exit_code: int | None = None
     timed_out: bool | None = None
+    interrupted: bool | None = None
 
 
 class ToolGroupEntryModel(BaseModel):

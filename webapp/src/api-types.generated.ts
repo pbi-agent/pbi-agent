@@ -353,7 +353,9 @@ export type ThinkingUpdatedSseEventPayloadModel = { live_session_id?: string | n
 
 export type TokenUsagePayloadModel = { input_tokens: number; cached_input_tokens: number; cache_write_tokens: number; cache_write_1h_tokens: number; output_tokens: number; reasoning_tokens: number; provider_total_tokens: number; sub_agent_input_tokens: number; sub_agent_output_tokens: number; sub_agent_reasoning_tokens: number; sub_agent_provider_total_tokens: number; sub_agent_cost_usd: number; context_tokens: number; total_tokens: number; estimated_cost_usd: number; main_agent_total_tokens: number; sub_agent_total_tokens: number; model: string; service_tier: string };
 
-export type ToolCallMetadataModel = { tool_name?: string | null; path?: string | null; operation?: string | null; success?: boolean | null; detail?: string | null; diff?: string | null; operation_count?: number | null; affected_paths?: string[] | null; diff_line_numbers?: DiffLineNumberModel[] | null; call_id?: string | null; status?: "running" | "completed" | "failed" | null; arguments?: Record<string, unknown> | string | null; result?: Record<string, unknown> | string | null; error?: unknown; command?: string | null; working_directory?: string | null; timeout_ms?: number | string | null; exit_code?: number | null; timed_out?: boolean | null };
+export type ToolCallInterruptRequest = { sub_agent_id?: string | null };
+
+export type ToolCallMetadataModel = { tool_name?: string | null; path?: string | null; operation?: string | null; success?: boolean | null; detail?: string | null; diff?: string | null; operation_count?: number | null; affected_paths?: string[] | null; diff_line_numbers?: DiffLineNumberModel[] | null; call_id?: string | null; status?: "running" | "completed" | "failed" | null; arguments?: Record<string, unknown> | string | null; result?: Record<string, unknown> | string | null; error?: unknown; command?: string | null; working_directory?: string | null; timeout_ms?: number | string | null; exit_code?: number | null; timed_out?: boolean | null; interrupted?: boolean | null };
 
 export type ToolGroupAddedSseEventModel = { seq: number; created_at: string; type: "tool_group_added"; payload: ToolGroupAddedSseEventPayloadModel };
 
@@ -508,6 +510,7 @@ export type ApiOperationResponses = {
   "GET /api/sessions/{session_id}/runs": SessionRunsResponse;
   "POST /api/sessions/{session_id}/runs": LiveSessionResponse;
   "POST /api/sessions/{session_id}/shell-command": LiveSessionResponse;
+  "POST /api/sessions/{session_id}/tool-calls/{call_id}/interrupt": LiveSessionResponse;
   "GET /api/skills/search": SkillMentionSearchResponse;
   "GET /api/slash-commands/search": SlashCommandSearchResponse;
   "POST /api/stt/transcribe": SttTranscriptionResponse;
@@ -561,6 +564,7 @@ export type ApiJsonRequestBodies = {
   "POST /api/sessions/{session_id}/question-response": SubmitQuestionResponseRequest;
   "POST /api/sessions/{session_id}/runs": LiveSessionInputRequest;
   "POST /api/sessions/{session_id}/shell-command": LiveSessionShellCommandRequest;
+  "POST /api/sessions/{session_id}/tool-calls/{call_id}/interrupt": ToolCallInterruptRequest;
   "POST /api/tasks": CreateTaskRequest;
   "PATCH /api/tasks/{task_id}": UpdateTaskRequest;
   "POST /api/workspaces/switch": WorkspaceSwitchRequest;
@@ -600,6 +604,7 @@ export type ApiOperationPathParams = {
   "GET /api/sessions/{session_id}/runs": { session_id: string };
   "POST /api/sessions/{session_id}/runs": { session_id: string };
   "POST /api/sessions/{session_id}/shell-command": { session_id: string };
+  "POST /api/sessions/{session_id}/tool-calls/{call_id}/interrupt": { session_id: string; call_id: string };
   "DELETE /api/tasks/{task_id}": { task_id: string };
   "PATCH /api/tasks/{task_id}": { task_id: string };
   "POST /api/tasks/{task_id}/run": { task_id: string };

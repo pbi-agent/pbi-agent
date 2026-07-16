@@ -488,6 +488,37 @@ class PendingUserQuestionsPrompt:
         }
 
 
+class _ToolInterruptController:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._active_shell_calls: set[tuple[str | None, str]] = set()
+        self._interrupted_calls: set[tuple[str | None, str]] = set()
+
+    def activate(self, owner_id: str | None, call_ids: set[str]) -> None:
+        with self._lock:
+            self._active_shell_calls.update((owner_id, call_id) for call_id in call_ids)
+
+    def deactivate(self, owner_id: str | None, call_ids: set[str]) -> None:
+        with self._lock:
+            keys = {(owner_id, call_id) for call_id in call_ids}
+            self._active_shell_calls.difference_update(keys)
+            self._interrupted_calls.difference_update(keys)
+
+    def request(self, owner_id: str | None, call_id: str) -> None:
+        normalized_call_id = call_id.strip()
+        if not normalized_call_id:
+            raise ValueError("Tool call ID must be non-empty.")
+        key = (owner_id, normalized_call_id)
+        with self._lock:
+            if key not in self._active_shell_calls:
+                raise RuntimeError("No running shell tool call matches that ID.")
+            self._interrupted_calls.add(key)
+
+    def requested(self, owner_id: str | None, call_id: str) -> bool:
+        with self._lock:
+            return (owner_id, call_id) in self._interrupted_calls
+
+
 class _EventDisplayBase(DisplayProtocol):
     def __init__(
         self,
@@ -495,6 +526,7 @@ class _EventDisplayBase(DisplayProtocol):
         publish_event: EventPublisher,
         verbose: bool = False,
         sub_agent: _SubAgentContext | None = None,
+        tool_interrupt_controller: _ToolInterruptController | None = None,
     ) -> None:
         self.verbose = verbose
         self._publish_event = publish_event
@@ -507,6 +539,13 @@ class _EventDisplayBase(DisplayProtocol):
         self._processing_phase: str | None = None
         self._active_tool_group_item_id: str | None = None
         self._message_item_ids_by_signature: dict[tuple[str, str], list[str]] = {}
+        self._tool_interrupt_controller = (
+            tool_interrupt_controller or _ToolInterruptController()
+        )
+        self._active_shell_tool_call_ids: set[str] = set()
+        self._tool_interrupt_owner_id = (
+            sub_agent.sub_agent_id if sub_agent is not None else None
+        )
 
     def _next_id(self, prefix: str) -> str:
         self._counter += 1
@@ -583,6 +622,20 @@ class _EventDisplayBase(DisplayProtocol):
     def interrupt_requested(self) -> bool:
         return False
 
+    def request_tool_interrupt(
+        self,
+        call_id: str,
+        *,
+        sub_agent_id: str | None = None,
+    ) -> None:
+        self._tool_interrupt_controller.request(sub_agent_id, call_id)
+
+    def tool_interrupt_requested(self, call_id: str) -> bool:
+        return self._tool_interrupt_controller.requested(
+            self._tool_interrupt_owner_id,
+            call_id,
+        )
+
     def submit_input(
         self,
         value: str,
@@ -651,6 +704,7 @@ class _EventDisplayBase(DisplayProtocol):
             publish_event=self._publish_event,
             verbose=self.verbose,
             sub_agent=_SubAgentContext(sub_agent_id=sub_agent_id, title=title),
+            tool_interrupt_controller=self._tool_interrupt_controller,
         )
 
     def finish_sub_agent(self, *, status: str) -> None:
@@ -699,6 +753,17 @@ class _EventDisplayBase(DisplayProtocol):
         )
 
     def tool_execution_start(self, calls: list[PendingToolCall]) -> None:
+        self._tool_interrupt_controller.deactivate(
+            self._tool_interrupt_owner_id,
+            self._active_shell_tool_call_ids,
+        )
+        self._active_shell_tool_call_ids = {
+            call.call_id for call in calls if call.name == "shell" and call.call_id
+        }
+        self._tool_interrupt_controller.activate(
+            self._tool_interrupt_owner_id,
+            self._active_shell_tool_call_ids,
+        )
         displayable_calls = [call for call in calls if call.name != "sub_agent"]
         if not displayable_calls:
             return
@@ -773,6 +838,11 @@ class _EventDisplayBase(DisplayProtocol):
         self._publish_tool_group_update()
 
     def tool_execution_stop(self) -> None:
+        self._tool_interrupt_controller.deactivate(
+            self._tool_interrupt_owner_id,
+            self._active_shell_tool_call_ids,
+        )
+        self._active_shell_tool_call_ids.clear()
         if self._assistant_active:
             self._processing_phase = "finalizing"
             self._publish(
@@ -1073,31 +1143,46 @@ class _EventDisplayBase(DisplayProtocol):
         arguments: Any = None,
         result: Any = None,
     ) -> None:
-        self._tool_group.update_for_function(name)
-        tool_name, text = route_function_result(
-            name,
-            verbose=self.verbose,
-            status=status_markup(success=success),
-            call_id=call_id,
-            arguments=arguments,
-            result=result,
-        )
-        result_body = _tool_result_body(result)
-        self._tool_group.upsert_item(
-            _plain_text(text),
-            call_id=call_id,
-            classes=tool_item_class(tool_name),
-            metadata={
-                "tool_name": tool_name,
-                "call_id": call_id,
-                "status": "completed" if success else "failed",
-                "success": success,
-                "arguments": _metadata_payload(arguments),
-                "result": result_body,
-                "error": _tool_error_payload(result),
-            },
-        )
-        self._publish_tool_group_update()
+        try:
+            result_body = _tool_result_body(result)
+            interrupted = bool(
+                name == "shell"
+                and isinstance(result_body, dict)
+                and result_body.get("interrupted")
+            )
+            display_success = success and not interrupted
+            self._tool_group.update_for_function(name)
+            tool_name, text = route_function_result(
+                name,
+                verbose=self.verbose,
+                status=status_markup(success=display_success),
+                call_id=call_id,
+                arguments=arguments,
+                result=result,
+            )
+            self._tool_group.upsert_item(
+                _plain_text(text),
+                call_id=call_id,
+                classes=tool_item_class(tool_name),
+                metadata={
+                    "tool_name": tool_name,
+                    "call_id": call_id,
+                    "status": "completed" if display_success else "failed",
+                    "success": display_success,
+                    "arguments": _metadata_payload(arguments),
+                    "result": result_body,
+                    "error": _tool_error_payload(result),
+                    **({"interrupted": True} if interrupted else {}),
+                },
+            )
+            self._publish_tool_group_update()
+        finally:
+            if name == "shell" and call_id:
+                self._active_shell_tool_call_ids.discard(call_id)
+                self._tool_interrupt_controller.deactivate(
+                    self._tool_interrupt_owner_id,
+                    {call_id},
+                )
 
     def tool_group_end(self) -> None:
         if not self._tool_group.items:
@@ -1295,6 +1380,9 @@ class WebDisplay(_EventDisplayBase):
         self._prompt_counter = 0
         self._shutdown = threading.Event()
         self._interrupt = threading.Event()
+        self._direct_shell_command = threading.Event()
+        self._direct_shell_command_token: object | None = None
+        self._direct_shell_command_running = False
         self._model = model
         self._reasoning_effort = reasoning_effort
         self._bind_session_callback = bind_session
@@ -1303,6 +1391,7 @@ class WebDisplay(_EventDisplayBase):
         self._input_state_lock = threading.Lock()
         self._input_block_prior_states: list[tuple[bool | None, int]] = []
         self._input_activity_sequence = 0
+        self._input_delivery_pending = False
 
     def _publish_input_state(self, enabled: bool) -> None:
         with self._input_state_lock:
@@ -1319,6 +1408,13 @@ class WebDisplay(_EventDisplayBase):
                 if self._input_enabled_state is enabled:
                     self._input_enabled_state = previous_state
             raise
+        if enabled:
+            with self._input_state_lock:
+                if self._input_enabled_state is True:
+                    self._direct_shell_command.clear()
+                    self._direct_shell_command_token = None
+                    self._direct_shell_command_running = False
+                    self.clear_interrupt()
 
     def _input_state_blocked(self) -> bool:
         with self._input_state_lock:
@@ -1329,6 +1425,10 @@ class WebDisplay(_EventDisplayBase):
         value: str | QueuedInput | QueuedRuntimeChange,
     ) -> None:
         with self._input_state_lock:
+            if self._direct_shell_command.is_set():
+                raise RuntimeError(
+                    "Messages cannot be sent while a shell command is running."
+                )
             self._input_activity_sequence += 1
             self._input_queue.put(value)
 
@@ -1348,6 +1448,10 @@ class WebDisplay(_EventDisplayBase):
                 if self._input_enabled_state is True:
                     self._input_enabled_state = previous_state
                 raise
+            self._direct_shell_command.clear()
+            self._direct_shell_command_token = None
+            self._direct_shell_command_running = False
+            self.clear_interrupt()
             return True
 
     def begin_direct_command(self) -> None:
@@ -1380,6 +1484,113 @@ class WebDisplay(_EventDisplayBase):
         ):
             return
         self._input_event.set()
+
+    def begin_direct_shell_command(self) -> object:
+        """Atomically reserve the shell interrupt target and disable input."""
+        with self._input_state_lock:
+            if self._assistant_active:
+                raise RuntimeError(
+                    "Shell commands cannot run while the assistant is processing."
+                )
+            if self._direct_shell_command.is_set():
+                raise RuntimeError("A shell command is already running.")
+            if self._input_delivery_pending or not self._input_queue.empty():
+                raise RuntimeError(
+                    "Shell commands cannot run while a message is pending."
+                )
+            token = object()
+            prior_state = self._input_enabled_state
+            prior_activity_sequence = self._input_activity_sequence
+            self._input_block_prior_states.append(
+                (prior_state, prior_activity_sequence)
+            )
+            self.clear_interrupt()
+            self._direct_shell_command.set()
+            self._direct_shell_command_token = token
+            self._direct_shell_command_running = True
+            self._input_enabled_state = False
+            try:
+                if prior_state is not False:
+                    self._publish("input_state", {"enabled": False})
+            except Exception:
+                self._input_enabled_state = prior_state
+                self._input_block_prior_states.pop()
+                self._direct_shell_command.clear()
+                self._direct_shell_command_token = None
+                self._direct_shell_command_running = False
+                raise
+            return token
+
+    def finish_direct_shell_command(self, token: object) -> None:
+        with self._input_state_lock:
+            if token is not self._direct_shell_command_token:
+                return
+            self._direct_shell_command_running = False
+            self.clear_interrupt()
+            if not self._input_block_prior_states:
+                return
+            prior_state, prior_activity_sequence = self._input_block_prior_states.pop()
+            should_restore = (
+                not self._input_block_prior_states and not self._shutdown.is_set()
+            )
+            if not should_restore:
+                if self._shutdown.is_set():
+                    self._direct_shell_command.clear()
+                    self._direct_shell_command_token = None
+                return
+            if (
+                prior_state is True
+                and self._input_activity_sequence == prior_activity_sequence
+                and self._input_enabled_state is not True
+            ):
+                previous_state = self._input_enabled_state
+                self._input_enabled_state = True
+                try:
+                    self._publish("input_state", {"enabled": True})
+                except Exception:
+                    self._input_enabled_state = previous_state
+                    raise
+                self._direct_shell_command.clear()
+                self._direct_shell_command_token = None
+                return
+            self._input_event.set()
+
+    def direct_shell_command_active(self) -> bool:
+        return self._direct_shell_command.is_set()
+
+    def assistant_turn_active(self) -> bool:
+        return self._assistant_active
+
+    def assistant_start(self) -> None:
+        with self._input_state_lock:
+            self._input_delivery_pending = False
+            self._assistant_active = True
+            self._processing_phase = "starting"
+        self._publish(
+            "processing_state",
+            {
+                "active": True,
+                "phase": "starting",
+                "message": "starting assistant turn...",
+            },
+        )
+
+    def assistant_stop(self) -> None:
+        with self._input_state_lock:
+            self._assistant_active = False
+            self._processing_phase = None
+            self._waiting_message = None
+        self._publish(
+            "processing_state",
+            {"active": False, "phase": None, "message": None},
+        )
+
+    def request_direct_shell_interrupt(self) -> None:
+        with self._input_state_lock:
+            if not self._direct_shell_command.is_set():
+                raise RuntimeError("No shell command is currently running.")
+            if self._direct_shell_command_running:
+                self._interrupt.set()
 
     def render_transient_markdown(self, text: str) -> None:
         from pbi_agent.web.session.events import TRANSIENT_WEB_EVENT_KEY
@@ -1448,7 +1659,6 @@ class WebDisplay(_EventDisplayBase):
         include_tool_history: bool = False,
         item_id: str | None = None,
     ) -> None:
-        self.clear_interrupt()
         queued = QueuedInput(
             text=value,
             file_paths=list(file_paths or []),
@@ -1460,6 +1670,7 @@ class WebDisplay(_EventDisplayBase):
             item_id=item_id,
         )
         self._put_input_activity(queued)
+        self.clear_interrupt()
         self._input_event.set()
         self._publish_input_state(False)
 
@@ -1588,10 +1799,19 @@ class WebDisplay(_EventDisplayBase):
         self._publish_input_state(False)
 
     def user_prompt(self) -> str | QueuedInput | QueuedRuntimeChange:
+        with self._input_state_lock:
+            self._input_delivery_pending = False
         while True:
-            try:
-                value = self._input_queue.get_nowait()
-            except queue.Empty:
+            value: str | QueuedInput | QueuedRuntimeChange | None = None
+            with self._input_state_lock:
+                if not self._input_block_prior_states:
+                    try:
+                        value = self._input_queue.get_nowait()
+                    except queue.Empty:
+                        pass
+                    else:
+                        self._input_delivery_pending = True
+            if value is None:
                 if self._shutdown.is_set():
                     return "exit"
                 if self._input_state_blocked():
@@ -1615,11 +1835,13 @@ class WebSubAgentDisplay(_EventDisplayBase):
         publish_event: EventPublisher,
         verbose: bool = False,
         sub_agent: _SubAgentContext,
+        tool_interrupt_controller: _ToolInterruptController,
     ) -> None:
         super().__init__(
             publish_event=publish_event,
             verbose=verbose,
             sub_agent=sub_agent,
+            tool_interrupt_controller=tool_interrupt_controller,
         )
         self._title = sub_agent.title
 

@@ -196,6 +196,77 @@ def test_web_display_direct_command_holds_input_disabled_until_finished() -> Non
     ]
 
 
+def test_web_display_direct_shell_interrupt_preserves_command_message() -> None:
+    events: list[tuple[str, dict[str, object]]] = []
+    display = WebDisplay(
+        publish_event=lambda event, payload: events.append((event, payload))
+    )
+    result: list[object] = []
+    worker = threading.Thread(target=lambda: result.append(display.user_prompt()))
+    worker.start()
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline:
+        if events:
+            break
+        time.sleep(0.01)
+
+    shell_token = display.begin_direct_shell_command()
+    display.request_direct_shell_interrupt()
+
+    assert display.direct_shell_command_active() is True
+    assert display.interrupt_requested() is True
+    assert not any(event == "message_removed" for event, _payload in events)
+
+    display.finish_direct_shell_command(shell_token)
+
+    assert display.direct_shell_command_active() is False
+    assert display.interrupt_requested() is False
+    display.submit_input("hello")
+    worker.join(timeout=1)
+    assert not worker.is_alive()
+    assert result
+
+
+def test_web_display_rejects_direct_shell_during_assistant_turn() -> None:
+    display = WebDisplay(publish_event=lambda _event, _payload: None)
+    display.assistant_start()
+
+    with pytest.raises(
+        RuntimeError,
+        match="Shell commands cannot run while the assistant is processing",
+    ):
+        display.begin_direct_shell_command()
+
+    assert display.direct_shell_command_active() is False
+
+
+def test_web_display_keeps_messages_out_of_active_direct_shell() -> None:
+    display = WebDisplay(publish_event=lambda _event, _payload: None)
+    display.begin_direct_shell_command()
+    display.request_direct_shell_interrupt()
+
+    with pytest.raises(
+        RuntimeError,
+        match="Messages cannot be sent while a shell command is running",
+    ):
+        display.submit_input("stale tab message")
+
+    assert display.interrupt_requested() is True
+
+
+def test_web_display_rejects_direct_shell_when_input_is_queued() -> None:
+    display = WebDisplay(publish_event=lambda _event, _payload: None)
+    display.submit_input("queued message")
+
+    with pytest.raises(
+        RuntimeError,
+        match="Shell commands cannot run while a message is pending",
+    ):
+        display.begin_direct_shell_command()
+
+    assert display.direct_shell_command_active() is False
+
+
 def test_web_display_direct_command_releases_hold_when_disable_publish_fails() -> None:
     events: list[tuple[str, dict[str, object]]] = []
     fail_next_disable = True
