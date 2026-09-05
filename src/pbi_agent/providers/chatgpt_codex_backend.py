@@ -19,7 +19,7 @@ from pbi_agent.providers.protocols.openai_responses import (
 from pbi_agent.tools.types import ToolResult
 
 CHATGPT_ORIGINATOR = "codex_cli_rs"
-CHATGPT_CODEX_VERSION = "0.144.1"
+CHATGPT_CODEX_VERSION = "0.153.4"
 CHATGPT_TERMINAL_USER_AGENT = "unknown"
 CHATGPT_WEBSOCKET_BETA_HEADER = "responses_websockets=2026-02-06"
 

@@ -1346,7 +1346,7 @@ def test_chatgpt_user_agent_uses_static_real_codex_version() -> None:
     user_agent = chatgpt_user_agent()
 
     assert user_agent.startswith(f"{CHATGPT_ORIGINATOR}/{CHATGPT_CODEX_VERSION} (")
-    assert "0.0.33" not in user_agent
+    assert CHATGPT_CODEX_VERSION == "0.153.4"
 
 
 def test_chatgpt_codex_backend_websocket_url_matches_codex_provider_path() -> None:

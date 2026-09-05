@@ -1,5 +1,3 @@
-- [x] Trace lease renewal and SessionStore initialization lock handling
-- [x] Implement bounded automatic retry/recovery for SQLite lock contention
-- [x] Add regression tests for transient and persistent lock failures
-- [x] Run focused and required Python validation
-- [x] Update task memory
+- [x] Review the Codex version bump and all affected call sites
+- [x] Run focused provider/model-discovery tests (99 passed); Ruff, format, and basedpyright passed
+- [x] Report actionable findings and overall correctness

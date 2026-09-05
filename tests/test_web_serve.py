@@ -12512,7 +12512,7 @@ def test_provider_model_discovery_endpoint_lists_chatgpt_openai_models(
     assert len(requests_seen) == 1
     assert (
         requests_seen[0].full_url
-        == "https://chatgpt.com/backend-api/codex/models?client_version=0.144.1"
+        == "https://chatgpt.com/backend-api/codex/models?client_version=0.153.4"
     )
     headers = {key.lower(): value for key, value in requests_seen[0].header_items()}
     assert headers["authorization"].startswith("Bearer ")
