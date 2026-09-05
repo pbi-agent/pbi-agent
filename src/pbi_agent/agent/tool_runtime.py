@@ -289,7 +289,7 @@ def _execute_one_tool_call(
     arguments = pre_hook_outcome.arguments
 
     try:
-        tool_context = _tool_context_for_call(context)
+        tool_context = _tool_context_for_call(context, call_id=call.call_id)
         output = handler(arguments, tool_context)
         attachments = []
         display_metadata = dict(tool_context.display_metadata)
@@ -568,10 +568,14 @@ def _append_hook_context_to_tool_output(output_json: str, context_text: str) -> 
     return f"{output_json}\n\nHook context:\n{context_text}"
 
 
-def _tool_context_for_call(context: ToolContext | None) -> ToolContext:
+def _tool_context_for_call(
+    context: ToolContext | None,
+    *,
+    call_id: str,
+) -> ToolContext:
     if context is None:
-        return ToolContext()
-    return replace(context, display_metadata={})
+        return ToolContext(tool_call_id=call_id)
+    return replace(context, display_metadata={}, tool_call_id=call_id)
 
 
 def _duration_ms(start: float) -> int:

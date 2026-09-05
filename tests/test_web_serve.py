@@ -7368,6 +7368,90 @@ def test_manager_start_retries_busy_lease_then_succeeds(monkeypatch, tmp_path) -
     manager.shutdown()
 
 
+def test_manager_lease_heartbeat_recovers_from_locked_store_open(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    manager = WebSessionManager(_settings())
+    recovered = threading.Event()
+    attempts = 0
+
+    def open_store():
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise sqlite3.OperationalError("database is locked")
+        store = SessionStore()
+        recovered.set()
+        return store
+
+    try:
+        with (
+            patch(
+                "pbi_agent.web.session.workers._WEB_MANAGER_LEASE_HEARTBEAT_SECS",
+                0.01,
+            ),
+            patch(
+                "pbi_agent.web.session.workers._WEB_MANAGER_LEASE_BUSY_RETRY_DELAY_SECS",
+                0.01,
+            ),
+            patch(
+                "pbi_agent.web.session.workers.SessionStore",
+                side_effect=open_store,
+            ),
+        ):
+            manager.start()
+            assert recovered.wait(timeout=2)
+            time.sleep(0.04)
+            assert attempts == 2
+            assert manager._lease_thread is not None
+            assert manager._lease_thread.is_alive()
+            assert manager._started is True
+    finally:
+        manager.shutdown()
+
+
+def test_manager_lease_heartbeat_keeps_retrying_while_database_is_locked(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    manager = WebSessionManager(_settings())
+    retried = threading.Event()
+    attempts = 0
+
+    def locked_store():
+        nonlocal attempts
+        attempts += 1
+        if attempts >= 3:
+            retried.set()
+        raise sqlite3.OperationalError("database is locked")
+
+    try:
+        with (
+            patch(
+                "pbi_agent.web.session.workers._WEB_MANAGER_LEASE_HEARTBEAT_SECS",
+                0.01,
+            ),
+            patch(
+                "pbi_agent.web.session.workers._WEB_MANAGER_LEASE_BUSY_RETRY_DELAY_SECS",
+                0.01,
+            ),
+            patch(
+                "pbi_agent.web.session.workers.SessionStore",
+                side_effect=locked_store,
+            ),
+        ):
+            manager.start()
+            assert retried.wait(timeout=2)
+            assert manager._lease_thread is not None
+            assert manager._lease_thread.is_alive()
+            assert manager._started is True
+    finally:
+        manager.shutdown()
+
+
 def test_shutdown_keeps_lease_until_noncooperative_live_worker_stops(
     monkeypatch, tmp_path
 ) -> None:
@@ -8503,6 +8587,191 @@ def test_web_display_processing_state_has_no_intermediate_inactive_tool_flow() -
     assert all(payload["active"] for payload in processing_payloads[:-1])
 
 
+def test_web_display_interrupts_only_active_shell_tool_call() -> None:
+    published: list[tuple[str, dict]] = []
+    display = WebDisplay(
+        publish_event=lambda event_type, payload: published.append(
+            (event_type, payload)
+        )
+    )
+    display.assistant_start()
+    display.tool_execution_start(
+        [
+            PendingToolCall(
+                call_id="call-shell",
+                name="shell",
+                arguments={"command": "sleep 30"},
+            ),
+            PendingToolCall(
+                call_id="call-read",
+                name="explore_workspace",
+                arguments={"pattern": "README"},
+            ),
+        ]
+    )
+
+    display.request_tool_interrupt("call-shell")
+
+    assert display.tool_interrupt_requested("call-shell") is True
+    assert display.tool_interrupt_requested("call-read") is False
+    assert display.interrupt_requested() is False
+    with pytest.raises(RuntimeError, match="No running shell tool call"):
+        display.request_tool_interrupt("call-read")
+
+    display.function_result(
+        "shell",
+        True,
+        call_id="call-shell",
+        arguments={"command": "sleep 30"},
+        result={
+            "ok": True,
+            "result": {
+                "stdout": "",
+                "stderr": "",
+                "exit_code": 130,
+                "interrupted": True,
+                "error": "Command interrupted by user.",
+            },
+        },
+    )
+
+    assert display.tool_interrupt_requested("call-shell") is False
+    tool_events = [
+        payload for event_type, payload in published if event_type == "tool_group_added"
+    ]
+    interrupted_metadata = tool_events[-1]["items"][0]["metadata"]
+    assert interrupted_metadata["status"] == "failed"
+    assert interrupted_metadata["success"] is False
+    assert interrupted_metadata["interrupted"] is True
+
+
+def test_web_display_routes_shell_interrupt_to_sub_agent_display() -> None:
+    published: list[tuple[str, dict]] = []
+    display = WebDisplay(
+        publish_event=lambda event_type, payload: published.append(
+            (event_type, payload)
+        )
+    )
+    display.tool_execution_start(
+        [
+            PendingToolCall(
+                call_id="shared-call-id",
+                name="shell",
+                arguments={"command": "sleep 30"},
+            )
+        ]
+    )
+    child_display = display.begin_sub_agent(
+        task_instruction="Run a command",
+        name="worker",
+    )
+    child_display.tool_execution_start(
+        [
+            PendingToolCall(
+                call_id="shared-call-id",
+                name="shell",
+                arguments={"command": "sleep 30"},
+            )
+        ]
+    )
+    child_state_events = [
+        payload for event_type, payload in published if event_type == "sub_agent_state"
+    ]
+    child_id = child_state_events[-1]["sub_agent_id"]
+
+    display.request_tool_interrupt(
+        "shared-call-id",
+        sub_agent_id=child_id,
+    )
+
+    assert child_display.tool_interrupt_requested("shared-call-id") is True
+    assert display.tool_interrupt_requested("shared-call-id") is False
+    assert display.interrupt_requested() is False
+
+    child_display.function_result(
+        "shell",
+        True,
+        call_id="shared-call-id",
+        arguments={"command": "sleep 30"},
+        result={
+            "ok": True,
+            "result": {
+                "exit_code": 130,
+                "interrupted": True,
+            },
+        },
+    )
+    assert child_display.tool_interrupt_requested("shared-call-id") is False
+
+    display.request_tool_interrupt("shared-call-id")
+    assert display.tool_interrupt_requested("shared-call-id") is True
+
+
+def test_saved_session_tool_call_interrupt_endpoint_targets_shell_only(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    def idle_run_session_loop(
+        _settings,
+        display,
+        *,
+        resume_session_id=None,
+        on_reload=None,
+        run_session_id=None,
+        **kwargs,
+    ):
+        del _settings, resume_session_id, on_reload, run_session_id, kwargs
+        while True:
+            if display.user_prompt() == "exit":
+                return 0
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Saved session",
+        )
+
+    app = create_app(_settings())
+    with patch(
+        "pbi_agent.web.session.workers.run_session_loop",
+        idle_run_session_loop,
+    ):
+        with TestClient(app) as client:
+            created = app.state.manager.create_live_session(session_id=session_id)
+            live_session = app.state.manager._live_sessions[created["live_session_id"]]
+            live_session.display.assistant_start()
+            live_session.display.tool_execution_start(
+                [
+                    PendingToolCall(
+                        call_id="call-shell",
+                        name="shell",
+                        arguments={"command": "sleep 30"},
+                    )
+                ]
+            )
+
+            response = client.post(
+                f"/api/sessions/{session_id}/tool-calls/call-shell/interrupt",
+                json={},
+            )
+            missing_response = client.post(
+                f"/api/sessions/{session_id}/tool-calls/call-other/interrupt",
+                json={},
+            )
+
+    assert response.status_code == 200
+    assert response.json()["session"]["session_id"] == session_id
+    assert live_session.display.tool_interrupt_requested("call-shell") is True
+    assert live_session.display.interrupt_requested() is False
+    assert missing_response.status_code == 400
+    assert "No running shell tool call" in missing_response.json()["detail"]
+
+
 @pytest.mark.parametrize(
     "markup",
     [
@@ -9115,6 +9384,125 @@ def test_saved_session_shell_command_reenables_input_after_output(
     ]
     assert input_enabled_after_command is True
     assert response["last_event_seq"] == last_event_seq_after_command
+
+
+def test_saved_session_interrupt_stops_direct_shell_without_removing_command(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    shell_started = threading.Event()
+
+    def idle_run_session_loop(
+        _settings,
+        display,
+        *,
+        resume_session_id=None,
+        on_reload=None,
+        run_session_id=None,
+        **kwargs,
+    ):
+        del _settings, resume_session_id, on_reload, run_session_id, kwargs
+        while True:
+            if display.user_prompt() == "exit":
+                return 0
+
+    def blocking_shell_handle(_arguments, context):
+        shell_started.set()
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            if context.display.interrupt_requested():
+                return {
+                    "stdout": "",
+                    "stderr": "",
+                    "exit_code": 130,
+                    "interrupted": True,
+                    "error": "Command interrupted by user.",
+                }
+            time.sleep(0.01)
+        raise AssertionError("Shell command did not receive the interrupt signal.")
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "",
+        )
+
+    manager = WebSessionManager(_settings())
+    manager.start()
+    command_response: dict[str, object] = {}
+    try:
+        with (
+            patch(
+                "pbi_agent.web.session.workers.run_session_loop",
+                idle_run_session_loop,
+            ),
+            patch(
+                "pbi_agent.web.session.live_sessions.shell_tool.handle",
+                side_effect=blocking_shell_handle,
+            ),
+        ):
+            created = manager.create_live_session(session_id=session_id)
+            live_session_id = str(created["live_session_id"])
+            live_session = manager._live_sessions[live_session_id]
+            command_worker = threading.Thread(
+                target=lambda: command_response.update(
+                    manager.run_saved_session_shell_command(
+                        session_id,
+                        command="sleep 30",
+                    )
+                )
+            )
+            command_worker.start()
+            assert shell_started.wait(timeout=2)
+            with pytest.raises(
+                RuntimeError,
+                match="Messages cannot be sent while a shell command is running",
+            ):
+                manager.submit_saved_session_input(
+                    session_id,
+                    text="stale tab message",
+                )
+
+            interrupted = manager.interrupt_saved_session(session_id)
+
+            command_worker.join(timeout=2)
+            assert not command_worker.is_alive()
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                if not live_session.display.direct_shell_command_active():
+                    break
+                time.sleep(0.01)
+            assert live_session.display.direct_shell_command_active() is False
+            reserved_shell_token = live_session.display.begin_direct_shell_command()
+            try:
+                with pytest.raises(RuntimeError, match="already running"):
+                    manager.run_saved_session_shell_command(
+                        session_id,
+                        command="echo duplicate",
+                    )
+            finally:
+                live_session.display.finish_direct_shell_command(reserved_shell_token)
+            events = live_session.event_stream.snapshot()
+            assert interrupted["live_session_id"] == live_session_id
+            assert live_session.snapshot.input_enabled is True
+            assert live_session.display.interrupt_requested() is False
+    finally:
+        manager.shutdown()
+
+    assert not any(event.get("type") == "message_removed" for event in events)
+    assert command_response["live_session_id"] == live_session_id
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        messages = store.list_messages(session_id)
+        session = store.get_session(session_id)
+    assert [message.content for message in messages[:1]] == ["!sleep 30"]
+    assert all(message.content != "stale tab message" for message in messages)
+    assert "Status: `interrupted`" in messages[-1].content
+    assert session is not None
+    assert session.title == ""
 
 
 def test_web_session_worker_records_turn_run_separately_from_live_projection(
@@ -12124,7 +12512,7 @@ def test_provider_model_discovery_endpoint_lists_chatgpt_openai_models(
     assert len(requests_seen) == 1
     assert (
         requests_seen[0].full_url
-        == "https://chatgpt.com/backend-api/codex/models?client_version=0.144.1"
+        == "https://chatgpt.com/backend-api/codex/models?client_version=0.153.4"
     )
     headers = {key.lower(): value for key, value in requests_seen[0].header_items()}
     assert headers["authorization"].startswith("Bearer ")

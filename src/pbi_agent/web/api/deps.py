@@ -27,6 +27,10 @@ SessionIdPath = Annotated[
     str,
     FastAPIPath(min_length=1, description="The saved session identifier."),
 ]
+ToolCallIdPath = Annotated[
+    str,
+    FastAPIPath(min_length=1, description="The active model tool-call identifier."),
+]
 RunSessionIdPath = Annotated[
     str,
     FastAPIPath(min_length=1, description="The observability run session identifier."),

@@ -881,6 +881,34 @@ export async function interruptSession(sessionId: string): Promise<LiveSession> 
   return result.session;
 }
 
+export async function interruptSessionToolCall(
+  sessionId: string,
+  callId: string,
+  subAgentId: string | null,
+): Promise<LiveSession> {
+  const result = await apiRequest<
+    "POST /api/sessions/{session_id}/tool-calls/{call_id}/interrupt",
+    LiveSessionResponsePayload
+  >(
+    "POST /api/sessions/{session_id}/tool-calls/{call_id}/interrupt",
+    pathFor(
+      "POST /api/sessions/{session_id}/tool-calls/{call_id}/interrupt",
+      {
+        session_id: sessionId,
+        call_id: callId,
+      },
+    ),
+    {
+      method: "POST",
+      body: jsonBody(
+        "POST /api/sessions/{session_id}/tool-calls/{call_id}/interrupt",
+        { sub_agent_id: subAgentId },
+      ),
+    },
+  );
+  return result.session;
+}
+
 export async function uploadTaskImages(files: File[]): Promise<ImageAttachment[]> {
   const formData = new FormData();
   for (const file of files) {

@@ -13,6 +13,7 @@ from pbi_agent.web.api.deps import (
     RunSessionIdPath,
     SessionIdPath,
     SessionManagerDep,
+    ToolCallIdPath,
     UploadIdPath,
     model_from_payload,
 )
@@ -60,6 +61,7 @@ from pbi_agent.web.api.schemas.system import (
     SkillMentionSearchResponse,
     SlashCommandItemModel,
     SubmitQuestionResponseRequest,
+    ToolCallInterruptRequest,
     SlashCommandSearchResponse,
     WorkspaceListResponse,
     WorkspaceFilePreviewResponse,
@@ -381,6 +383,29 @@ def interrupt_session_run(
 ) -> LiveSessionResponse:
     try:
         session = manager.interrupt_saved_session(session_id)
+    except KeyError as exc:
+        raise not_found("Active session run not found.") from exc
+    except Exception as exc:
+        raise bad_request(str(exc)) from exc
+    return LiveSessionResponse(session=model_from_payload(LiveSessionModel, session))
+
+
+@router.post(
+    "/sessions/{session_id}/tool-calls/{call_id}/interrupt",
+    response_model=LiveSessionResponse,
+)
+def interrupt_session_tool_call(
+    session_id: SessionIdPath,
+    call_id: ToolCallIdPath,
+    request: ToolCallInterruptRequest,
+    manager: SessionManagerDep,
+) -> LiveSessionResponse:
+    try:
+        session = manager.interrupt_saved_session_tool_call(
+            session_id,
+            call_id=call_id,
+            sub_agent_id=request.sub_agent_id,
+        )
     except KeyError as exc:
         raise not_found("Active session run not found.") from exc
     except Exception as exc:

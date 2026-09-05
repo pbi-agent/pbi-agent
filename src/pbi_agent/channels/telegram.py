@@ -191,6 +191,19 @@ class TelegramDisplay:
     def interrupt_requested(self) -> bool:
         return self.shutdown_requested
 
+    def request_tool_interrupt(
+        self,
+        call_id: str,
+        *,
+        sub_agent_id: str | None = None,
+    ) -> None:
+        del call_id, sub_agent_id
+        raise RuntimeError("Telegram tool calls cannot be interrupted remotely.")
+
+    def tool_interrupt_requested(self, call_id: str) -> bool:
+        del call_id
+        return False
+
     def submit_input(
         self,
         value: str,

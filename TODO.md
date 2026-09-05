@@ -1,5 +1,3 @@
-- [x] Inspect the failing session's persisted messages, runs, and events
-- [x] Identify and reproduce the crash-resume history mismatch
-- [x] Fix history reconstruction and add regression coverage
-- [x] Run focused and required backend validation
-- [x] Update task memory
+- [x] Review the Codex version bump and all affected call sites
+- [x] Run focused provider/model-discovery tests (99 passed); Ruff, format, and basedpyright passed
+- [x] Report actionable findings and overall correctness

@@ -24,6 +24,7 @@ import {
   fetchWorkspaceFileTree,
   forkSession,
   interruptSession,
+  interruptSessionToolCall,
   runSessionShellCommand,
   sendQueuedFollowUp,
   sendSessionMessage,
@@ -393,6 +394,24 @@ export function SessionPage({
       }
     },
   });
+
+  const interruptShellToolMutation = useMutation({
+    mutationFn: (callId: string) => {
+      const sessionId = routeSessionId ?? sessionState?.sessionId;
+      if (!sessionId) throw new Error("No session available.");
+      return interruptSessionToolCall(
+        sessionId,
+        callId,
+        routeSubAgentId ?? null,
+      );
+    },
+    onSuccess: (session) => {
+      if (selectedRouteSessionKey) {
+        updateRuntimeFromSession(selectedRouteSessionKey, session);
+      }
+    },
+  });
+  const requestShellToolInterrupt = interruptShellToolMutation.mutate;
 
   const sendQueuedFollowUpMutation = useMutation({
     mutationFn: (followUpId: string) => {
@@ -1226,6 +1245,14 @@ export function SessionPage({
           <AlertDescription>{interruptMutation.error.message}</AlertDescription>
         </Alert>
       ) : null}
+      {interruptShellToolMutation.error ? (
+        <Alert variant="destructive" className="banner banner--error">
+          <AlertTriangleIcon />
+          <AlertDescription>
+            {interruptShellToolMutation.error.message}
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {!isSubAgentRoute && sendQueuedFollowUpMutation.error ? (
         <Alert variant="destructive" className="banner banner--error">
           <AlertTriangleIcon />
@@ -1274,6 +1301,14 @@ export function SessionPage({
             parentSessionId={routeSessionId ?? sessionState?.sessionId ?? undefined}
             showSubAgentCards={!isSubAgentRoute}
             onForkMessage={!isSubAgentRoute ? handleForkMessage : undefined}
+            interruptingShellCallId={
+              interruptShellToolMutation.isPending
+                ? interruptShellToolMutation.variables
+                : null
+            }
+            onInterruptShellTool={
+              requestShellToolInterrupt
+            }
           />
           {!isSubAgentRoute && sessionState?.pendingUserQuestions ? (
             <UserQuestionsPanel

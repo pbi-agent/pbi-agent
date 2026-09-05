@@ -501,7 +501,13 @@ def _format_shell_command_output(  # pyright: ignore[reportUnusedFunction] - imp
     if not isinstance(result, dict):
         return f"## Shell command output\n\n```text\n{result}\n```"
     exit_code = result.get("exit_code")
-    status = "timed out" if result.get("timed_out") else f"exit code {exit_code}"
+    status = (
+        "interrupted"
+        if result.get("interrupted")
+        else "timed out"
+        if result.get("timed_out")
+        else f"exit code {exit_code}"
+    )
     sections = ["## Shell command output", "", f"Status: `{status}`"]
     error = str(result.get("error") or "").strip()
     if error:

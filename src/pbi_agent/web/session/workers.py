@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import threading
 import uuid
 from typing import Any
@@ -19,10 +20,22 @@ from pbi_agent.web.session.state import _now_iso
 from pbi_agent.web.uploads import load_uploaded_image
 
 _WEB_MANAGER_LEASE_HEARTBEAT_SECS = 5.0
+_WEB_MANAGER_LEASE_BUSY_RETRY_DELAY_SECS = 0.25
 _SHUTDOWN_INTERRUPTED_MESSAGE = "Interrupted during app shutdown."
 _TASK_FINALIZATION_PERSISTENCE_FAILED_MESSAGE = (
     "Failed to persist terminal live session finalization."
 )
+
+
+def _is_sqlite_busy_error(exc: sqlite3.OperationalError) -> bool:
+    error_code = getattr(exc, "sqlite_errorcode", None)
+    if isinstance(error_code, int) and error_code & 0xFF in {
+        sqlite3.SQLITE_BUSY,
+        sqlite3.SQLITE_LOCKED,
+    }:
+        return True
+    message = str(exc).lower()
+    return "locked" in message or "busy" in message
 
 
 class WorkersMixin:
@@ -411,15 +424,26 @@ class WorkersMixin:
             self._finalize_shutdown_if_idle()
 
     def _renew_manager_lease_loop(self) -> None:
-        while not self._lease_stop.wait(_WEB_MANAGER_LEASE_HEARTBEAT_SECS):
-            with SessionStore() as store:
-                renewed = store.renew_web_manager_lease(
-                    self._directory_key,
-                    owner_id=self._manager_owner_id,
-                )
-            if not renewed:
-                self.shutdown()
-                return
+        if self._lease_stop.wait(_WEB_MANAGER_LEASE_HEARTBEAT_SECS):
+            return
+        while not self._lease_stop.is_set():
+            try:
+                with SessionStore() as store:
+                    while not self._lease_stop.is_set():
+                        renewed = store.renew_web_manager_lease(
+                            self._directory_key,
+                            owner_id=self._manager_owner_id,
+                        )
+                        if not renewed:
+                            self.shutdown()
+                            return
+                        if self._lease_stop.wait(_WEB_MANAGER_LEASE_HEARTBEAT_SECS):
+                            return
+            except sqlite3.OperationalError as exc:
+                if not _is_sqlite_busy_error(exc):
+                    raise
+                if self._lease_stop.wait(_WEB_MANAGER_LEASE_BUSY_RETRY_DELAY_SECS):
+                    return
 
     def _interrupt_noncooperative_workers(self) -> None:
         stale_live_sessions = []

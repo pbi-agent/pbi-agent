@@ -1,7 +1,14 @@
 from __future__ import annotations
 
+import shlex
+import os
 import subprocess
+import sys
+import threading
+import time
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
@@ -155,6 +162,155 @@ def test_shell_handle_honors_requested_timeout(
 
     assert result["exit_code"] == 0
     assert seen == {"timeout": 12.345}
+
+
+def test_shell_handle_interrupts_running_process_from_display(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    interrupted = threading.Event()
+    display = SimpleNamespace(interrupt_requested=interrupted.is_set)
+    script = "import time; time.sleep(30)"
+    command = (
+        subprocess.list2cmdline([sys.executable, "-c", script])
+        if os.name == "nt"
+        else f"{shlex.quote(sys.executable)} -c {shlex.quote(script)}"
+    )
+    timer = threading.Timer(0.2, interrupted.set)
+
+    started_at = time.monotonic()
+    timer.start()
+    try:
+        result = shell_tool.handle(
+            {
+                "command": command,
+                "compression": False,
+                "timeout_ms": 10_000,
+            },
+            ToolContext(display=cast(Any, display)),
+        )
+    finally:
+        timer.cancel()
+
+    assert time.monotonic() - started_at < 5
+    assert result == {
+        "stdout": "",
+        "stderr": "",
+        "exit_code": 130,
+        "interrupted": True,
+        "error": "Command interrupted by user.",
+    }
+
+
+def test_shell_handle_interrupts_only_targeted_tool_call(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    interrupted_call_ids: set[str] = set()
+    display = SimpleNamespace(
+        interrupt_requested=lambda: False,
+        tool_interrupt_requested=lambda call_id: call_id in interrupted_call_ids,
+    )
+    script = "import time; time.sleep(30)"
+    command = (
+        subprocess.list2cmdline([sys.executable, "-c", script])
+        if os.name == "nt"
+        else f"{shlex.quote(sys.executable)} -c {shlex.quote(script)}"
+    )
+    timer = threading.Timer(0.2, interrupted_call_ids.add, args=("call-shell",))
+
+    started_at = time.monotonic()
+    timer.start()
+    try:
+        result = shell_tool.handle(
+            {
+                "command": command,
+                "compression": False,
+                "timeout_ms": 10_000,
+            },
+            ToolContext(
+                display=cast(Any, display),
+                tool_call_id="call-shell",
+            ),
+        )
+    finally:
+        timer.cancel()
+
+    assert time.monotonic() - started_at < 5
+    assert result["exit_code"] == 130
+    assert result["interrupted"] is True
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-group behavior")
+def test_shell_handle_interrupts_descendant_after_shell_leader_exits(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    interrupted = threading.Event()
+    display = SimpleNamespace(interrupt_requested=interrupted.is_set)
+    timer = threading.Timer(0.2, interrupted.set)
+
+    started_at = time.monotonic()
+    timer.start()
+    try:
+        result = shell_tool.handle(
+            {
+                "command": "sleep 30 &",
+                "compression": False,
+                "timeout_ms": 10_000,
+            },
+            ToolContext(display=cast(Any, display)),
+        )
+    finally:
+        timer.cancel()
+
+    assert time.monotonic() - started_at < 5
+    assert result["exit_code"] == 130
+    assert result["interrupted"] is True
+
+
+def test_shell_handle_stops_process_before_propagating_keyboard_interrupt(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    display = SimpleNamespace(interrupt_requested=lambda: False)
+
+    def interrupt_communication(**_kwargs: object) -> tuple[bytes, bytes]:
+        raise KeyboardInterrupt
+
+    class FakePopen:
+        pid = 123
+        returncode = None
+
+        @classmethod
+        def __class_getitem__(cls, _item: object) -> type["FakePopen"]:
+            return cls
+
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        communicate = staticmethod(interrupt_communication)
+
+    stopped: list[object] = []
+    monkeypatch.setattr(shell_tool.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(
+        shell_tool,
+        "_stop_process",
+        lambda active_process: stopped.append(active_process) or (b"", b""),
+    )
+
+    with pytest.raises(KeyboardInterrupt):
+        shell_tool.handle(
+            {"command": "long-running"},
+            ToolContext(display=cast(Any, display)),
+        )
+
+    assert len(stopped) == 1
+    assert isinstance(stopped[0], FakePopen)
 
 
 def test_shell_handle_compresses_non_empty_streams_by_default(

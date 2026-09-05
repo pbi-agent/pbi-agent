@@ -36,6 +36,7 @@ class DisplaySpy:
         self.tool_execution_stop_count = 0
         self.tool_group_end_count = 0
         self.web_search_sources_calls: list[list[WebSearchSource]] = []
+        self.interrupted_tool_call_ids: set[str] = set()
 
     def begin_sub_agent(
         self,
@@ -115,6 +116,18 @@ class DisplaySpy:
 
     def tool_execution_stop(self) -> None:
         self.tool_execution_stop_count += 1
+
+    def request_tool_interrupt(
+        self,
+        call_id: str,
+        *,
+        sub_agent_id: str | None = None,
+    ) -> None:
+        del sub_agent_id
+        self.interrupted_tool_call_ids.add(call_id)
+
+    def tool_interrupt_requested(self, call_id: str) -> bool:
+        return call_id in self.interrupted_tool_call_ids
 
     def function_result(
         self,

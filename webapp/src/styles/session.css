@@ -2939,9 +2939,45 @@
 
 .tool-result-card__actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: var(--sp-2);
+}
+
+.tool-result-card__action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid color-mix(in srgb, var(--destructive) 22%, var(--color-border-subtle));
+  background: color-mix(in srgb, var(--destructive) 6%, transparent);
+}
+
+.tool-result-card__action-hint {
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+.tool-result-card__interrupt-button {
+  padding-inline: var(--sp-3);
+  border-color: var(--destructive);
+  color: var(--background);
+  background: var(--destructive);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--destructive) 28%, transparent);
+}
+
+.tool-result-card__interrupt-button:has([data-icon="inline-start"]) {
+  padding-inline-start: var(--sp-2);
+}
+
+.tool-result-card__interrupt-button:hover:not(:disabled) {
+  border-color: var(--destructive);
+  color: var(--background);
+  background: color-mix(in srgb, var(--destructive) 88%, var(--background));
 }
 
 .tool-result-card__content {

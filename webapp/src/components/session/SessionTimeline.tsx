@@ -1085,6 +1085,8 @@ function WorkingItemsPanel({
   subAgentItems,
   closeSignal,
   parentSessionId,
+  interruptingShellCallId,
+  onInterruptShellTool,
   showSubAgentCards = true,
   fullExpanded = false,
 }: {
@@ -1093,6 +1095,8 @@ function WorkingItemsPanel({
   subAgentItems: Record<string, WorkItem[]>;
   closeSignal: string | null;
   parentSessionId?: string;
+  interruptingShellCallId?: string | null;
+  onInterruptShellTool?: (callId: string) => void;
   showSubAgentCards?: boolean;
   fullExpanded?: boolean;
 }) {
@@ -1294,6 +1298,10 @@ function WorkingItemsPanel({
                       metadata={entry.entry.metadata}
                       text={entry.entry.text}
                       running={entry.status === "running"}
+                      interrupting={
+                        interruptingShellCallId === entry.entry.metadata?.call_id
+                      }
+                      onInterrupt={onInterruptShellTool}
                     />
                   </div>
                 </AccordionPrimitive.Content>
@@ -1491,6 +1499,8 @@ function WorkRun({
   onOpenChange,
   onUserOpen,
   parentSessionId,
+  interruptingShellCallId,
+  onInterruptShellTool,
   showSubAgentCards,
   durationSeconds,
   subAgentItems,
@@ -1505,6 +1515,8 @@ function WorkRun({
   onOpenChange: (nextOpen: boolean) => void;
   onUserOpen?: (contentEl: HTMLElement | null) => void;
   parentSessionId?: string;
+  interruptingShellCallId?: string | null;
+  onInterruptShellTool?: (callId: string) => void;
   showSubAgentCards?: boolean;
   durationSeconds?: number | null;
   subAgentItems: Record<string, WorkItem[]>;
@@ -1632,6 +1644,8 @@ function WorkRun({
                 subAgents={subAgents}
                 closeSignal={closeSignal}
                 parentSessionId={parentSessionId}
+                interruptingShellCallId={interruptingShellCallId}
+                onInterruptShellTool={onInterruptShellTool}
                 showSubAgentCards={showSubAgentCards}
                 fullExpanded={fullExpanded}
                 subAgentItems={subAgentItems}
@@ -1833,6 +1847,8 @@ type SessionTimelineProps = {
   parentSessionId?: string;
   showSubAgentCards?: boolean;
   onForkMessage?: (messageId: string) => void;
+  interruptingShellCallId?: string | null;
+  onInterruptShellTool?: (callId: string) => void;
 };
 
 function processingStatesEqual(
@@ -1877,6 +1893,8 @@ function areSessionTimelinePropsEqual(
     && previous.turnCostUsd === next.turnCostUsd
     && previous.subAgentItems === next.subAgentItems
     && previous.onForkMessage === next.onForkMessage
+    && previous.interruptingShellCallId === next.interruptingShellCallId
+    && previous.onInterruptShellTool === next.onInterruptShellTool
     && subAgentSummariesEqual(previous.subAgents, next.subAgents);
 }
 
@@ -1893,6 +1911,8 @@ export const SessionTimeline = memo(function SessionTimeline({
   parentSessionId,
   showSubAgentCards = true,
   onForkMessage,
+  interruptingShellCallId,
+  onInterruptShellTool,
 }: SessionTimelineProps) {
   const previousLengthRef = useRef<number | undefined>(undefined);
   const previousItemsVersionRef = useRef<number | string | undefined>(undefined);
@@ -2324,6 +2344,8 @@ export const SessionTimeline = memo(function SessionTimeline({
                   isActiveUnit ? handleUserOpenCollapsible : undefined
                 }
                 parentSessionId={parentSessionId}
+                interruptingShellCallId={interruptingShellCallId}
+                onInterruptShellTool={onInterruptShellTool}
                 showSubAgentCards={showSubAgentCards}
                 durationSeconds={workRunDurationSeconds}
                 subAgentItems={subAgentItems}

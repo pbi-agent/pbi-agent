@@ -378,6 +378,10 @@ class LiveSessionShellCommandRequest(BaseModel):
     command: str = ""
 
 
+class ToolCallInterruptRequest(BaseModel):
+    sub_agent_id: str | None = None
+
+
 class NewSessionRequest(BaseModel):
     profile_id: str | None = None
 

@@ -6,6 +6,7 @@ import {
   FileTextIcon,
   GlobeIcon,
   SearchIcon,
+  SquareIcon,
   TerminalIcon,
   WrenchIcon,
   XCircleIcon,
@@ -15,6 +16,7 @@ import { inferShellOutputLanguage } from "@/lib/code-language";
 import { cn } from "@/lib/utils";
 import type { ToolCallMetadata } from "../../types";
 import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
 import {
   Card,
   CardAction,
@@ -34,11 +36,17 @@ type ToolResultProps = {
   metadata?: ToolCallMetadata;
   text: string;
   running?: boolean;
+  interrupting?: boolean;
+  onInterrupt?: (callId: string) => void;
 };
 
-
-
-export function ToolResult({ metadata, text, running = false }: ToolResultProps) {
+export function ToolResult({
+  metadata,
+  text,
+  running = false,
+  interrupting = false,
+  onInterrupt,
+}: ToolResultProps) {
   const toolName = toolNameFor(metadata);
   if (metadata && isApplyPatchToolMetadata(metadata) && !running) {
     return <GitDiffResult metadata={metadata} />;
@@ -48,7 +56,15 @@ export function ToolResult({ metadata, text, running = false }: ToolResultProps)
   }
 
   if (toolName === "shell") {
-    return <ShellToolResult metadata={metadata} text={text} running={running} />;
+    return (
+      <ShellToolResult
+        metadata={metadata}
+        text={text}
+        running={running}
+        interrupting={interrupting}
+        onInterrupt={onInterrupt}
+      />
+    );
   }
   if (toolName === "read_image") {
     return <ReadImageToolResult metadata={metadata} text={text} running={running} />;
@@ -90,7 +106,12 @@ function FileEditRunningToolResult({ metadata, running }: ToolResultProps) {
   );
 }
 
-function ShellToolResult({ metadata, running }: ToolResultProps) {
+function ShellToolResult({
+  metadata,
+  running,
+  interrupting,
+  onInterrupt,
+}: ToolResultProps) {
   const args = objectValue(metadata?.arguments);
   const result = objectValue(metadata?.result);
   const command = stringValue(metadata?.command) ?? stringValue(args?.command) ?? "<missing command>";
@@ -100,10 +121,12 @@ function ShellToolResult({ metadata, running }: ToolResultProps) {
     ? metadata.exit_code
     : numberOrNull(result?.exit_code);
   const timedOut = Boolean(metadata?.timed_out ?? result?.timed_out);
+  const interrupted = Boolean(metadata?.interrupted ?? result?.interrupted);
   const stdout = stringValue(result?.stdout) ?? "";
   const stderr = stringValue(result?.stderr) ?? "";
   const error = errorText(metadata?.error ?? result?.error);
   const stdoutLanguage = inferShellOutputLanguage(command);
+  const callId = metadata?.call_id;
 
   return (
     <ToolCard
@@ -112,7 +135,23 @@ function ShellToolResult({ metadata, running }: ToolResultProps) {
       icon={<TerminalIcon />}
       title={command}
       description={[cwd, timeout ? `timeout ${timeout}ms` : null].filter(Boolean).join(" · ")}
-      statusLabel={timedOut ? "Timed out" : running || exitCode === null || exitCode === undefined ? "Running" : exitCode === 0 ? "Done" : `Exit ${exitCode}`}
+      statusLabel={interrupted ? "Interrupted" : timedOut ? "Timed out" : running || exitCode === null || exitCode === undefined ? "Running" : exitCode === 0 ? "Done" : `Exit ${exitCode}`}
+      headerAction={
+        running && callId && onInterrupt ? (
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            className="tool-result-card__interrupt-button"
+            disabled={interrupting}
+            aria-label="Stop running shell command"
+            onClick={() => onInterrupt(callId)}
+          >
+            <SquareIcon data-icon="inline-start" aria-hidden="true" />
+            {interrupting ? "Stopping…" : "Stop command"}
+          </Button>
+        ) : null
+      }
     >
       {error ? <ToolNotice tone="error" label="Error" value={error} /> : null}
       <CodeOutputBlock
@@ -290,13 +329,14 @@ function GenericToolResult({ metadata, text, running }: ToolResultProps) {
   );
 }
 
-function ToolCard({ metadata, running, icon, title, description, statusLabel, className, children }: {
+function ToolCard({ metadata, running, icon, title, description, statusLabel, headerAction, className, children }: {
   metadata?: ToolCallMetadata;
   running?: boolean;
   icon: ReactNode;
   title: string;
   description?: string;
   statusLabel?: string;
+  headerAction?: ReactNode;
   className?: string;
   children: ReactNode;
 }) {
@@ -328,6 +368,12 @@ function ToolCard({ metadata, running, icon, title, description, statusLabel, cl
           ) : null}
         </CardAction>
       </CardHeader>
+      {headerAction ? (
+        <div className="tool-result-card__action-bar">
+          <span className="tool-result-card__action-hint">Shell command is still running</span>
+          {headerAction}
+        </div>
+      ) : null}
       <CardContent className="tool-result-card__content">
         {children}
         {metadata?.call_id ? <Badge variant="ghost" size="meta">{metadata.call_id}</Badge> : null}
