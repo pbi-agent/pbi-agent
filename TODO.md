@@ -1,3 +1,2 @@
-- [x] Review the Codex version bump and all affected call sites
-- [x] Run focused provider/model-discovery tests (99 passed); Ruff, format, and basedpyright passed
-- [x] Report actionable findings and overall correctness
+- [x] Review the system_prompt.py diff against callers and prompt tests
+- [x] Run focused validation and report the component-command regression test failure; Ruff, formatting, and basedpyright passed
