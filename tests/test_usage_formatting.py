@@ -76,6 +76,20 @@ def test_unknown_model_returns_zero_cost() -> None:
     assert usage.estimated_cost_usd == 0.0
 
 
+@pytest.mark.parametrize("model", ["gpt-6-astra", "GPT-6-ASTRA", "gpt-6-astra-variant"])
+def test_gpt_6_astra_pricing(model: str) -> None:
+    assert _pricing_for_model(model) == (10.00, 12.50, 12.50, 1.00, 50.00)
+    usage = TokenUsage(
+        model=model,
+        input_tokens=4_000_000,
+        cached_input_tokens=1_000_000,
+        cache_write_tokens=1_000_000,
+        cache_write_1h_tokens=1_000_000,
+        output_tokens=1_000_000,
+    )
+    assert usage.estimated_cost_usd == pytest.approx(86.00)
+
+
 def test_known_model_pricing() -> None:
     pricing = _pricing_for_model("gpt-5.6-sol")
     assert pricing == (5.00, 6.25, 6.25, 0.50, 30.00)
