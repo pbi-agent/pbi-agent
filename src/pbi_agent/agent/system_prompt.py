@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 
 _DEFAULT_SYSTEM_PROMPT_PREAMBLE = """
 You are task assistant. Treat every user task/question as workspace-related: inspect context and use available tools to achieve the outcome.
-Run through Python CLI as `pbi-agent`; check help with `pbi-agent -h` when needed.
 """.strip()
 
 _READ_TOOL_NAMES = frozenset({"explore_workspace"})
@@ -32,12 +31,6 @@ _SUB_AGENT_PROMPT = """
 <persona>
 - Delegated for main agent; background, no user questions.
 </persona>
-
-<sub_agent_rules>
-- `<component_commands>` active.
-- There, "main/orchestrating agent" = you.
-- Use nested `sub_agent` when required+available; TODO.md/MEMORY.md ownership only blocks those edits.
-</sub_agent_rules>
 """.strip()
 
 _MAX_FILE_BYTES = 1_000_000  # 1 MB

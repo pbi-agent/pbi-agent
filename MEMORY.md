@@ -60,3 +60,4 @@
 
 ## 2026-09-05
 - Updated ChatGPT Codex client version 0.144.1 → 0.153.4 from ~/codex's latest stable tag; aligned user-agent/model-discovery regression expectations. Validation: 99 focused provider/discovery/API tests, Ruff, format check, basedpyright, and diff check passed. No live subscription request tested.
+- Added user-supplied `gpt-6-astra` standard short-context pricing per MTok: input $10, cached $1, writes $12.50 (both existing write buckets), output $50; context window left unspecified. Added lookup/cost regressions. Validation: 21 usage tests, Ruff, format check, basedpyright, and diff check passed.
