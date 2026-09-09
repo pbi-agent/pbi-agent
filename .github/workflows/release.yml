@@ -6,12 +6,22 @@ on:
       - master
     paths:
       - pyproject.toml
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Existing package version to publish from current master (without v)"
+        required: true
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -37,6 +47,7 @@ jobs:
         id: version
         env:
           BEFORE_SHA: ${{ github.event.before }}
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
           python - <<'PY'
           import os
@@ -60,6 +71,16 @@ jobs:
               if previous_pyproject:
                   previous_version = tomllib.loads(previous_pyproject)["project"]["version"]
           should_release = previous_version != version
+
+          if os.environ["GITHUB_EVENT_NAME"] == "workflow_dispatch":
+              if os.environ["GITHUB_REF"] != "refs/heads/master":
+                  raise SystemExit("Manual releases must run from master.")
+              requested_version = os.environ["REQUESTED_VERSION"]
+              if requested_version != version:
+                  raise SystemExit(
+                      f"Requested version {requested_version!r} does not match package version {version!r}."
+                  )
+              should_release = True
 
           with open(Path(os.environ["GITHUB_OUTPUT"]), "a", encoding="utf-8") as fh:
               fh.write(f"project_name={project_name}\n")

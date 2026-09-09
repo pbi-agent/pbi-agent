@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
+import subprocess
+import sys
+from textwrap import dedent
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -182,6 +188,68 @@ def test_release_workflow_skips_when_package_version_did_not_change() -> None:
     assert fetch_depth_index < before_index < previous_version_index
     assert previous_version_index < should_release_index < skip_index
     assert skip_index < guard_index < upload_index < publish_index
+
+
+def test_release_workflow_supports_serialized_manual_retries() -> None:
+    workflow = read_workflow("release.yml")
+
+    assert "workflow_dispatch:\n    inputs:\n      version:" in workflow
+    assert "required: true\n        type: string" in workflow
+    assert "REQUESTED_VERSION: ${{ inputs.version }}" in workflow
+    assert "concurrency:\n  group: release\n  cancel-in-progress: false" in workflow
+
+
+@pytest.mark.parametrize(
+    ("ref", "requested_version", "expected_error"),
+    [
+        ("refs/heads/master", "0.31.0", None),
+        ("refs/heads/master", "0.30.0", "does not match package version"),
+        ("refs/heads/master", "", "does not match package version"),
+        ("refs/heads/release-fix", "0.31.0", "must run from master"),
+        ("refs/tags/v0.31.0", "0.31.0", "must run from master"),
+    ],
+)
+def test_release_workflow_manual_retry_requires_master_and_matching_version(
+    tmp_path, ref, requested_version, expected_error
+) -> None:
+    workflow = read_workflow("release.yml")
+    version_step = workflow.split("      - name: Read package version\n", 1)[1]
+    script = dedent(
+        version_step.split("          python - <<'PY'\n", 1)[1].split(
+            "          PY\n", 1
+        )[0]
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "pbi-agent"\nversion = "0.31.0"\n',
+        encoding="utf-8",
+    )
+    output = tmp_path / "github-output"
+
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "BEFORE_SHA": "",
+            "GITHUB_EVENT_NAME": "workflow_dispatch",
+            "GITHUB_REF": ref,
+            "REQUESTED_VERSION": requested_version,
+            "GITHUB_OUTPUT": str(output),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    if expected_error is not None:
+        assert result.returncode != 0
+        assert expected_error in result.stderr
+        assert not output.exists()
+    else:
+        assert result.returncode == 0, result.stderr
+        assert output.read_text(encoding="utf-8") == (
+            "project_name=pbi-agent\nversion=0.31.0\ntag=v0.31.0\nshould_release=true\n"
+        )
 
 
 def test_release_workflow_rebuilds_static_assets_before_distribution() -> None:
