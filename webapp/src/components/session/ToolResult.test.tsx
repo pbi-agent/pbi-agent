@@ -78,7 +78,7 @@ describe("ToolResult", () => {
       expect(screen.getByText("Shell command is still running")).toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: "Stop running shell command" }),
-      ).toHaveTextContent("Stop command");
+      ).toHaveTextContent("Interrupt");
 
       await user.click(
         screen.getByRole("button", { name: "Stop running shell command" }),

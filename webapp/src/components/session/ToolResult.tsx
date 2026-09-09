@@ -148,7 +148,7 @@ function ShellToolResult({
             onClick={() => onInterrupt(callId)}
           >
             <SquareIcon data-icon="inline-start" aria-hidden="true" />
-            {interrupting ? "Stopping…" : "Stop command"}
+            {interrupting ? "Stopping…" : "Interrupt"}
           </Button>
         ) : null
       }
