@@ -1359,6 +1359,7 @@ def test_checkpoint_follow_up_is_pending_and_drained_before_turn_end(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     run_started = threading.Event()
+    release_drain = threading.Event()
     steer_received = threading.Event()
     release_turn = threading.Event()
     received: list[str] = []
@@ -1368,13 +1369,9 @@ def test_checkpoint_follow_up_is_pending_and_drained_before_turn_end(
         received.append(getattr(initial, "text", str(initial)))
         display.assistant_start()
         run_started.set()
-        while not steer_received.is_set():
-            steers = display.drain_checkpoint_follow_ups()
-            if steers:
-                received.extend(item.text for item in steers)
-                steer_received.set()
-                break
-            time.sleep(0.01)
+        assert release_drain.wait(timeout=2)
+        received.extend(item.text for item in display.drain_checkpoint_follow_ups())
+        steer_received.set()
         assert release_turn.wait(timeout=2)
         display.assistant_stop()
         return 0
@@ -1412,15 +1409,18 @@ def test_checkpoint_follow_up_is_pending_and_drained_before_turn_end(
         assert queued_snapshot["queued_follow_ups"][0]["delivery"] == "checkpoint"
         assert queued_snapshot["queued_follow_ups"][0]["text"] == "Steer now"
 
+        release_drain.set()
         assert steer_received.wait(timeout=2)
         delivered_snapshot = app.state.manager.get_live_session_detail(live_session_id)[
             "snapshot"
         ]
         assert delivered_snapshot["queued_follow_ups"] == []
+        assert delivered_snapshot["processing"]["active"] is True
         release_turn.set()
         worker = app.state.manager._live_sessions[live_session_id].worker
         assert worker is not None
         worker.join(timeout=2)
+        assert not worker.is_alive()
 
     assert received == ["Initial", "Steer now"]
 
