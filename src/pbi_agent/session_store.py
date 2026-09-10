@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS messages (
     profile_id             TEXT,
     file_paths_json        TEXT NOT NULL DEFAULT '[]',
     image_attachments_json TEXT NOT NULL DEFAULT '[]',
+    is_local_command       INTEGER NOT NULL DEFAULT 0,
     created_at             TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id, id);
@@ -310,6 +311,7 @@ class MessageRecord:
     profile_id: str | None = None
     file_paths: list[str] = field(default_factory=list)
     image_attachments: list["MessageImageAttachment"] = field(default_factory=list)
+    is_local_command: bool = False
 
 
 @dataclass(slots=True)
@@ -813,6 +815,7 @@ def _message_record_from_row(row: sqlite3.Row) -> MessageRecord:
         image_attachments=_deserialize_image_attachments(
             data.get("image_attachments_json")
         ),
+        is_local_command=bool(data["is_local_command"]),
         created_at=data["created_at"],
     )
 
@@ -1807,8 +1810,8 @@ class SessionStore:
                     self._conn.execute(
                         "INSERT INTO messages "
                         "(session_id, role, content, provider_id, profile_id, "
-                        "file_paths_json, image_attachments_json, created_at) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        "file_paths_json, image_attachments_json, is_local_command, created_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (
                             new_session_id,
                             row["role"],
@@ -1817,6 +1820,7 @@ class SessionStore:
                             row["profile_id"],
                             row["file_paths_json"],
                             image_attachments_json,
+                            row["is_local_command"],
                             row["created_at"],
                         ),
                     )
@@ -1984,13 +1988,15 @@ class SessionStore:
         provider_id: str | None = None,
         profile_id: str | None = None,
         image_attachments: list[MessageImageAttachment] | None = None,
+        is_local_command: bool = False,
     ) -> int:
         now = _now_iso()
         with self._lock:
             cursor = self._conn.execute(
                 "INSERT INTO messages "
-                "(session_id, role, content, provider_id, profile_id, file_paths_json, image_attachments_json, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "(session_id, role, content, provider_id, profile_id, file_paths_json, "
+                "image_attachments_json, is_local_command, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     session_id,
                     role,
@@ -1999,6 +2005,7 @@ class SessionStore:
                     profile_id,
                     _serialize_file_paths(file_paths),
                     _serialize_image_attachments(image_attachments),
+                    int(is_local_command),
                     now,
                 ),
             )

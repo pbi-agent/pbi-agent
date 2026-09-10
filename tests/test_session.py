@@ -530,8 +530,9 @@ def test_run_single_turn_replays_resumed_history_by_default(
     assert provider.restored_history_items is None
 
 
+@pytest.mark.parametrize("with_local_commands", [False, True])
 def test_run_single_turn_restores_tool_history_when_enabled(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, with_local_commands
 ) -> None:
     monkeypatch.chdir(tmp_path)
     provider = _ProviderStub()
@@ -540,8 +541,18 @@ def test_run_single_turn_restores_tool_history_when_enabled(
 
     with SessionStore() as store:
         session_id = store.create_session(str(tmp_path), "openai", DEFAULT_MODEL)
+        if with_local_commands:
+            store.add_message(session_id, "user", "!ls", is_local_command=True)
+            store.add_message(
+                session_id, "assistant", "private local listing", is_local_command=True
+            )
         store.add_message(session_id, "user", "previous user")
         store.add_message(session_id, "assistant", "previous assistant")
+        if with_local_commands:
+            store.add_message(session_id, "user", "!pwd", is_local_command=True)
+            store.add_message(
+                session_id, "assistant", "private local path", is_local_command=True
+            )
         run_id = store.create_run_session(
             run_session_id="run-1",
             session_id=session_id,
@@ -683,9 +694,55 @@ def test_run_single_turn_restores_tool_history_when_enabled(
     assert restored_items[5]["content"] == [
         {"type": "output_text", "text": "previous assistant"}
     ]
-    assert [message.content for message in display.replayed_history] == [
+    expected_display = [
         "previous user",
         "previous assistant",
+    ]
+    if with_local_commands:
+        expected_display = [
+            "!ls",
+            "private local listing",
+            *expected_display,
+            "!pwd",
+            "private local path",
+        ]
+    assert [message.content for message in display.replayed_history] == expected_display
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "![diagram](architecture.png)\nExplain this architecture.",
+        "!important: diagnose this problem",
+    ],
+)
+def test_run_single_turn_preserves_non_web_bang_prefixed_conversations(
+    monkeypatch, tmp_path, prompt
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    settings = Settings(api_key="test-key", provider="openai")
+    first_provider = _ProviderStub()
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(first_provider),
+    )
+    outcome = run_single_turn(prompt, settings, _SessionDisplaySpy([]))
+    assert first_provider.request_calls[0]["user_message"] == prompt
+
+    second_provider = _ProviderStub()
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(second_provider),
+    )
+    run_single_turn(
+        "Describe your previous answer in more detail.",
+        settings,
+        _SessionDisplaySpy([]),
+        resume_session_id=outcome.session_id,
+    )
+    assert [m.content for m in second_provider.restored_messages] == [
+        prompt,
+        "All set.",
     ]
 
 

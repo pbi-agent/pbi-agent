@@ -9301,9 +9301,11 @@ def test_temporary_slash_command_web_events_are_live_only(
     assert "Normal response" in timeline_contents
 
 
-def test_saved_session_shell_command_reenables_input_after_output(
+@pytest.mark.parametrize("command_fails", [False, True])
+def test_saved_session_shell_command_persists_origin_and_reenables_input(
     tmp_path,
     monkeypatch,
+    command_fails,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
@@ -9344,6 +9346,11 @@ def test_saved_session_shell_command_reenables_input_after_output(
             ),
             patch(
                 "pbi_agent.web.session.live_sessions.shell_tool.handle",
+                side_effect=(
+                    RuntimeError("Shell failed before output")
+                    if command_fails
+                    else None
+                ),
                 return_value={
                     "stdout": "ok\n",
                     "stderr": "",
@@ -9361,10 +9368,14 @@ def test_saved_session_shell_command_reenables_input_after_output(
                     break
                 time.sleep(0.01)
 
-            response = manager.run_saved_session_shell_command(
-                session_id,
-                command="pwd",
-            )
+            if command_fails:
+                with pytest.raises(RuntimeError, match="Shell failed before output"):
+                    manager.run_saved_session_shell_command(session_id, command="pwd")
+            else:
+                response = manager.run_saved_session_shell_command(
+                    session_id,
+                    command="pwd",
+                )
             events = live_session.event_stream.snapshot()
             input_enabled_after_command = live_session.snapshot.input_enabled
             last_event_seq_after_command = live_session.snapshot.last_event_seq
@@ -9383,7 +9394,21 @@ def test_saved_session_shell_command_reenables_input_after_output(
         True,
     ]
     assert input_enabled_after_command is True
-    assert response["last_event_seq"] == last_event_seq_after_command
+    if not command_fails:
+        assert response["last_event_seq"] == last_event_seq_after_command
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        messages = store.list_messages(session_id)
+    assert [m.role for m in messages] == (
+        ["user"] if command_fails else ["user", "assistant"]
+    )
+    assert messages[0].content == "!pwd"
+    assert all(m.is_local_command for m in messages)
+    message_events = [
+        event["payload"] for event in events if event.get("type") == "message_added"
+    ]
+    assert [payload["content"] for payload in message_events] == [
+        m.content for m in messages
+    ]
 
 
 def test_saved_session_interrupt_stops_direct_shell_without_removing_command(
@@ -9499,6 +9524,7 @@ def test_saved_session_interrupt_stops_direct_shell_without_removing_command(
         messages = store.list_messages(session_id)
         session = store.get_session(session_id)
     assert [message.content for message in messages[:1]] == ["!sleep 30"]
+    assert all(message.is_local_command for message in messages)
     assert all(message.content != "stale tab message" for message in messages)
     assert "Status: `interrupted`" in messages[-1].content
     assert session is not None

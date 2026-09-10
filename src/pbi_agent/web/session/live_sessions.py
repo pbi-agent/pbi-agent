@@ -631,6 +631,7 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
                 live_session,
                 role="user",
                 content=user_content,
+                is_local_command=True,
             )
             self._publish_live_event(
                 live_session_id,
@@ -671,6 +672,7 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
                 live_session,
                 role="assistant",
                 content=assistant_content,
+                is_local_command=True,
             )
             self._publish_live_event(
                 live_session_id,
@@ -708,6 +710,7 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
         *,
         role: str,
         content: str,
+        is_local_command: bool = False,
     ) -> MessageRecord | None:
         with SessionStore() as store:
             session = store.get_session(live_session.bound_session_id or "")
@@ -719,6 +722,7 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
                 content,
                 provider_id=live_session.runtime.provider_id or None,
                 profile_id=live_session.runtime.profile_id or None,
+                is_local_command=is_local_command,
             )
             return store.get_message(message_id)
 

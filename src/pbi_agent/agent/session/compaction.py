@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from pbi_agent.agent.compaction_prompt import COMPACTION_PROMPT
+from pbi_agent.agent.conversation_context import model_context_messages
 from pbi_agent.config import ResolvedRuntime, Settings
 from pbi_agent.display.protocol import DisplayProtocol
 from pbi_agent.hooks.runtime import HookRuntime
@@ -48,6 +49,7 @@ def _open_compaction_provider(settings: Settings):
 def _active_context_messages(
     messages: list[MessageRecord] | tuple[MessageRecord, ...],
 ) -> list[MessageRecord]:
+    messages = model_context_messages(messages)
     marker_index = _latest_compaction_marker_index(messages)
     if marker_index is None:
         return list(messages)
