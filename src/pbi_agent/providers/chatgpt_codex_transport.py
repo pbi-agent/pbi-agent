@@ -51,12 +51,14 @@ class ChatGPTCodexWebSocketError(RuntimeError):
         retryable: bool = False,
         connection_limit: bool = False,
         previous_response_not_found: bool = False,
+        invalid_previous_response_id: bool = False,
     ) -> None:
         self.status = status
         self.payload = payload or {}
         self.retryable = retryable
         self.connection_limit = connection_limit
         self.previous_response_not_found = previous_response_not_found
+        self.invalid_previous_response_id = invalid_previous_response_id
         super().__init__(message)
 
 
@@ -368,6 +370,14 @@ def _websocket_error_from_payload(
     message = _error_message(error.payload) or "WebSocket error"
     connection_limit = code == WEBSOCKET_CONNECTION_LIMIT_REACHED_CODE
     previous_response_not_found = code == PREVIOUS_RESPONSE_NOT_FOUND_CODE
+    # This code-less validation error is recoverable only when the rejected
+    # request supplied an ID. Keep it out of the generic transport retry path.
+    invalid_previous_response_id = (
+        error.status == 400
+        and code is None
+        and error_type == "invalid_request_error"
+        and message == "Invalid `previous_response_id`."
+    )
     # Some ChatGPT websocket error events carry no HTTP status but do carry a
     # transient nested error marker, e.g. {"error": {"type": "server_error"}}.
     retryable_error_marker = error.status is None and (
@@ -385,6 +395,7 @@ def _websocket_error_from_payload(
         ),
         connection_limit=connection_limit,
         previous_response_not_found=previous_response_not_found,
+        invalid_previous_response_id=invalid_previous_response_id,
     )
 
 

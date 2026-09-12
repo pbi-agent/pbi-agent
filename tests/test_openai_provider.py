@@ -3668,6 +3668,289 @@ def test_openai_chatgpt_previous_response_not_found_replays_active_turn(
     ]
 
 
+def _mock_chatgpt_websocket_events(monkeypatch, events):
+    frames = iter(
+        (_WS_OPCODE_TEXT, json.dumps(event).encode("utf-8")) for event in events
+    )
+    requests = []
+
+    def connect(*args, **kwargs):
+        websocket = ResponsesWebSocket(Mock(), response_headers={})
+        websocket._send_text = lambda payload: requests.append(json.loads(payload))
+        websocket._recv_frame = lambda: next(frames)
+        return websocket
+
+    monkeypatch.setattr(ResponsesWebSocket, "connect", connect)
+    return requests
+
+
+@pytest.mark.parametrize("max_retries", [0, 3])
+def test_openai_chatgpt_invalid_previous_response_id_replays_and_resumes(
+    monkeypatch,
+    display_spy,
+    max_retries,
+) -> None:
+    outputs = [
+        [
+            {
+                "type": "reasoning",
+                "id": f"reasoning_{round_number}",
+                "summary": [],
+                "encrypted_content": f"encrypted_{round_number}",
+            },
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": f"Step {round_number}"}],
+            },
+            {
+                "type": "function_call",
+                "call_id": f"call_{round_number}",
+                "name": "shell",
+                "arguments": '{"command":"pwd"}',
+            },
+        ]
+        for round_number in range(1, 4)
+    ]
+    outputs.append(
+        [
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "Recovered."}],
+            }
+        ]
+    )
+    events = [
+        {
+            "type": "response.completed",
+            "response": {
+                "id": f"resp_{index}",
+                "model": "gpt-5",
+                "output": output,
+            },
+        }
+        for index, output in enumerate(outputs, start=1)
+    ]
+    events.insert(
+        2,
+        {
+            "type": "error",
+            "status": 400,
+            "error": {
+                "type": "invalid_request_error",
+                "message": "Invalid `previous_response_id`.",
+            },
+        },
+    )
+    requests = _mock_chatgpt_websocket_events(monkeypatch, events)
+    executed_calls = []
+
+    def execute_calls(calls, *, max_workers, context=None, on_result=None):
+        executed_calls.extend(call.call_id for call in calls)
+        return ToolExecutionBatch(
+            results=[
+                ToolResult(call_id=call.call_id, output_json='{"result": "/workspace"}')
+                for call in calls
+            ],
+            had_errors=False,
+        )
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.openai_provider._execute_tool_calls", execute_calls
+    )
+    provider = OpenAIProvider(
+        _make_settings(
+            responses_url=OPENAI_CHATGPT_RESPONSES_URL,
+            max_retries=max_retries,
+            auth=OAuthSessionAuth(
+                provider_id="openai-chatgpt",
+                backend="openai_chatgpt",
+                access_token="access-token",
+                refresh_token="refresh-token",
+            ),
+        ),
+        system_prompt="Keep the workspace context.",
+    )
+    provider.restore_history_items(
+        [
+            {
+                "type": "provider_input_item",
+                "format": "openai_responses",
+                "item": {"role": "user", "content": "Earlier context"},
+            }
+        ]
+    )
+    session_usage = TokenUsage(model=DEFAULT_MODEL)
+    turn_usage = TokenUsage(model=DEFAULT_MODEL)
+    response = provider.request_turn(
+        user_input=UserTurnInput(text="Inspect the workspace"),
+        session_id="session-123",
+        display=display_spy,
+        session_usage=session_usage,
+        turn_usage=turn_usage,
+    )
+    tool_outputs = []
+    for _ in range(3):
+        assert response.has_tool_calls
+        results, had_errors = provider.execute_tool_calls(
+            response,
+            max_workers=1,
+            display=display_spy,
+            session_usage=session_usage,
+            turn_usage=turn_usage,
+        )
+        assert not had_errors
+        tool_outputs.append(results)
+        response = provider.request_turn(
+            tool_result_items=results,
+            session_id="session-123",
+            display=display_spy,
+            session_usage=session_usage,
+            turn_usage=turn_usage,
+        )
+
+    assert response.text == "Recovered."
+    assert executed_calls == ["call_1", "call_2", "call_3"]
+    assert len(requests) == 5
+    assert requests[1]["previous_response_id"] == "resp_1"
+    assert requests[2]["previous_response_id"] == "resp_2"
+    assert requests[2]["input"] == tool_outputs[1]
+    assert "previous_response_id" not in requests[3]
+    replay_outputs = [
+        [{key: value for key, value in item.items() if key != "id"} for item in output]
+        for output in outputs
+    ]
+    assert requests[3]["input"] == [
+        *requests[0]["input"],
+        *replay_outputs[0],
+        *tool_outputs[0],
+        *replay_outputs[1],
+        *tool_outputs[1],
+    ]
+    assert requests[3]["instructions"] == "Keep the workspace context."
+    assert requests[3]["input"][:2] == [
+        {"role": "user", "content": "Earlier context"},
+        {"role": "user", "content": "Inspect the workspace"},
+    ]
+    assert {
+        key: value
+        for key, value in requests[2].items()
+        if key not in {"input", "previous_response_id"}
+    } == {
+        key: value
+        for key, value in requests[3].items()
+        if key not in {"input", "previous_response_id"}
+    }
+    assert requests[4]["previous_response_id"] == "resp_3"
+    assert requests[4]["input"] == tool_outputs[2]
+    assert provider.get_conversation_checkpoint() == "resp_4"
+    assert display_spy.retry_notices == [(1, max_retries)]
+
+
+@pytest.mark.parametrize(
+    ("status", "error_type", "message", "code", "with_id", "expected_attempts"),
+    [
+        (
+            400,
+            "invalid_request_error",
+            "Invalid `previous_response_id`.",
+            None,
+            True,
+            2,
+        ),
+        (
+            400,
+            "invalid_request_error",
+            "Invalid `previous_response_id`.",
+            None,
+            False,
+            1,
+        ),
+        (400, "invalid_request_error", "Invalid tool transcript.", None, True, 1),
+        (
+            400,
+            "invalid_request_error",
+            "Invalid `previous_response_id` format.",
+            None,
+            True,
+            1,
+        ),
+        (400, "api_error", "Invalid `previous_response_id`.", None, True, 1),
+        (
+            422,
+            "invalid_request_error",
+            "Invalid `previous_response_id`.",
+            None,
+            True,
+            1,
+        ),
+        (
+            None,
+            "invalid_request_error",
+            "Invalid `previous_response_id`.",
+            None,
+            True,
+            1,
+        ),
+        (
+            400,
+            "invalid_request_error",
+            "Invalid `previous_response_id`.",
+            "other_error",
+            True,
+            1,
+        ),
+    ],
+)
+def test_openai_chatgpt_invalid_previous_response_id_recovery_is_narrow_and_bounded(
+    monkeypatch,
+    display_spy,
+    status,
+    error_type,
+    message,
+    code,
+    with_id,
+    expected_attempts,
+) -> None:
+    event = {
+        "type": "error",
+        "status": status,
+        "error": {"type": error_type, "message": message, "code": code},
+    }
+    requests = _mock_chatgpt_websocket_events(monkeypatch, [event] * 10)
+    provider = OpenAIProvider(
+        _make_settings(
+            responses_url=OPENAI_CHATGPT_RESPONSES_URL,
+            max_retries=5,
+            auth=OAuthSessionAuth(
+                provider_id="openai-chatgpt",
+                backend="openai_chatgpt",
+                access_token="access-token",
+                refresh_token="refresh-token",
+            ),
+        )
+    )
+    if with_id:
+        provider.set_previous_response_id("resp_expired")
+    with pytest.raises(RuntimeError, match="OpenAI Responses WebSocket error"):
+        provider.request_turn(
+            tool_result_items=[
+                {"type": "function_call_output", "call_id": "call_1", "output": "done"}
+            ],
+            session_id="session-123",
+            display=display_spy,
+            session_usage=TokenUsage(model=DEFAULT_MODEL),
+            turn_usage=TokenUsage(model=DEFAULT_MODEL),
+        )
+
+    assert len(requests) == expected_attempts
+    assert bool(requests[0].get("previous_response_id")) == with_id
+    if expected_attempts == 2:
+        assert "previous_response_id" not in requests[1]
+    assert display_spy.retry_notices == ([(1, 5)] if expected_attempts == 2 else [])
+
+
 def test_openai_request_turn_does_not_retry_insufficient_quota(
     monkeypatch,
     display_spy,
