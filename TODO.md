@@ -1,7 +1,3 @@
-- [x] Inspect Git/GitHub release boundaries and reconcile all committed local and remote work; preserve uncommitted changes.
-- [x] Create chore/release-v0.32.0 from local master containing all seven unreleased commits; bump version and write changelog/index/sidebar updates.
-- [x] Run required release validation and inspect the explicit staged release diff: 1,782 Python tests, 720 frontend tests, lint/format/type/dead-code checks, docs/web/package builds, API types, repeat static build.
-- [x] Diagnose pre-existing static asset check failure: rebuilt bundles match committed content exactly after updating hashed asset references; include generated repair and version-only uv.lock update.
-- [x] Commit cbba9bef, push the release branch, and open PR #350; CI run 34692859148 passed all checks.
-- [x] Merge PR #350 as f7f08219; Release run 34693042976, master CI, and docs deployment passed. Verified v0.32.0 tag, normalized GitHub notes, and PyPI wheel/sdist.
-- [x] Record release outcome; local master synced, orchestrator profile edit preserved/excluded, dependency PRs untouched, TODO/memory bookkeeping remains local.
+- [x] Inspect task-scoped provider, tests, and memory changes; review found no actionable issues.
+- [x] Reuse current validation: 107 provider tests, full 1,786-test suite, Ruff lint/format, basedpyright; diff check passed.
+- [x] Prepare one local commit for proactive sub-agent full-history replay; no push.

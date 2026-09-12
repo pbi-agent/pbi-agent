@@ -287,7 +287,11 @@ class OpenAIProvider(Provider):
             return [], False
 
         if self._chatgpt_backend.enabled and _has_sub_agent_call(response):
-            self._chatgpt_backend.close_websocket()
+            # The continuation belongs to the socket we release for the child.
+            # Preserve the replay buffer so the next request sends the full
+            # active-turn transcript instead of trying the now-stale ID first.
+            self.set_previous_response_id(None)
+            self._chatgpt_backend.clear_live_loop_state()
 
         return execute_provider_tool_calls(
             response.function_calls,
