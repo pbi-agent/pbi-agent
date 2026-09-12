@@ -1,3 +1,5 @@
-- [x] Review ToolSpec prose, guidance assertions, and compress skill boundaries.
-- [x] Tighten descriptions without changing runtime behavior or schema structure.
-- [x] Run focused tests (153 passed), Ruff lint/format, basedpyright, and diff check; record outcome.
+- [x] Verify release boundary, local/remote commits, authentication, and workspace safety.
+- [x] Prepare v0.33.0 release branch, version/lockfile, changelog, and navigation.
+- [x] Run release validation and inspect explicit release-scoped diff (1,861 Python / 720 frontend tests; all checks/builds passed).
+- [x] Commit db41e0e9, push, and merge PR #351 after clean checks (merge 783b81d2).
+- [x] Verify Release/master/docs CI, tag 783b81d2, normalized GitHub notes, and PyPI wheel/sdist; sync local master and record outcome.
