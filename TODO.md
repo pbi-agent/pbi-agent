@@ -1,3 +1,3 @@
-- [x] Read compress skill and current memory; identify durable rules and open follow-ups.
-- [x] Compress long-term prose/history; preserve active-day entries.
-- [x] Review structure and retained constraints; append compression task event.
+- [x] Review ToolSpec prose, guidance assertions, and compress skill boundaries.
+- [x] Tighten descriptions without changing runtime behavior or schema structure.
+- [x] Run focused tests (153 passed), Ruff lint/format, basedpyright, and diff check; record outcome.

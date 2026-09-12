@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
+import os
+import re
 import shlex
+import stat
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -43,47 +47,53 @@ _ROOT_SCHEMA: dict[str, Any] = {
 SPEC = ToolSpec(
     name="explore_workspace",
     description=(
-        "Explore workspace files: content/path search, text read, or one-level list. "
-        "Compact text output."
+        "Workspace content/path search, text read, or one-level list; compact output. "
+        'Partial filenames: target="path". Existing exact file/directory: target="list".'
     ),
     prompt_usage=(
-        "Use `explore_workspace` for workspace search/read/list: "
+        "Use `explore_workspace`: "
         'content `{pattern:"UserService",regex:false}`, '
         'multi-root `{pattern:"UserService",root:["tests","src/pbi_agent"]}`, '
-        'path `{pattern:"service",target:"path",glob:"*.py",regex:false}`, '
         'read `{pattern:"src/app.py",target:"read",start_line:20,limit:80}`, '
-        'list `{pattern:"src",target:"list",limit:100}`.'
+        "list existing exact path "
+        '`{"pattern": ".", "root": "tests", "target": "list"}` versus '
+        "find partial filename "
+        '`{"pattern": "test_openai_provider", "root": "tests", "target": "path", '
+        '"regex": false}`.'
     ),
     parameters_schema={
         "type": "object",
         "properties": {
             "pattern": {
                 "type": "string",
-                "description": "Search pattern; for read/list, the file or directory path.",
+                "description": "Search pattern; read/list: exact path.",
             },
             "root": {
                 **_ROOT_SCHEMA,
                 "description": (
-                    "Workspace-relative file/dir root, or roots array for search. Defaults to '.'."
+                    "Workspace-relative file/dir; search also accepts roots array. Default '.'."
                 ),
             },
             "target": {
                 "type": "string",
                 "enum": ["content", "path", "read", "list"],
-                "description": "Operation. Defaults to content search.",
+                "description": "Operation; default content.",
             },
             "regex": {
                 "type": "boolean",
-                "description": "Treat search pattern as regex. Defaults to true; use false for literal.",
+                "description": (
+                    "Search: true (default) = regex, false = literal. "
+                    "Explicit true disables missing-list recovery."
+                ),
             },
             "path_scope": {
                 "type": "string",
                 "enum": ["path", "basename"],
-                "description": "For path search, match full path or basename. Defaults to path.",
+                "description": "Path-search scope; default path.",
             },
             "glob": {
                 **_STRING_OR_STRING_ARRAY_SCHEMA,
-                "description": "Include only glob(s), e.g. '*.py'.",
+                "description": "Include glob(s), e.g. '*.py'.",
             },
             "exclude": {
                 **_STRING_OR_STRING_ARRAY_SCHEMA,
@@ -93,25 +103,30 @@ SPEC = ToolSpec(
                 "type": "string",
                 "enum": ["files", "snippets", "count"],
                 "description": (
-                    "Search result detail: files, snippets, or count. Defaults to snippets "
-                    "when context_lines > 0, otherwise files."
+                    "Search output; default snippets if context_lines > 0, else files."
                 ),
             },
             "context_lines": {
                 "type": "integer",
-                "description": "Snippet context lines for content search. Defaults to 0; max 20.",
+                "description": "Content-search context lines; default 0, max 20.",
             },
             "limit": {
                 "type": "integer",
-                "description": "Max matches/list entries/read lines. Defaults to 50; max 1000.",
+                "description": (
+                    "Max matches/list entries/read lines; default 50, cap 1000. "
+                    "Limits output, not traversal."
+                ),
             },
             "cursor": {
                 "oneOf": [{"type": "integer"}, {"type": "string"}],
-                "description": "Cursor from a previous truncated result.",
+                "description": (
+                    "Continue truncated result with same target/options/root. "
+                    "After list recovery use target='path'; list cursors disable recovery."
+                ),
             },
             "start_line": {
                 "type": "integer",
-                "description": "First line for target='read'. Defaults to 1.",
+                "description": "Read start line; default 1.",
             },
         },
         "required": ["pattern"],
@@ -158,12 +173,26 @@ def _handle_search(
     *,
     target: str,
 ) -> str:
+    result = _run_search(pattern, arguments, workspace_root, target=target)
+    if not isinstance(result, str):
+        raise ValueError("explore returned non-text output")
+    return result
+
+
+def _run_search(
+    pattern: str,
+    arguments: dict[str, Any],
+    workspace_root: Path,
+    *,
+    target: str,
+    result_format: str = "text",
+) -> dict[str, object] | str:
     search_root = _resolve_search_root(workspace_root, arguments.get("root", "."))
     context_lines = _normalize_context_lines(arguments.get("context_lines"))
     limit = normalize_positive_int(
         arguments.get("limit"), default=DEFAULT_LIMIT, upper_bound=MAX_LIMIT
     )
-    result = codetool_explore(
+    return codetool_explore(
         pattern,
         root=_codetool_root_argument(search_root),
         target=target,
@@ -175,11 +204,8 @@ def _handle_search(
         context_lines=context_lines,
         limit=limit,
         cursor=_normalize_cursor(arguments.get("cursor")),
-        result_format="text",
+        result_format=result_format,
     )
-    if not isinstance(result, str):
-        raise ValueError("explore returned non-text output")
-    return result
 
 
 def _handle_read_or_list(
@@ -196,8 +222,12 @@ def _handle_read_or_list(
         pattern,
         target=target,
     )
-    if not target_path.exists():
-        raise ValueError(f"path not found: {target_path}")
+    try:
+        target_path.stat()
+    except FileNotFoundError:
+        if target == "list" and _can_recover_missing_list(pattern, arguments, root):
+            return _recover_missing_list(pattern, arguments, workspace_root, root)
+        raise ValueError(f"path not found: {target_path}") from None
     if target == "read" and _is_supported_image_path(target_path):
         return _handle_image_file(workspace_root, target_path)
 
@@ -229,6 +259,130 @@ def _handle_read_or_list(
     if not isinstance(result, str):
         raise ValueError("explore returned non-text output")
     return result
+
+
+def _can_recover_missing_list(
+    pattern: str, arguments: dict[str, Any], root: Path
+) -> bool:
+    # Deliberately conservative: dots within filenames are literal, but query
+    # operators, separators (including Windows paths), and traversal are not.
+    if (
+        re.fullmatch(r"[\w-]+(?:\.[\w-]+)*", pattern) is None
+        or "cursor" in arguments
+        or ("regex" in arguments and arguments["regex"] is not False)
+        or not root.is_dir()
+        or not _valid_recovery_arguments(arguments)
+    ):
+        return False
+    # A dangling symlink is an existing entry, not an ordinary missing filename.
+    try:
+        (root / pattern).lstat()
+    except FileNotFoundError:
+        return True
+    return False
+
+
+def _valid_recovery_arguments(arguments: dict[str, Any]) -> bool:
+    """Don't turn malformed list calls into successful searches via normalization."""
+    if arguments.keys() - SPEC.parameters_schema["properties"].keys():
+        return False
+    if (
+        not isinstance(arguments.get("root", "."), str)
+        or not arguments.get("root", ".").strip()
+    ):
+        return False
+    for name, minimum in (("limit", 1), ("start_line", 1), ("context_lines", 0)):
+        if name in arguments and (
+            type(arguments[name]) is not int or arguments[name] < minimum
+        ):
+            return False
+    for name, choices in (
+        ("path_scope", ("path", "basename")),
+        ("mode", ("files", "snippets", "count")),
+    ):
+        if name in arguments and arguments[name] not in choices:
+            return False
+    for name in ("glob", "exclude"):
+        if name in arguments:
+            value = arguments[name]
+            if not isinstance(value, str) and not (
+                isinstance(value, list) and all(isinstance(item, str) for item in value)
+            ):
+                return False
+    return True
+
+
+def _recover_missing_list(
+    pattern: str,
+    arguments: dict[str, Any],
+    workspace_root: Path,
+    root: Path,
+) -> ToolOutput:
+    # The search walker may skip unreadable directories; do not report a root
+    # permission failure as a successful empty recovery.
+    with os.scandir(root):
+        pass
+    options = {
+        "pattern": pattern,
+        "root": root.relative_to(workspace_root).as_posix(),
+        "target": "path",
+        "path_scope": "basename",
+        "regex": False,
+        "mode": "files",
+        "limit": normalize_positive_int(
+            arguments.get("limit"), default=DEFAULT_LIMIT, upper_bound=MAX_LIMIT
+        ),
+        **{name: arguments[name] for name in ("glob", "exclude") if name in arguments},
+    }
+    result = _run_search(
+        pattern, options, workspace_root, target="path", result_format="full"
+    )
+    if not isinstance(result, dict):
+        raise ValueError("explore returned invalid path-search output")
+    matches = result.get("matches")
+    if not isinstance(matches, list):
+        raise ValueError("explore returned invalid path-search output")
+    paths: list[str] = []
+    for match in matches:
+        if not isinstance(match, dict) or not isinstance(match.get("path"), str):
+            raise ValueError("explore returned invalid path-search match")
+        relative = Path(match["path"])
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError("search result must be under its root.")
+        candidate = root / relative
+        # Validate backend output too: never print an outside-workspace symlink
+        # target (or trust that every backend will always skip symlinks).
+        _ensure_inside(
+            candidate.resolve(strict=True),
+            workspace_root,
+            message="search result must resolve inside the workspace.",
+        )
+        paths.append(candidate.relative_to(workspace_root).as_posix())
+
+    label = options["root"]
+    text = (
+        f"List target not found; matching file paths under {label}:\n"
+        + "\n".join(paths)
+        if paths
+        else f"List target not found; no matching file paths found under {label}."
+    )
+    next_cursor = result.get("next_cursor")
+    continuation = None
+    if next_cursor is not None:
+        continuation = {**options, "cursor": next_cursor}
+        text += (
+            '\nMore matches; continue with target="path" (not "list"): '
+            + json.dumps(continuation, ensure_ascii=False)
+        )
+    metadata = {
+        "requested_target": "list",
+        "effective_target": "path",
+        "recovery_reason": "missing_list_target",
+        "truncated": bool(result.get("truncated")),
+        "next_cursor": next_cursor,
+        "continuation": continuation,
+    }
+    return ToolOutput(result=text, display_metadata=metadata, trace_metadata=metadata)
 
 
 def _error_output(message: str) -> ToolOutput:
@@ -303,9 +457,11 @@ def _resolve_single_workspace_root(workspace_root: Path, raw_root: Any) -> Path:
         search_root, workspace_root, message="'root' must resolve inside the workspace."
     )
 
-    if not search_root.exists():
-        raise ValueError(f"root not found: {search_root}")
-    if not (search_root.is_dir() or search_root.is_file()):
+    try:
+        root_mode = search_root.stat().st_mode
+    except FileNotFoundError:
+        raise ValueError(f"root not found: {search_root}") from None
+    if not (stat.S_ISDIR(root_mode) or stat.S_ISREG(root_mode)):
         raise ValueError(f"root is not a file or directory: {search_root}")
     return search_root
 
