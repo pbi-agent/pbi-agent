@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 from typing import Any
 
@@ -22,6 +23,12 @@ from pbi_agent.agent.session.shared import (
     REDACTED_INLINE_IMAGE_MARKER,
     log as _log,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class _RunUserInput:
+    text: str
+    timestamp: str
 
 
 def _open_store(settings: Settings) -> SessionStore | None:
@@ -121,14 +128,17 @@ def _refresh_provider_history_from_store(
         if store is not None and session_id is not None:
             messages = _messages_for_provider_restore(
                 store.list_messages(session_id),
-                preserve_trailing_user=include_tool_history,
+                preserve_trailing_user=True,
             )
-            if include_tool_history:
+            if reason != "compaction" and (
+                include_tool_history or _needs_run_history_lookup(messages)
+            ):
                 history_items = _history_items_for_provider_restore(
                     store,
                     session_id,
                     messages,
                     provider=provider,
+                    include_completed_tools=include_tool_history,
                 )
     except Exception:
         _log.warning(
@@ -139,7 +149,7 @@ def _refresh_provider_history_from_store(
         return
     try:
         reset_conversation()
-        if include_tool_history and callable(restore_history_items):
+        if history_items and callable(restore_history_items):
             restore_history_items(history_items)
         else:
             restore_messages(messages)
@@ -283,20 +293,20 @@ def _resume_session(
     if messages:
         provider_messages = _messages_for_provider_restore(
             messages,
-            preserve_trailing_user=include_tool_history,
+            preserve_trailing_user=True,
         )
         try:
-            if include_tool_history:
+            if include_tool_history or _needs_run_history_lookup(provider_messages):
                 restore_history_items = getattr(provider, "restore_history_items", None)
+                history_items = _history_items_for_provider_restore(
+                    store,
+                    session_id,
+                    provider_messages,
+                    provider=provider,
+                    include_completed_tools=include_tool_history,
+                )
                 if callable(restore_history_items):
-                    restore_history_items(
-                        _history_items_for_provider_restore(
-                            store,
-                            session_id,
-                            provider_messages,
-                            provider=provider,
-                        )
-                    )
+                    restore_history_items(history_items)
                 elif provider_messages:
                     provider.restore_messages(provider_messages)
             elif provider_messages:
@@ -341,6 +351,7 @@ def _history_items_for_provider_restore(
     messages: list[MessageRecord],
     *,
     provider: Provider | None = None,
+    include_completed_tools: bool = True,
 ) -> list[dict[str, Any]]:
     if _provider_prefers_response_input_history(provider):
         response_history_items = _response_history_items_for_provider_restore(
@@ -348,75 +359,95 @@ def _history_items_for_provider_restore(
             session_id,
             messages,
             provider=provider,
+            include_completed_tools=include_completed_tools,
         )
         if response_history_items:
             return response_history_items
-    return _message_tool_history_items_for_provider_restore(store, session_id, messages)
+    return _message_tool_history_items_for_provider_restore(
+        store, session_id, messages, include_completed_tools=include_completed_tools
+    )
+
+
+def _needs_run_history_lookup(messages: list[MessageRecord]) -> bool:
+    # Consecutive users may be checkpoints in a completed run, not failed turns.
+    # This is only a fast path; replay eligibility is determined per run below.
+    pending_user = False
+    for message in messages:
+        if message.role == "user":
+            if pending_user:
+                return True
+            pending_user = True
+        elif message.role == "assistant":
+            pending_user = False
+    return pending_user
+
+
+def _message_history_items(messages: list[MessageRecord]) -> list[dict[str, Any]]:
+    return [{"type": "message", "message": message} for message in messages]
+
+
+def _compaction_history_cutoff(messages: list[MessageRecord]) -> str | None:
+    from pbi_agent.agent.session.compaction import is_compaction_summary
+
+    return max(
+        (message.created_at for message in messages if is_compaction_summary(message)),
+        default=None,
+    )
+
+
+def _history_turns_for_messages(
+    histories: list[tuple[Any, ...]],
+    messages: list[MessageRecord],
+) -> list[tuple[list[MessageRecord], tuple[Any, ...] | None]]:
+    histories_by_message_id = _run_histories_for_messages(histories, messages)
+    turns: list[tuple[list[MessageRecord], tuple[Any, ...] | None]] = []
+    for message in messages:
+        history = histories_by_message_id.get(message.id)
+        if turns and turns[-1][0][-1].role == "user":
+            previous_messages, previous_history = turns[-1]
+            if message.role != "user" or (
+                history is not None and history is previous_history
+            ):
+                previous_messages.append(message)
+                continue
+        turns.append(([message], history))
+    return turns
+
+
+def _is_unfinished_run(run: Any, messages: list[MessageRecord]) -> bool:
+    # The final message is persisted before the active tracer becomes completed.
+    return run.status != "completed" and messages[-1].role == "user"
 
 
 def _message_tool_history_items_for_provider_restore(
     store: SessionStore,
     session_id: str,
     messages: list[MessageRecord],
+    *,
+    include_completed_tools: bool = True,
 ) -> list[dict[str, Any]]:
     history_items: list[dict[str, Any]] = []
-    run_tool_histories = _tool_history_by_run(store, session_id)
-    histories_by_message_id = _run_histories_for_messages(
-        run_tool_histories,
-        messages,
+    run_tool_histories = _tool_history_by_run(
+        store, session_id, after=_compaction_history_cutoff(messages)
     )
-    pending_user = False
-    pending_message: MessageRecord | None = None
-    for message in messages:
-        if message.role == "user" and pending_user:
-            run_history = (
-                histories_by_message_id.get(pending_message.id)
-                if pending_message is not None
-                else None
-            )
-            if run_history is not None:
-                run, items, _intermediate_text, _user_text = run_history
-                history_items.extend(
-                    _interrupted_generic_run_items(
-                        run,
-                        pending_message,
-                        items,
-                    )
-                )
-            else:
-                history_items.pop()
-        history_items.append({"type": "message", "message": message})
-        if message.role == "user":
-            pending_user = True
-            pending_message = message
-        elif message.role == "assistant" and pending_user:
-            run_history = (
-                histories_by_message_id.get(pending_message.id)
-                if pending_message is not None
-                else None
-            )
-            if run_history is not None:
-                run, items, _intermediate_text, _user_text = run_history
-                history_items[-1:-1] = _completed_generic_run_items(items)
-            pending_user = False
-            pending_message = None
-    if pending_user:
-        run_history = (
-            histories_by_message_id.get(pending_message.id)
-            if pending_message is not None
-            else None
-        )
-        if run_history is not None:
-            run, items, _intermediate_text, _user_text = run_history
+    for turn_messages, run_history in _history_turns_for_messages(
+        run_tool_histories, messages
+    ):
+        history_items.extend(_message_history_items(turn_messages))
+        if run_history is None:
+            continue
+        run, items, _intermediate_text, _user_inputs = run_history
+        if _is_unfinished_run(run, turn_messages):
             history_items.extend(
-                _interrupted_generic_run_items(
-                    run,
-                    pending_message,
-                    items,
-                )
+                _interrupted_generic_run_items(run, turn_messages[0], items)
             )
-        else:
-            history_items.pop()
+        elif include_completed_tools:
+            insertion = (
+                len(history_items) - 1
+                if turn_messages[-1].role == "assistant"
+                else len(history_items)
+            )
+            history_items[insertion:insertion] = _completed_generic_run_items(items)
     return history_items
 
 
@@ -460,79 +491,36 @@ def _response_history_items_for_provider_restore(
     messages: list[MessageRecord],
     *,
     provider: Provider | None = None,
+    include_completed_tools: bool = True,
 ) -> list[dict[str, Any]]:
-    run_histories = _response_model_call_history_by_run(store, session_id)
+    run_histories = _response_model_call_history_by_run(
+        store, session_id, after=_compaction_history_cutoff(messages)
+    )
     if not run_histories:
         return []
 
     history_items: list[dict[str, Any]] = []
-    histories_by_message_id = _run_histories_for_messages(run_histories, messages)
     used_response_history = False
-    pending_user: MessageRecord | None = None
     current_provider = _provider_history_name(provider)
 
-    for message in messages:
-        if message.role == "user":
-            if pending_user is not None:
-                run_history = histories_by_message_id.get(pending_user.id)
-                if run_history is None:
-                    return []
-                run, events, completed_tool_results, _user_text = run_history
-                if (
-                    current_provider is not None
-                    and _run_provider_name(run) != current_provider
-                ):
-                    return []
-                turn_items = _response_history_items_for_run(
-                    events,
-                    pending_user,
-                    completed_tool_results=completed_tool_results,
-                    require_completed_tool_exchange=True,
-                )
-                if not turn_items:
-                    return []
-                history_items.extend(turn_items)
-                used_response_history = True
-            pending_user = message
-            continue
-        if message.role == "assistant" and pending_user is not None:
-            run_history = histories_by_message_id.get(pending_user.id)
-            if run_history is None:
-                return []
-            run, events, completed_tool_results, _user_text = run_history
-            if (
-                current_provider is not None
-                and _run_provider_name(run) != current_provider
-            ):
-                return []
-            turn_items = _response_history_items_for_run(
-                events,
-                pending_user,
-                completed_tool_results=completed_tool_results,
-            )
-            if turn_items:
-                history_items.extend(turn_items)
-                used_response_history = True
-            else:
-                return []
-            pending_user = None
-            continue
-        if pending_user is not None:
-            return []
-        history_items.append({"type": "message", "message": message})
-
-    if pending_user is not None:
-        run_history = histories_by_message_id.get(pending_user.id)
+    for turn_messages, run_history in _history_turns_for_messages(
+        run_histories, messages
+    ):
         if run_history is None:
-            return []
-        run, events, completed_tool_results, _user_text = run_history
+            history_items.extend(_message_history_items(turn_messages))
+            continue
+        run, events, completed_tool_results, _user_inputs = run_history
+        unfinished = _is_unfinished_run(run, turn_messages)
+        if not include_completed_tools and not unfinished:
+            history_items.extend(_message_history_items(turn_messages))
+            continue
         if current_provider is not None and _run_provider_name(run) != current_provider:
             return []
         turn_items = _response_history_items_for_run(
             events,
-            pending_user,
+            turn_messages[0],
             completed_tool_results=completed_tool_results,
-            require_completed_tool_exchange=True,
+            require_completed_tool_exchange=unfinished,
         )
         if not turn_items:
             return []
@@ -545,19 +533,20 @@ def _response_history_items_for_provider_restore(
 def _response_model_call_history_by_run(
     store: SessionStore,
     session_id: str,
-) -> list[tuple[Any, list[Any], dict[str, Any], str]]:
-    histories: list[tuple[Any, list[Any], dict[str, Any], str]] = []
+    *,
+    after: str | None = None,
+) -> list[tuple[Any, list[Any], dict[str, Any], list[_RunUserInput]]]:
+    histories: list[tuple[Any, list[Any], dict[str, Any], list[_RunUserInput]]] = []
     for run in store.list_run_sessions(session_id):
         if run.parent_run_session_id or run.agent_name not in {None, "main"}:
             continue
         if run.agent_type not in {"session_turn", "single_turn"}:
             continue
         run_events = store.list_observability_events(run_session_id=run.run_session_id)
-        events = [
-            event
-            for event in run_events
-            if event.event_type == "model_call" and event.success != 0
-        ]
+        user_inputs = _run_user_inputs(run_events)
+        if after is not None:
+            run_events = [event for event in run_events if event.timestamp > after]
+        events = [event for event in run_events if event.event_type == "model_call"]
         completed_tool_results = {
             event.tool_call_id: event
             for event in run_events
@@ -568,7 +557,7 @@ def _response_model_call_history_by_run(
                 run,
                 events,
                 completed_tool_results,
-                _run_user_input_text(events),
+                user_inputs,
             )
         )
     return histories
@@ -584,41 +573,128 @@ def _run_histories_for_messages(
     messages: list[MessageRecord],
 ) -> dict[int, tuple[Any, ...]]:
     ordered = sorted(histories, key=lambda item: (item[0].started_at, item[0].id))
-    upper_bound = len(ordered)
+    compaction_cutoff = _compaction_history_cutoff(messages)
+    lower_bound = 0
     matched: dict[int, tuple[Any, ...]] = {}
-    user_messages = [message for message in messages if message.role == "user"]
-    for message in reversed(user_messages):
-        candidates = list(enumerate(ordered[:upper_bound]))
-        exact = [
-            (index, history)
-            for index, history in candidates
-            if isinstance(history[-1], str)
-            and history[-1].strip() == message.content.strip()
+    for history in ordered:
+        user_inputs = history[-1]
+        if not user_inputs:
+            continue
+        user_texts = [item.text for item in user_inputs]
+        candidates = [
+            (index, message)
+            for index, message in enumerate(messages[lower_bound:], lower_bound)
+            if message.role == "user"
+            and (not history[0].ended_at or message.created_at <= history[0].ended_at)
         ]
+        exact = [
+            (index, message)
+            for index, message in candidates
+            if user_texts[0].strip() in _user_message_prompt_texts(message)
+            and message.created_at <= user_inputs[0].timestamp
+        ]
+        initial_request_match = bool(exact)
+        if (
+            not exact
+            and compaction_cutoff is not None
+            and history[0].started_at <= compaction_cutoff
+        ):
+            # Compaction rewrites retained prompts/checkpoints with new times
+            # and can remove the initial prompt. Only relax chronology here.
+            exact = [
+                (index, message)
+                for index, message in candidates
+                if user_texts[0].strip() in _user_message_prompt_texts(message)
+                or _matches_checkpoint_input(user_texts[1:], message)
+            ]
         provider_exact = [
-            (index, history)
-            for index, history in exact
+            (index, message)
+            for index, message in exact
             if message.provider_id
             and message.provider_id in {history[0].provider_id, history[0].provider}
         ]
-        available = provider_exact or exact or candidates
+        available = provider_exact or exact
         if not available:
             continue
-        index, history = available[-1]
+        # The prompt can be persisted before or after run start. The last match
+        # before the initial request excludes older untraced exchanges (e.g.
+        # fork copies) and later identical checkpoints. Rewritten compaction
+        # rows instead start at the first surviving prompt/checkpoint.
+        index, message = available[-1] if initial_request_match else available[0]
         matched[message.id] = history
-        upper_bound = index
+        lower_bound = index + 1
+        for index, message in enumerate(messages[lower_bound:], lower_bound):
+            if (
+                message.role != "user"
+                or (history[0].ended_at and message.created_at > history[0].ended_at)
+                or not _matches_checkpoint_input(user_texts[1:], message)
+            ):
+                break
+            # A single checkpoint request can contain several queued user rows.
+            matched[message.id] = history
+            lower_bound = index + 1
     return matched
 
 
-def _run_user_input_text(events: list[Any]) -> str:
+def _user_message_prompt_texts(message: MessageRecord) -> tuple[str, ...]:
+    # CLI image turns may have no attachment metadata. Keep the literal content
+    # as well, since restored requests can already contain the display suffix.
+    content = message.content.strip()
+    if content.endswith("]"):
+        prompt, separator, _attachments = content.rpartition("\n\n[attached images: ")
+        if separator:
+            return content, prompt.strip()
+        if content.startswith("[attached images: "):
+            return content, ""
+    return (content,)
+
+
+def _matches_checkpoint_input(texts: list[str], message: MessageRecord) -> bool:
+    prompts = _user_message_prompt_texts(message)
+    for text in texts:
+        # The tool loop adds this wrapper when compaction and checkpoint drain
+        # happen in the same iteration. Its single newline is not a user-row
+        # boundary; the wrapped body still uses double newlines between rows.
+        _, wrapper, follow_up = text.partition(
+            "\n\nUser follow-up for the current turn:\n"
+        )
+        candidates = (text, follow_up) if wrapper else (text,)
+        if any(
+            prompt == candidate.strip()
+            or (bool(prompt) and f"\n\n{prompt}\n\n" in f"\n\n{candidate.strip()}\n\n")
+            for prompt in prompts
+            for candidate in candidates
+        ):
+            return True
+    return False
+
+
+def _run_user_inputs(events: list[Any]) -> list[_RunUserInput]:
+    return [
+        _RunUserInput(text=text, timestamp=event.timestamp)
+        for event in events
+        if event.event_type == "model_call"
+        and (text := _run_user_input_text([event])) is not None
+    ]
+
+
+def _run_user_input_text(events: list[Any]) -> str | None:
     for event in events:
         payload = _json_field(event.request_payload_json)
         if not isinstance(payload, dict):
             continue
         request_items = _request_input_items(payload)
         for item in reversed(request_items):
-            if str(item.get("role") or "").lower() == "user":
+            if (
+                str(item.get("role") or "").lower() == "user"
+                or item.get("type") == "user_input"
+            ):
                 return _input_item_text(item.get("content"))
+        # Fresh multimodal Google input is a content list rather than steps.
+        if request_items and all(
+            item.get("type") in {"text", "image"} for item in request_items
+        ):
+            return _input_item_text(request_items)
         messages = payload.get("messages")
         if isinstance(messages, list):
             for message in reversed(messages):
@@ -640,7 +716,7 @@ def _run_user_input_text(events: list[Any]) -> str:
             for step in reversed(steps):
                 if isinstance(step, dict) and step.get("type") == "user_input":
                     return _input_item_text(step.get("content"))
-    return ""
+    return None
 
 
 def _response_history_items_for_run(
@@ -654,6 +730,7 @@ def _response_history_items_for_run(
     turn_items: list[dict[str, Any]] = []
     item_batches: list[tuple[list[dict[str, Any]], list[dict[str, Any]]]] = []
     first_model_call = True
+    failed_request_items: list[dict[str, Any]] | None = None
     saw_assistant_message_output = False
     request_output_ids = {
         call_id
@@ -669,14 +746,21 @@ def _response_history_items_for_run(
             if not delta_items:
                 return []
             first_model_call = False
+        elif request_items == failed_request_items:
+            # HTTP retries repeat incremental inputs without replaying the whole
+            # turn. Keep that logical request once, but still process its result.
+            delta_items = []
         else:
             delta_items = _new_input_delta(request_items, turn_items)
+        failed_request_items = request_items if event.success == 0 else None
         if _contains_redacted_inline_image(delta_items):
             return []
         turn_items.extend(_clone_json_dict(item) for item in delta_items)
 
-        response_items = _provider_response_output_items(
-            _json_field(event.response_payload_json)
+        response_items = (
+            _provider_response_output_items(_json_field(event.response_payload_json))
+            if event.success != 0
+            else []
         )
         response_items.extend(
             _missing_response_tool_outputs(
@@ -815,9 +899,10 @@ def _input_item_matches_message(
 ) -> bool:
     if str(item.get("role") or "").lower() != "user":
         return False
-    expected = message.content.strip()
     actual = _input_item_text(item.get("content")).strip()
-    return actual == expected if expected or actual else False
+    return actual in _user_message_prompt_texts(message) and bool(
+        actual or message.content.strip()
+    )
 
 
 def _input_item_text(content: Any) -> str:
@@ -855,9 +940,20 @@ def _new_input_delta(
         return []
     if not existing_items:
         return [_clone_json_dict(item) for item in request_items]
-    if _json_item_sequence_startswith(request_items, existing_items):
+    # Stateless Responses follow-ups sanitize prior outputs for request input,
+    # while traced outputs retain metadata (id/status, message annotations, etc.).
+    # Compare the same input-safe form without changing the returned delta.
+    normalized_request = [
+        _response_history_item_for_input(item) for item in request_items
+    ]
+    normalized_existing = [
+        _response_history_item_for_input(item) for item in existing_items
+    ]
+    if _json_item_sequence_startswith(normalized_request, normalized_existing):
         return [_clone_json_dict(item) for item in request_items[len(existing_items) :]]
-    existing_start = _find_json_item_subsequence(request_items, existing_items)
+    existing_start = _find_json_item_subsequence(
+        normalized_request, normalized_existing
+    )
     if existing_start is not None:
         return [
             _clone_json_dict(item)
@@ -980,8 +1076,10 @@ def _clone_json_value(value: Any) -> Any:
 def _tool_history_by_run(
     store: SessionStore,
     session_id: str,
-) -> list[tuple[Any, list[dict[str, Any]], str, str]]:
-    histories: list[tuple[Any, list[dict[str, Any]], str, str]] = []
+    *,
+    after: str | None = None,
+) -> list[tuple[Any, list[dict[str, Any]], str, list[_RunUserInput]]]:
+    histories: list[tuple[Any, list[dict[str, Any]], str, list[_RunUserInput]]] = []
     for run in store.list_run_sessions(session_id):
         if run.parent_run_session_id or run.agent_name not in {None, "main"}:
             continue
@@ -992,6 +1090,8 @@ def _tool_history_by_run(
         intermediate_parts: list[str] = []
         run_events = store.list_observability_events(run_session_id=run.run_session_id)
         for event in run_events:
+            if after is not None and event.timestamp <= after:
+                continue
             if event.event_type == "model_call":
                 response_items = _generic_response_history_items(
                     _json_field(event.response_payload_json)
@@ -1038,7 +1138,7 @@ def _tool_history_by_run(
                 run,
                 _group_parallel_tool_results(run_items),
                 "\n\n".join(intermediate_parts),
-                _run_user_input_text(run_events),
+                _run_user_inputs(run_events),
             )
         )
     return histories
