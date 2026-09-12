@@ -1,3 +1,3 @@
-- [x] Inspect task-scoped provider, tests, and memory changes; review found no actionable issues.
-- [x] Reuse current validation: 107 provider tests, full 1,786-test suite, Ruff lint/format, basedpyright; diff check passed.
-- [x] Prepare one local commit for proactive sub-agent full-history replay; no push.
+- [x] Read compress skill and current memory; identify durable rules and open follow-ups.
+- [x] Compress long-term prose/history; preserve active-day entries.
+- [x] Review structure and retained constraints; append compression task event.
