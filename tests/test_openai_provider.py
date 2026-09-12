@@ -2405,23 +2405,38 @@ def test_openai_execute_tool_calls_returns_only_outputs_for_chatgpt_backend(
     ]
 
 
-def test_openai_execute_tool_calls_closes_chatgpt_websocket_before_sub_agent(
+@pytest.mark.parametrize(
+    ("responses_url", "tool_name", "clears_continuation"),
+    [
+        (OPENAI_CHATGPT_RESPONSES_URL, "sub_agent", True),
+        (OPENAI_CHATGPT_RESPONSES_URL, "shell", False),
+        (DEFAULT_RESPONSES_URL, "sub_agent", False),
+    ],
+)
+def test_openai_execute_tool_calls_clears_only_chatgpt_sub_agent_continuation(
     monkeypatch,
     display_spy,
+    responses_url,
+    tool_name,
+    clears_continuation,
 ) -> None:
-    provider = OpenAIProvider(
-        _make_settings(responses_url=OPENAI_CHATGPT_RESPONSES_URL)
-    )
+    provider = OpenAIProvider(_make_settings(responses_url=responses_url))
     websocket = Mock()
     setattr(provider._chatgpt_backend, "_websocket", websocket)
+    setattr(provider._chatgpt_backend, "_turn_state", "old-turn-state")
+    provider.set_previous_response_id("resp_1")
     response = CompletedResponse(
         response_id="resp_1",
         text="",
         function_calls=[
             ToolCall(
                 call_id="call_1",
-                name="sub_agent",
-                arguments={"task_instruction": "Inspect the repo"},
+                name=tool_name,
+                arguments=(
+                    {"task_instruction": "Inspect the repo"}
+                    if tool_name == "sub_agent"
+                    else {"command": "pwd"}
+                ),
             )
         ],
     )
@@ -2443,8 +2458,18 @@ def test_openai_execute_tool_calls_closes_chatgpt_websocket_before_sub_agent(
         on_result=None,
     ):
         del calls, max_workers, context, on_result
-        websocket.close.assert_called_once()
-        assert getattr(provider._chatgpt_backend, "_websocket") is None
+        if clears_continuation:
+            websocket.close.assert_called_once()
+            assert getattr(provider._chatgpt_backend, "_websocket") is None
+            assert getattr(provider._chatgpt_backend, "_turn_state") is None
+            assert provider._previous_response_id is None
+            assert provider.get_conversation_checkpoint() is None
+        else:
+            websocket.close.assert_not_called()
+            assert getattr(provider._chatgpt_backend, "_websocket") is websocket
+            assert getattr(provider._chatgpt_backend, "_turn_state") == "old-turn-state"
+            assert provider._previous_response_id == "resp_1"
+            assert provider.get_conversation_checkpoint() == "resp_1"
         return batch
 
     monkeypatch.setattr(
@@ -3685,10 +3710,12 @@ def _mock_chatgpt_websocket_events(monkeypatch, events):
 
 
 @pytest.mark.parametrize("max_retries", [0, 3])
-def test_openai_chatgpt_invalid_previous_response_id_replays_and_resumes(
+@pytest.mark.parametrize("after_sub_agent", [False, True])
+def test_openai_chatgpt_full_history_replay_resumes_continuation(
     monkeypatch,
     display_spy,
     max_retries,
+    after_sub_agent,
 ) -> None:
     outputs = [
         [
@@ -3712,6 +3739,15 @@ def test_openai_chatgpt_invalid_previous_response_id_replays_and_resumes(
         ]
         for round_number in range(1, 4)
     ]
+    if after_sub_agent:
+        outputs[1].append(
+            {
+                "type": "function_call",
+                "call_id": "call_sub_agent",
+                "name": "sub_agent",
+                "arguments": '{"task_instruction":"Inspect the repo"}',
+            }
+        )
     outputs.append(
         [
             {
@@ -3732,17 +3768,18 @@ def test_openai_chatgpt_invalid_previous_response_id_replays_and_resumes(
         }
         for index, output in enumerate(outputs, start=1)
     ]
-    events.insert(
-        2,
-        {
-            "type": "error",
-            "status": 400,
-            "error": {
-                "type": "invalid_request_error",
-                "message": "Invalid `previous_response_id`.",
+    if not after_sub_agent:
+        events.insert(
+            2,
+            {
+                "type": "error",
+                "status": 400,
+                "error": {
+                    "type": "invalid_request_error",
+                    "message": "Invalid `previous_response_id`.",
+                },
             },
-        },
-    )
+        )
     requests = _mock_chatgpt_websocket_events(monkeypatch, events)
     executed_calls = []
 
@@ -3811,41 +3848,48 @@ def test_openai_chatgpt_invalid_previous_response_id_replays_and_resumes(
         )
 
     assert response.text == "Recovered."
-    assert executed_calls == ["call_1", "call_2", "call_3"]
-    assert len(requests) == 5
+    assert executed_calls == (
+        ["call_1", "call_2", "call_sub_agent", "call_3"]
+        if after_sub_agent
+        else ["call_1", "call_2", "call_3"]
+    )
+    assert len(requests) == (4 if after_sub_agent else 5)
     assert requests[1]["previous_response_id"] == "resp_1"
-    assert requests[2]["previous_response_id"] == "resp_2"
-    assert requests[2]["input"] == tool_outputs[1]
-    assert "previous_response_id" not in requests[3]
+    assert requests[1]["input"] == tool_outputs[0]
+    if not after_sub_agent:
+        assert requests[2]["previous_response_id"] == "resp_2"
+        assert requests[2]["input"] == tool_outputs[1]
+    replay_request = requests[2 if after_sub_agent else 3]
+    assert "previous_response_id" not in replay_request
     replay_outputs = [
         [{key: value for key, value in item.items() if key != "id"} for item in output]
         for output in outputs
     ]
-    assert requests[3]["input"] == [
+    assert replay_request["input"] == [
         *requests[0]["input"],
         *replay_outputs[0],
         *tool_outputs[0],
         *replay_outputs[1],
         *tool_outputs[1],
     ]
-    assert requests[3]["instructions"] == "Keep the workspace context."
-    assert requests[3]["input"][:2] == [
+    assert replay_request["instructions"] == "Keep the workspace context."
+    assert replay_request["input"][:2] == [
         {"role": "user", "content": "Earlier context"},
         {"role": "user", "content": "Inspect the workspace"},
     ]
     assert {
         key: value
-        for key, value in requests[2].items()
+        for key, value in requests[1].items()
         if key not in {"input", "previous_response_id"}
     } == {
         key: value
-        for key, value in requests[3].items()
+        for key, value in replay_request.items()
         if key not in {"input", "previous_response_id"}
     }
-    assert requests[4]["previous_response_id"] == "resp_3"
-    assert requests[4]["input"] == tool_outputs[2]
+    assert requests[-1]["previous_response_id"] == "resp_3"
+    assert requests[-1]["input"] == tool_outputs[2]
     assert provider.get_conversation_checkpoint() == "resp_4"
-    assert display_spy.retry_notices == [(1, max_retries)]
+    assert display_spy.retry_notices == ([] if after_sub_agent else [(1, max_retries)])
 
 
 @pytest.mark.parametrize(

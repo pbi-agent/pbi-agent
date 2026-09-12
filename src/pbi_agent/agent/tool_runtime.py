@@ -292,6 +292,7 @@ def _execute_one_tool_call(
         tool_context = _tool_context_for_call(context, call_id=call.call_id)
         output = handler(arguments, tool_context)
         attachments = []
+        trace_metadata: dict[str, Any] = {}
         display_metadata = dict(tool_context.display_metadata)
         is_codex_apply_patch = _is_codex_apply_patch_call(call, spec)
         if isinstance(output, ToolOutput):
@@ -299,6 +300,7 @@ def _execute_one_tool_call(
             result_payload = output.result
             attachments = list(output.attachments)
             display_metadata.update(output.display_metadata)
+            trace_metadata.update(output.trace_metadata)
         else:
             result_payload = output
             is_error = False
@@ -340,7 +342,10 @@ def _execute_one_tool_call(
             duration_ms=_duration_ms(start),
             success=not result.is_error,
             error_message=result.output_json if result.is_error else None,
-            metadata={"attachment_count": hooked_result.attachment_count},
+            metadata={
+                **trace_metadata,
+                "attachment_count": hooked_result.attachment_count,
+            },
         )
         _log.debug(
             "Finished tool call %s (%s) in %.3fs",
