@@ -84,7 +84,6 @@ from pbi_agent.agent.session.compaction import (
 from pbi_agent.agent.session.history import (
     add_message as _add_message,
     create_session as _create_session,
-    delete_message as _delete_message,
     discard_interrupted_turn as _discard_interrupted_turn,
     open_store as _open_store,
     persist_runtime_change as _persist_runtime_change,
@@ -1174,8 +1173,8 @@ def run_session_loop(
                         usage=turn_usage,
                         metadata={"error_message": str(exc)},
                     )
-                    if user_message_id is not None:
-                        _delete_message(store, user_message_id)
+                    # Failed requests may already have executed tools. Keep the
+                    # prompt as the anchor for replaying that unfinished turn.
                     raise
 
     _close_store(store)

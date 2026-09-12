@@ -138,4 +138,3 @@ Oververbosity:low
   - Frontend changes: `bun run test:web`, `bun run lint`, `bun run typecheck`, and `bun run web:build`.
   - Docs changes: `bun run docs:build`.
 - Before handoff on broad changes, the repo-level checks are `uv run ruff check .`, `uv run ruff format --check .`, `uv run basedpyright`, `bun run lint`, `bun run typecheck`, and `uv run pytest -q --tb=short -x`.
-- **No migration or backward-compatibility logic.** The project is in early development — do not add schema migrations, version checks, deprecation shims, or any other backward-compatibility code. When something changes, just change it directly.

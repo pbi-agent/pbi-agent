@@ -1,2 +1,3 @@
-- [x] Review the system_prompt.py diff against callers and prompt tests
-- [x] Run focused validation and report the component-command regression test failure; Ruff, formatting, and basedpyright passed
+- [x] Inspect session f9f2afb7b96243fa9c175d2838bc58ad traces read-only for sub-agent execution and invalid-ID recovery.
+- [x] Confirm exact 400 → full-history retry → 200; original input/tool call/result preserved and sub-agent executed once.
+- [x] Report limitation: recovery ended the turn; next turn started ID-less, so direct reuse of the recovered ID was not exercised.

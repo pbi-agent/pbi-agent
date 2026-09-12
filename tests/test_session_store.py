@@ -497,6 +497,40 @@ def test_add_and_list_messages(tmp_path) -> None:
     assert msgs[0].id < msgs[1].id < msgs[2].id
 
 
+@pytest.mark.parametrize("fork_index", [0, 1, 3])
+def test_message_local_command_origin_survives_reopen_and_fork(
+    tmp_path, fork_index
+) -> None:
+    db = tmp_path / "sessions.db"
+    turns = [
+        ("user", "!ls", True),
+        ("assistant", "local output", True),
+        ("user", "![diagram](architecture.png)", False),
+        ("assistant", "An architecture diagram", False),
+    ]
+    with SessionStore(db_path=db) as store:
+        sid = store.create_session("/w", "openai", "gpt-5")
+        ids = [
+            store.add_message(sid, role, content, is_local_command=is_local_command)
+            for role, content, is_local_command in turns
+        ]
+
+    with SessionStore(db_path=db) as store:
+        for message_id, (_, _, is_local_command) in zip(ids, turns, strict=True):
+            message = store.get_message(message_id)
+            assert message is not None
+            assert message.is_local_command is is_local_command
+        messages = store.list_messages(sid)
+        assert [(m.role, m.content, m.is_local_command) for m in messages] == turns
+        fork_id = store.fork_session(sid, ids[fork_index])
+
+    with SessionStore(db_path=db) as store:
+        forked = store.list_messages(fork_id)
+        assert [(m.role, m.content, m.is_local_command) for m in forked] == turns[
+            : fork_index + 1
+        ]
+
+
 def test_add_and_list_messages_preserve_image_attachments(tmp_path) -> None:
     db = tmp_path / "sessions.db"
     attachment = MessageImageAttachment(
@@ -531,6 +565,7 @@ def test_existing_message_table_adds_image_attachments_column(tmp_path) -> None:
             provider_id     TEXT,
             profile_id      TEXT,
             file_paths_json TEXT NOT NULL DEFAULT '[]',
+            is_local_command INTEGER NOT NULL DEFAULT 0,
             created_at      TEXT NOT NULL
         );
         INSERT INTO messages

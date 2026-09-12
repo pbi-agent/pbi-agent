@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import io
 import json
 import os
 from pathlib import Path
 from typing import cast
 import urllib.request
+import urllib.error
 
 import pytest
 
@@ -530,8 +532,9 @@ def test_run_single_turn_replays_resumed_history_by_default(
     assert provider.restored_history_items is None
 
 
+@pytest.mark.parametrize("with_local_commands", [False, True])
 def test_run_single_turn_restores_tool_history_when_enabled(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, with_local_commands
 ) -> None:
     monkeypatch.chdir(tmp_path)
     provider = _ProviderStub()
@@ -540,8 +543,18 @@ def test_run_single_turn_restores_tool_history_when_enabled(
 
     with SessionStore() as store:
         session_id = store.create_session(str(tmp_path), "openai", DEFAULT_MODEL)
+        if with_local_commands:
+            store.add_message(session_id, "user", "!ls", is_local_command=True)
+            store.add_message(
+                session_id, "assistant", "private local listing", is_local_command=True
+            )
         store.add_message(session_id, "user", "previous user")
         store.add_message(session_id, "assistant", "previous assistant")
+        if with_local_commands:
+            store.add_message(session_id, "user", "!pwd", is_local_command=True)
+            store.add_message(
+                session_id, "assistant", "private local path", is_local_command=True
+            )
         run_id = store.create_run_session(
             run_session_id="run-1",
             session_id=session_id,
@@ -683,15 +696,65 @@ def test_run_single_turn_restores_tool_history_when_enabled(
     assert restored_items[5]["content"] == [
         {"type": "output_text", "text": "previous assistant"}
     ]
-    assert [message.content for message in display.replayed_history] == [
+    expected_display = [
         "previous user",
         "previous assistant",
     ]
+    if with_local_commands:
+        expected_display = [
+            "!ls",
+            "private local listing",
+            *expected_display,
+            "!pwd",
+            "private local path",
+        ]
+    assert [message.content for message in display.replayed_history] == expected_display
 
 
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "![diagram](architecture.png)\nExplain this architecture.",
+        "!important: diagnose this problem",
+    ],
+)
+def test_run_single_turn_preserves_non_web_bang_prefixed_conversations(
+    monkeypatch, tmp_path, prompt
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    settings = Settings(api_key="test-key", provider="openai")
+    first_provider = _ProviderStub()
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(first_provider),
+    )
+    outcome = run_single_turn(prompt, settings, _SessionDisplaySpy([]))
+    assert first_provider.request_calls[0]["user_message"] == prompt
+
+    second_provider = _ProviderStub()
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(second_provider),
+    )
+    run_single_turn(
+        "Describe your previous answer in more detail.",
+        settings,
+        _SessionDisplaySpy([]),
+        resume_session_id=outcome.session_id,
+    )
+    assert [m.content for m in second_provider.restored_messages] == [
+        prompt,
+        "All set.",
+    ]
+
+
+@pytest.mark.parametrize("include_tool_history", [False, True])
+@pytest.mark.parametrize("status", ["stale", "failed"])
 def test_run_single_turn_restores_completed_tools_from_interrupted_turn(
     monkeypatch,
     tmp_path,
+    include_tool_history,
+    status,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     provider = _ProviderStub()
@@ -710,7 +773,7 @@ def test_run_single_turn_restores_completed_tools_from_interrupted_turn(
             provider_id=None,
             profile_id=None,
             model=DEFAULT_MODEL,
-            status="stale",
+            status=status,
         )
         store.add_observability_event(
             run_session_id=run_id,
@@ -802,7 +865,7 @@ def test_run_single_turn_restores_completed_tools_from_interrupted_turn(
         settings,
         display,
         resume_session_id=session_id,
-        include_tool_history=True,
+        include_tool_history=include_tool_history,
     )
 
     assert provider.restored_history_items is not None
@@ -901,10 +964,14 @@ def test_interrupted_response_history_uses_persisted_tool_result_without_next_mo
     }
 
 
+@pytest.mark.parametrize("include_tool_history", [False, True])
+@pytest.mark.parametrize("provider_name", ["anthropic", "google", "generic", "openai"])
 def test_generic_interrupted_tool_history_stays_aligned_after_no_tool_turn(
     tmp_path,
+    include_tool_history,
+    provider_name,
 ) -> None:
-    provider = _ProviderStub(provider_name="anthropic")
+    provider = _ProviderStub(provider_name=provider_name)
     with SessionStore(db_path=tmp_path / "sessions.db") as store:
         session_id = store.create_session(str(tmp_path), "anthropic", DEFAULT_MODEL)
         store.add_message(session_id, "user", "first request")
@@ -976,6 +1043,7 @@ def test_generic_interrupted_tool_history_stays_aligned_after_no_tool_turn(
             session_id,
             messages,
             provider=provider,
+            include_completed_tools=include_tool_history,
         )
 
     assert [item["type"] for item in history] == [
@@ -5083,7 +5151,7 @@ def test_run_session_loop_processes_attachment_only_queued_images(monkeypatch) -
     assert messages[1].content == "Ack"
 
 
-def test_run_session_loop_does_not_persist_unanswered_user_turn(monkeypatch) -> None:
+def test_run_session_loop_preserves_failed_user_turn(monkeypatch) -> None:
     class _FailingProvider:
         def __enter__(self):
             return self
@@ -5137,7 +5205,168 @@ def test_run_session_loop_does_not_persist_unanswered_user_turn(monkeypatch) -> 
     with SessionStore() as store:
         sessions = store.list_sessions(os.getcwd(), limit=10)
         assert len(sessions) == 1
-        assert store.list_messages(sessions[0].session_id) == []
+        assert [
+            (message.role, message.content)
+            for message in store.list_messages(sessions[0].session_id)
+        ] == [("user", "hello")]
+
+
+@pytest.mark.parametrize("fail_after_tool", [False, True])
+@pytest.mark.parametrize("include_tool_history", [False, True])
+@pytest.mark.parametrize("resume_in_loop", [False, True])
+def test_follow_up_after_http_400_replays_unfinished_turn(
+    monkeypatch,
+    tmp_path,
+    display_spy,
+    fail_after_tool,
+    include_tool_history,
+    resume_in_loop,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    settings = Settings(api_key="test-key", provider="openai", max_retries=0)
+    monkeypatch.setattr(
+        _SessionDisplaySpy,
+        "tool_execution_start",
+        lambda self, calls: display_spy.tool_execution_start(calls),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        _SessionDisplaySpy,
+        "tool_execution_stop",
+        lambda self: display_spy.tool_execution_stop(),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        _SessionDisplaySpy, "interrupt_requested", lambda self: False, raising=False
+    )
+    requests = []
+    failing = True
+
+    class _FakeHTTPResponse:
+        def __init__(self, output) -> None:
+            self.output = output
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {"id": f"resp_{len(requests)}", "output": self.output}
+            ).encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    def fake_urlopen(request, timeout):
+        del timeout
+        requests.append(json.loads(request.data))
+        if failing:
+            if fail_after_tool and len(requests) == 1:
+                return _FakeHTTPResponse(
+                    [
+                        {
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [
+                                {"type": "output_text", "text": "Inspecting workspace."}
+                            ],
+                        },
+                        {
+                            "type": "function_call",
+                            "call_id": "call_before_failure",
+                            "name": "shell",
+                            "arguments": '{"command": "pwd"}',
+                        },
+                    ]
+                )
+            raise urllib.error.HTTPError(
+                request.full_url,
+                400,
+                "Bad Request",
+                {},
+                io.BytesIO(b'{"error":{"message":"Invalid `previous_response_id`."}}'),
+            )
+        return _FakeHTTPResponse(
+            [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "Recovered."}],
+                }
+            ]
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(OpenAIProvider(settings)),
+    )
+    with pytest.raises(Exception, match="previous_response_id"):
+        run_session_loop(settings, _SessionDisplaySpy(["original task"]))
+
+    with SessionStore() as store:
+        session = store.list_sessions(str(tmp_path))[0]
+        assert [m.content for m in store.list_messages(session.session_id)] == [
+            "original task"
+        ]
+        assert store.list_run_sessions(session.session_id)[0].status == "failed"
+
+    failing = False
+    requests.clear()
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(OpenAIProvider(settings)),
+    )
+    if resume_in_loop:
+        run_session_loop(
+            settings,
+            _SessionDisplaySpy(
+                [
+                    QueuedInput(
+                        text="continue",
+                        include_tool_history=include_tool_history,
+                    ),
+                    QueuedInput(
+                        text="again",
+                        include_tool_history=include_tool_history,
+                    ),
+                    "quit",
+                ]
+            ),
+            resume_session_id=session.session_id,
+            include_tool_history=include_tool_history,
+        )
+    else:
+        run_single_turn(
+            "continue",
+            settings,
+            _SessionDisplaySpy([]),
+            resume_session_id=session.session_id,
+            include_tool_history=include_tool_history,
+        )
+
+    assert len(requests) == (2 if resume_in_loop else 1)
+    assert "previous_response_id" not in requests[0]
+    items = requests[0]["input"]
+    assert items[0] == {"role": "user", "content": "original task"}
+    assert items[-1] == {"role": "user", "content": "continue"}
+    if fail_after_tool:
+        assert [item.get("type", item.get("role")) for item in items] == [
+            "user",
+            "message",
+            "function_call",
+            "function_call_output",
+            "user",
+        ]
+        assert items[1]["content"][0]["text"] == "Inspecting workspace."
+        assert items[2]["call_id"] == items[3]["call_id"] == "call_before_failure"
+        assert str(tmp_path) in items[3]["output"]
+    else:
+        assert len(items) == 2
+    if resume_in_loop:
+        assert "previous_response_id" not in requests[1]
+        assert requests[1]["input"][: len(items)] == items
+        assert requests[1]["input"][-1] == {"role": "user", "content": "again"}
 
 
 def test_run_session_loop_interrupt_deletes_user_turn_and_accepts_next_input(
@@ -5547,11 +5776,12 @@ def test_run_single_turn_resumed_session_bootstraps_from_history_without_previou
     assert requests[0]["input"] == [
         {"role": "user", "content": "hello"},
         {"role": "assistant", "content": "hi"},
+        {"role": "user", "content": "failed earlier"},
         {"role": "user", "content": "continue"},
     ]
 
 
-def test_resume_session_does_not_restore_trailing_user_only_turn(
+def test_resume_session_restores_trailing_user_only_turn_without_trace(
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -5581,9 +5811,10 @@ def test_resume_session_does_not_restore_trailing_user_only_turn(
             display=display,
         )
 
-    assert [message.content for message in provider.restored_messages] == [
+    assert [item["message"].content for item in provider.restored_history_items] == [
         "hello",
         "hi",
+        "failed earlier",
     ]
 
 

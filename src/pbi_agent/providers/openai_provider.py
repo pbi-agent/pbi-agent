@@ -1072,8 +1072,11 @@ class OpenAIProvider(Provider):
 
                 if (
                     exc.previous_response_not_found
-                    and not retried_missing_previous_response
-                ):
+                    or (
+                        exc.invalid_previous_response_id
+                        and request_body.get("previous_response_id")
+                    )
+                ) and not retried_missing_previous_response:
                     request_body = self._rebuild_chatgpt_websocket_request_without_previous_response(
                         input_items=input_items,
                         instructions=instructions,

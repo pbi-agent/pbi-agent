@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 from typing import Any, Protocol
 
+from pbi_agent.agent.conversation_context import model_context_messages
 from pbi_agent.agent.session.runtime import open_runtime_provider
 from pbi_agent.config import ResolvedRuntime
 from pbi_agent.display.protocol import (
@@ -506,6 +507,7 @@ def _prompt_enhancement_user_input(
     draft: str,
     messages: list[MessageRecord],
 ) -> str:
+    messages = model_context_messages(messages)
     last_user = next(
         (
             message.content
