@@ -1,3 +1,2 @@
-- [x] Review ToolSpec prose, guidance assertions, and compress skill boundaries.
-- [x] Tighten descriptions without changing runtime behavior or schema structure.
-- [x] Run focused tests (153 passed), Ruff lint/format, basedpyright, and diff check; record outcome.
+- [x] Review shell input block, related tests, and rebuilt assets for regressions; no actionable findings.
+- [x] Validate 19 ToolResult tests, frontend lint/typecheck, generated asset changes, and diff whitespace; leave implementation unchanged.

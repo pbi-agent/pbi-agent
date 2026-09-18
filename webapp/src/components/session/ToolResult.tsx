@@ -154,6 +154,7 @@ function ShellToolResult({
       }
     >
       {error ? <ToolNotice tone="error" label="Error" value={error} /> : null}
+      <CodeOutputBlock label="Input" value={command} />
       <CodeOutputBlock
         label="Stdout"
         value={stdout}
