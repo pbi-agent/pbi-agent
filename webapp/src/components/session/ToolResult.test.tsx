@@ -34,11 +34,49 @@ describe("ToolResult", () => {
         />,
       );
 
-      expect(screen.getByText("bun run web:build")).toBeInTheDocument();
+      expect(screen.getAllByText("bun run web:build")).toHaveLength(2);
       expect(screen.queryByText("Summary")).not.toBeInTheDocument();
       expect(screen.queryByText("$ bun run web:build")).not.toBeInTheDocument();
       expect(screen.queryByText("<missing command>")).not.toBeInTheDocument();
     });
+
+    it.each([true, false])(
+      "renders the full multiline input before stdout and stderr (running=%s)",
+      (running) => {
+        const command = [
+          "python3 - <<'PY'",
+          `values = [${Array.from({ length: 100 }, (_, index) => index).join(", ")}]`,
+          "for value in values:",
+          "    print(value)",
+          "PY",
+          "",
+        ].join("\n");
+        const { container } = render(
+          <ToolResult
+            running={running}
+            text=""
+            metadata={{
+              tool_name: "shell",
+              status: running ? "running" : "completed",
+              ...(running
+                ? { arguments: { command } }
+                : {
+                    command,
+                    exit_code: 0,
+                    result: { stdout: "0\n", stderr: "", exit_code: 0 },
+                  }),
+            }}
+          />,
+        );
+
+        expect(
+          Array.from(container.querySelectorAll(".tool-result__section-label"))
+            .map((label) => label.textContent),
+        ).toEqual(["Input", "Stdout", "Stderr"]);
+        const inputBlock = screen.getByText("Input").closest(".tool-result__section");
+        expect(inputBlock?.querySelector("pre")?.textContent).toBe(command);
+      },
+    );
 
     it("shows a Running status label while the tool is running", () => {
       render(
@@ -171,7 +209,7 @@ describe("ToolResult", () => {
         />,
       );
 
-      expect(screen.getByText("<missing command>")).toBeInTheDocument();
+      expect(screen.getAllByText("<missing command>")).toHaveLength(2);
     });
 
     describe("stdout highlighting", () => {
@@ -241,7 +279,7 @@ describe("ToolResult", () => {
       });
 
       it("leaves stdout plain when the command is unrecognized", () => {
-        const { container } = render(
+        render(
           <ToolResult
             text=""
             metadata={{
@@ -259,9 +297,8 @@ describe("ToolResult", () => {
         );
 
         expect(highlightCodeMock).not.toHaveBeenCalled();
-        const stdoutPre = container.querySelector(
-          ".tool-result__section pre.tool-result__pre",
-        );
+        const stdoutPre = screen.getByText("Stdout")
+          .closest(".tool-result__section")?.querySelector("pre.tool-result__pre");
         expect(stdoutPre?.textContent).toBe("README.md\nsrc\n");
         expect(stdoutPre?.getAttribute("data-highlighted")).toBe("false");
       });
