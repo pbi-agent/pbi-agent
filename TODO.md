@@ -1,6 +1,3 @@
-- [x] Inspect Git/GitHub release boundary; retain both local commits above v0.33.0 (remote master), with no divergent remote commits.
-- [x] Create chore/release-v0.34.0; update version/lockfile, changelog, index, and sidebar.
-- [x] Run required validation: Python suite, Ruff/format/types/dead-code, 722 frontend tests, lint/types, API/static checks, docs/web/package builds. Two unrelated frontend timeouts passed focused/full reruns.
-- [x] Commit d86328b0 with only five release paths; push and merge PR #352 after clean CI (merge 859e3124).
-- [x] Verify Release/master/docs CI, tag 859e3124, normalized GitHub notes, and published PyPI wheel/sdist.
-- [x] Return to master and fast-forward to origin/master and v0.34.0 (859e3124); leave only session bookkeeping uncommitted.
+- [x] Compare Claude catalog entries with the supplied pricing table.
+- [x] Add missing pricing and regression coverage.
+- [x] Run Python validation and record results: 66 focused tests, Ruff lint/format, and basedpyright passed.
