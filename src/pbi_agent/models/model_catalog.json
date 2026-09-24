@@ -109,6 +109,123 @@
         "output": 15.00
       }
     },
+    "claude-fable-5-1": {
+      "pricing": {
+        "input": 10.00,
+        "cache_write_5m": 12.50,
+        "cache_write_1h": 20.00,
+        "cache_hit": 0.25,
+        "output": 50.00
+      }
+    },
+    "claude-fable-5.1": {
+      "pricing": {
+        "input": 10.00,
+        "cache_write_5m": 12.50,
+        "cache_write_1h": 20.00,
+        "cache_hit": 0.25,
+        "output": 50.00
+      }
+    },
+    "claude-mythos-5-1": {
+      "pricing": {
+        "input": 10.00,
+        "cache_write_5m": 12.50,
+        "cache_write_1h": 20.00,
+        "cache_hit": 0.25,
+        "output": 50.00
+      }
+    },
+    "claude-mythos-5.1": {
+      "pricing": {
+        "input": 10.00,
+        "cache_write_5m": 12.50,
+        "cache_write_1h": 20.00,
+        "cache_hit": 0.25,
+        "output": 50.00
+      }
+    },
+    "claude-opus-5-5": {
+      "pricing": {
+        "input": 4.00,
+        "cache_write_5m": 5.00,
+        "cache_write_1h": 8.00,
+        "cache_hit": 0.20,
+        "output": 20.00
+      }
+    },
+    "claude-opus-5.5": {
+      "pricing": {
+        "input": 4.00,
+        "cache_write_5m": 5.00,
+        "cache_write_1h": 8.00,
+        "cache_hit": 0.20,
+        "output": 20.00
+      }
+    },
+    "claude-opus-5": {
+      "pricing": {
+        "input": 5.00,
+        "cache_write_5m": 6.25,
+        "cache_write_1h": 10.00,
+        "cache_hit": 0.50,
+        "output": 25.00
+      }
+    },
+    "claude-opus-4-5": {
+      "pricing": {
+        "input": 5.00,
+        "cache_write_5m": 6.25,
+        "cache_write_1h": 10.00,
+        "cache_hit": 0.50,
+        "output": 25.00
+      }
+    },
+    "claude-opus-4-1": {
+      "pricing": {
+        "input": 15.00,
+        "cache_write_5m": 18.75,
+        "cache_write_1h": 30.00,
+        "cache_hit": 1.50,
+        "output": 75.00
+      }
+    },
+    "claude-opus-4": {
+      "pricing": {
+        "input": 15.00,
+        "cache_write_5m": 18.75,
+        "cache_write_1h": 30.00,
+        "cache_hit": 1.50,
+        "output": 75.00
+      }
+    },
+    "claude-sonnet-4-5": {
+      "pricing": {
+        "input": 3.00,
+        "cache_write_5m": 3.75,
+        "cache_write_1h": 6.00,
+        "cache_hit": 0.30,
+        "output": 15.00
+      }
+    },
+    "claude-sonnet-4": {
+      "pricing": {
+        "input": 3.00,
+        "cache_write_5m": 3.75,
+        "cache_write_1h": 6.00,
+        "cache_hit": 0.30,
+        "output": 15.00
+      }
+    },
+    "claude-3-5-haiku": {
+      "pricing": {
+        "input": 0.80,
+        "cache_write_5m": 1.00,
+        "cache_write_1h": 1.60,
+        "cache_hit": 0.08,
+        "output": 4.00
+      }
+    },
     "claude-fable-5": {
       "context_window": 1000000,
       "pricing": {
@@ -182,11 +299,11 @@
     "claude-sonnet-5": {
       "context_window": 1000000,
       "pricing": {
-        "input": 3.00,
-        "cache_write_5m": 3.75,
-        "cache_write_1h": 6.00,
-        "cache_hit": 0.30,
-        "output": 15.00
+        "input": 2.00,
+        "cache_write_5m": 2.50,
+        "cache_write_1h": 4.00,
+        "cache_hit": 0.20,
+        "output": 10.00
       }
     },
     "claude-haiku-4-5": {

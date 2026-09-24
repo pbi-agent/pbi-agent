@@ -1,2 +1,3 @@
-- [x] Review shell input block, related tests, and rebuilt assets for regressions; no actionable findings.
-- [x] Validate 19 ToolResult tests, frontend lint/typecheck, generated asset changes, and diff whitespace; leave implementation unchanged.
+- [x] Compare Claude catalog entries with the supplied pricing table.
+- [x] Add missing pricing and regression coverage.
+- [x] Run Python validation and record results: 66 focused tests, Ruff lint/format, and basedpyright passed.
