@@ -1,3 +1,2 @@
-- [x] Compare Claude catalog entries with the supplied pricing table.
-- [x] Add missing pricing and regression coverage.
-- [x] Run Python validation and record results: 66 focused tests, Ruff lint/format, and basedpyright passed.
+- [x] Compress MEMORY.md; retain durable decisions, open follow-ups, and active-day events.
+- [x] Review structure and technical guidance; record outcome.

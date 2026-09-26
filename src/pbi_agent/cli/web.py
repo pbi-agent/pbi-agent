@@ -331,12 +331,44 @@ def _open_browser_url(browser_url: str) -> bool:
     _remove_legacy_atk_bridge_gtk_module()
 
     if os.environ.get("BROWSER"):
-        return webbrowser.open(browser_url)
+        return _open_standard_browser(browser_url)
 
     if _is_wsl_environment() and _open_url_in_windows_browser(browser_url):
         return True
 
-    return webbrowser.open(browser_url)
+    return _open_standard_browser(browser_url)
+
+
+def _open_standard_browser(browser_url: str) -> bool:
+    if not sys.platform.startswith("linux") or not (
+        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+    ):
+        return webbrowser.open(browser_url)
+
+    # xdg-open (and its browser descendants) can inherit the server's terminal.
+    # Isolate selection in a child so we retain stdlib/BROWSER behavior without
+    # redirecting process-wide file descriptors in the threaded web server.
+    # Isolated Python mode prevents workspace/PYTHONPATH module shadowing.
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                "-c",
+                "import sys, webbrowser; "
+                "sys.exit(0 if webbrowser.open(sys.argv[1]) else 1)",
+                browser_url,
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
 
 
 def _remove_legacy_atk_bridge_gtk_module() -> None:
@@ -427,7 +459,9 @@ def _create_web_server(
     )
 
 
-def _load_session_record(session_id: str):  # pyright: ignore[reportUnusedFunction] - exported for compatibility/tests
+def _load_session_record(  # pyright: ignore[reportUnusedFunction] - exported for compatibility/tests
+    session_id: str,
+):
     from pbi_agent.session_store import SessionStore
 
     try:
