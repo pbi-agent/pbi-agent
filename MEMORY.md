@@ -1,7 +1,7 @@
 # MEMORY.md
 
 ## Metadata
-- Last compacted: 2026-09-18
+- Last compacted: 2026-09-26
 - Scope: durable repo memory + active-day task events.
 - Format: only `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
 
@@ -52,9 +52,13 @@
 - Test hygiene: uploads isolated to `tmp_path / "web_uploads"`; FastAPI/Starlette TestClient pinned `httpx2==2.4.0`. Checkpoint tests gate worker drain with explicit event after pending assertions; avoid queue-consuming sleep polling.
 - 2026-09-12 resume: invalid-ID investigation/recovery, read-only smoke test, and proactive socket replay outcomes are retained in ChatGPT continuation/open-validation bullets; provider regressions and full Python checks passed. Explore recovery/metadata and compact guidance passed focused/full checks; retained above. v0.32.0 (#350) and v0.33.0 (#351, tag 783b81d2) shipped with CI/PyPI verified; latest release validated 1,861 Python/720 frontend tests. Memory-only compression had no runtime effect. Transient SQLite/FIFO test failures passed reruns; release troubleshooting details are non-durable.
 
+- 2026-09-18 resume: shell cards gained multiline Input above Stdout/Stderr; 722 frontend tests/lint/types/build passed. v0.34.0 #352/tag 859e3124 shipped with full validation/CI/PyPI verified (release rules above); transient frontend timeouts passed reruns. Claude catalog added ten supplied models, dotted/hyphenated Fable/Mythos 5.1 and Opus 5.5 aliases, corrected Sonnet 5 rates; undocumented context windows omitted; 66 focused tests/Ruff/types passed. No durable follow-ups from that day.
+- Linux desktop browser launch: isolate stdlib `webbrowser.open` in a same-interpreter `-I` child with DEVNULL stdio, new session, bounded wait; prevent workspace/PYTHONPATH module shadowing, preserve BROWSER/default selection, WSL precedence, headless/non-Linux direct behavior. Avoid process-wide fd redirection in threaded server. Snap Brave GPU/GTK/AppArmor logs are browser diagnostics, not server errors; do not weaken sandbox or change drivers to silence them.
+
 ## Detailed Task Events
 
-## 2026-09-18
-- Added a full shell command Input block above Stdout/Stderr, preserving multiline whitespace for running/completed cards; updated component tests and rebuilt static bundle. Validation: 722 frontend tests, lint, typecheck, web build, and diff check passed; first suite run hit an unrelated Composer timeout, rerun passed. Existing React act/chunk-size warnings remain; no manual browser check.
-- Published v0.34.0 via PR #352, preserving both unreleased local commits; release commit d86328b0, merge/tag 859e3124. Validation: full Python suite, 722 frontend tests, Ruff/format/types/dead-code, API/static checks, docs/web/package builds, and PR/master/release/docs CI passed. Two unrelated frontend timeouts passed focused/full reruns. GitHub notes normalized and PyPI wheel/sdist verified after propagation; master refreshed to origin/master. Only session bookkeeping remains local; dependency PRs/alerts unchanged.
-- Updated Claude catalog from the supplied pricing table: ten missing models, dotted/hyphenated aliases for Fable/Mythos 5.1 and Opus 5.5, and corrected Sonnet 5 standard rates. New entries omit undocumented context windows. Validation: 66 usage/Anthropic tests, Ruff lint/format, and basedpyright passed.
+## 2026-09-26
+- Diagnosed Ubuntu CLI noise as Snap Brave inheriting terminal descriptors; confirmed default Brave and loaded NVIDIA driver. Isolated Linux desktop browser launch; added mocked failures and real-child/descendant output regression tests. Validation: 152 CLI tests, Ruff lint/format, basedpyright passed; local `pbi-agent` reinstalled with `uv tool install --reinstall .`. Actual GUI launch not manually checked; underlying Brave graphics/sandbox warnings remain outside this fix.
+- Fixed review P1: browser child uses Python `-I`; real-child tests reject current-directory/PYTHONPATH `webbrowser.py` while preserving explicit BROWSER selection and silent descendants. Regression failed before fix; 153 CLI tests, Ruff lint/format, diff check passed. Basedpyright reports unrelated unused `_load_session_record` at `src/pbi_agent/cli/web.py:462`; left unchanged.
+- Corrected the preceding attribution: the unused-function error came from moving its suppression in this diff. Restored suppression to the declaration; Ruff lint/format, basedpyright, all 32 web CLI tests, and diff checks passed.
+- Commit preparation: full 153-test CLI suite passed; browser isolation, regression tests, and task notes reviewed for the requested commit.

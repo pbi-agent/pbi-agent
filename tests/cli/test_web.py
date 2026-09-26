@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import io
 import os
+import shlex
+import subprocess
 import sys
 import unittest
+
+import pytest
 
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -14,7 +18,101 @@ from pbi_agent import cli
 from pbi_agent.cli import web as cli_web
 
 
+@pytest.mark.parametrize("display_variable", ["DISPLAY", "WAYLAND_DISPLAY"])
+@pytest.mark.parametrize("returncode", [0, 1])
+def test_desktop_browser_isolates_stdio(display_variable: str, returncode: int) -> None:
+    url = "http://localhost:7424/?value='quoted'&other=1"
+    with (
+        patch("pbi_agent.cli.web.sys.platform", "linux"),
+        patch.dict(os.environ, {display_variable: ":1"}, clear=True),
+        patch(
+            "pbi_agent.cli.web.subprocess.run",
+            return_value=subprocess.CompletedProcess([], returncode),
+        ) as run,
+        patch("pbi_agent.cli.web.webbrowser.open") as direct_open,
+    ):
+        assert cli_web._open_standard_browser(url) is (returncode == 0)
+
+    direct_open.assert_not_called()
+    args, kwargs = run.call_args
+    assert args[0][:3] == [sys.executable, "-I", "-c"]
+    assert args[0][-1] == url
+    assert kwargs == {
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "start_new_session": True,
+        "timeout": 15,
+        "check": False,
+    }
+
+
+@pytest.mark.parametrize(
+    "error", [OSError("cannot launch"), subprocess.TimeoutExpired("browser", 15)]
+)
+def test_desktop_browser_launch_errors_return_false(error: Exception) -> None:
+    with (
+        patch("pbi_agent.cli.web.sys.platform", "linux"),
+        patch.dict(os.environ, {"DISPLAY": ":1"}, clear=True),
+        patch("pbi_agent.cli.web.subprocess.run", side_effect=error),
+    ):
+        assert not cli_web._open_standard_browser("http://localhost:7424")
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux desktop launch")
+@pytest.mark.parametrize("shadow_source", ["cwd", "pythonpath"])
+def test_desktop_browser_child_preserves_selection_and_silences_descendants(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+    shadow_source: str,
+) -> None:
+    output = tmp_path / "opened.txt"
+    browser = tmp_path / "custom browser.py"
+    browser.write_text(
+        "import os, subprocess, sys\n"
+        "print('browser stdout', flush=True)\n"
+        "print('browser stderr', file=sys.stderr, flush=True)\n"
+        "subprocess.run([sys.executable, '-I', '-c', "
+        "\"import os; os.write(2, b'GPU diagnostic')\"], check=True)\n"
+        "with open(os.environ['OPENED_FILE'], 'w') as f:\n"
+        "    f.write(sys.argv[1])\n",
+        encoding="utf-8",
+    )
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    marker = tmp_path / "workspace-module-imported.txt"
+    (workspace / "webbrowser.py").write_text(
+        f"with open({str(marker)!r}, 'w') as f:\n"
+        "    f.write('untrusted workspace module imported')\n"
+        "raise RuntimeError('workspace webbrowser.py must not be imported')\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(workspace if shadow_source == "cwd" else tmp_path)
+    monkeypatch.delenv("PYTHONPATH", raising=False)
+    if shadow_source == "pythonpath":
+        monkeypatch.setenv("PYTHONPATH", str(workspace))
+    monkeypatch.setenv("DISPLAY", ":1")
+    monkeypatch.setenv(
+        "BROWSER", shlex.join([sys.executable, "-I", str(browser), "%s"])
+    )
+    monkeypatch.setenv("OPENED_FILE", str(output))
+    url = "http://localhost:7424/?a=1&b='two'"
+
+    opened = cli_web._open_browser_url(url)
+    assert not marker.exists()
+    assert opened
+    assert output.read_text(encoding="utf-8") == url
+    assert capfd.readouterr() == ("", "")
+
+
 class DefaultWebCommandTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # Browser process isolation is covered separately with a fake desktop.
+        self.enterContext(
+            patch.dict(os.environ, {"DISPLAY": "", "WAYLAND_DISPLAY": ""})
+        )
+
     _OAUTH_URL = (
         "https://auth.openai.com/oauth/authorize?"
         "response_type=code&client_id=app_EMoamEEZ73f0CkXaXp7hrann"

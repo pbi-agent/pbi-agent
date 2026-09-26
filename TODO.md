@@ -1,3 +1,4 @@
-- [x] Compare Claude catalog entries with the supplied pricing table.
-- [x] Add missing pricing and regression coverage.
-- [x] Run Python validation and record results: 66 focused tests, Ruff lint/format, and basedpyright passed.
+- [x] Restore the unused-function suppression to the function declaration.
+- [x] Run Python validation and diff checks.
+- [x] Record the corrected outcome in memory.
+- [x] Review the validated changes and prepare the commit.
