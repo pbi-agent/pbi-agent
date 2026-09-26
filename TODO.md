@@ -1,4 +1,2 @@
-- [x] Restore the unused-function suppression to the function declaration.
-- [x] Run Python validation and diff checks.
-- [x] Record the corrected outcome in memory.
-- [x] Review the validated changes and prepare the commit.
+- [x] Compress MEMORY.md; retain durable decisions, open follow-ups, and active-day events.
+- [x] Review structure and technical guidance; record outcome.
