@@ -5,16 +5,18 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
+import pytest
 from rich.console import Console
 
 from pbi_agent.maintenance import (
-    _latest_pypi_version,
+    BACKGROUND_CHECK_TIMEOUT_SECONDS,
     check_update_notice,
     render_update_notice,
     run_startup_maintenance,
 )
+from pbi_agent.self_update import UpdateCheckError, UpgradePlan
 from pbi_agent.session_store import MessageImageAttachment, SessionStore
 from pbi_agent.web import uploads
 
@@ -239,10 +241,7 @@ def test_daily_maintenance_runs_once_and_checks_update(
     monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(db_path))
     monkeypatch.setenv("PBI_AGENT_INTERNAL_CONFIG_PATH", str(config_path))
     monkeypatch.setattr(uploads, "_UPLOADS_ROOT", uploads_root)
-    notice = (
-        "Update available: pbi-agent 1.0.0 -> 1.2.0. "
-        "Run: uv tool install pbi-agent --upgrade"
-    )
+    notice = "Update available: pbi-agent 1.0.0 -> 1.2.0.\nRun: pbi-agent upgrade"
     with (
         patch(
             "pbi_agent.maintenance.check_update_notice", return_value=notice
@@ -259,7 +258,7 @@ def test_daily_maintenance_runs_once_and_checks_update(
     assert check.call_count == 1
     assert output.count("Update available") >= 1
     assert output.count("pbi-agent 1.0.0 -> 1.2.0") == 1
-    assert output.count("uv tool install pbi-agent --upgrade") >= 1
+    assert output.count("pbi-agent upgrade") >= 1
     assert not old_upload.exists()
 
 
@@ -270,10 +269,7 @@ def test_daily_maintenance_can_defer_update_notice_rendering(
     config_path = tmp_path / "config.json"
     monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(db_path))
     monkeypatch.setenv("PBI_AGENT_INTERNAL_CONFIG_PATH", str(config_path))
-    notice = (
-        "Update available: pbi-agent 1.0.0 -> 1.2.0. "
-        "Run: uv tool install pbi-agent --upgrade"
-    )
+    notice = "Update available: pbi-agent 1.0.0 -> 1.2.0.\nRun: pbi-agent upgrade"
     with (
         patch("pbi_agent.maintenance.check_update_notice", return_value=notice),
         patch("sys.stderr", io.StringIO()) as stderr,
@@ -285,26 +281,68 @@ def test_daily_maintenance_can_defer_update_notice_rendering(
     assert stderr.getvalue() == ""
 
 
-def test_update_notice_newer_version(monkeypatch) -> None:
+def test_daily_maintenance_can_skip_update_check(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(tmp_path / "sessions.db"))
+    with patch("pbi_agent.maintenance.check_update_notice") as check:
+        result = run_startup_maintenance(check_updates=False)
+
+    assert result.ran is True
+    assert result.update_notice is None
+    check.assert_not_called()
+
+
+def _pypi_returns(version: str | None):
+    def fake(*, timeout: float = 10) -> str:
+        assert timeout == BACKGROUND_CHECK_TIMEOUT_SECONDS
+        if version is None:
+            raise UpdateCheckError("offline")
+        return version
+
+    return fake
+
+
+@pytest.mark.parametrize(
+    ("command", "manual_hint", "expected_hint"),
+    [
+        (
+            ("uv", "tool", "upgrade"),
+            "Run: uv tool upgrade pbi-agent",
+            "Run: pbi-agent upgrade",
+        ),
+        (
+            None,
+            "Update your source checkout and reinstall it.",
+            "Update your source checkout and reinstall it.",
+        ),
+    ],
+)
+def test_update_notice_uses_install_aware_hint(
+    monkeypatch,
+    command: tuple[str, ...] | None,
+    manual_hint: str,
+    expected_hint: str,
+) -> None:
     monkeypatch.setattr("pbi_agent.maintenance.__version__", "1.0.0")
-    monkeypatch.setattr("pbi_agent.maintenance._latest_pypi_version", lambda: "1.2.0")
+    monkeypatch.setattr(
+        "pbi_agent.maintenance.latest_pypi_version", _pypi_returns("1.2.0")
+    )
+    plan = UpgradePlan(installer="uv", command=command, manual_hint=manual_hint)
+    monkeypatch.setattr("pbi_agent.maintenance.detect_upgrade_plan", lambda: plan)
 
     assert check_update_notice() == (
-        "Update available: pbi-agent 1.0.0 -> 1.2.0. "
-        "Run: uv tool install pbi-agent --upgrade"
+        f"Update available: pbi-agent 1.0.0 -> 1.2.0.\n{expected_hint}"
     )
 
 
-def test_update_notice_silent_for_equal_older_and_missing_versions(monkeypatch) -> None:
+@pytest.mark.parametrize("version", ["1.2.0", "1.0.0", None])
+def test_update_notice_silent_for_equal_older_and_missing_versions(
+    monkeypatch, version: str | None
+) -> None:
     monkeypatch.setattr("pbi_agent.maintenance.__version__", "1.2.0")
+    monkeypatch.setattr(
+        "pbi_agent.maintenance.latest_pypi_version", _pypi_returns(version)
+    )
 
-    monkeypatch.setattr("pbi_agent.maintenance._latest_pypi_version", lambda: "1.2.0")
-    assert check_update_notice() is None
-
-    monkeypatch.setattr("pbi_agent.maintenance._latest_pypi_version", lambda: "1.0.0")
-    assert check_update_notice() is None
-
-    monkeypatch.setattr("pbi_agent.maintenance._latest_pypi_version", lambda: None)
     assert check_update_notice() is None
 
 
@@ -313,33 +351,14 @@ def test_render_update_notice_uses_rich_warning_panel() -> None:
     console = Console(file=output, force_terminal=False, color_system=None, width=100)
 
     render_update_notice(
-        "Update available: pbi-agent 1.0.0 -> 1.2.0. "
-        "Run: uv tool install pbi-agent --upgrade",
+        "Update available: pbi-agent 1.0.0 -> 1.2.0.\nRun: pbi-agent upgrade",
         console=console,
     )
 
     rendered = output.getvalue()
     assert "Update available" in rendered
     assert "pbi-agent 1.0.0 -> 1.2.0" in rendered
-    assert "uv tool install pbi-agent --upgrade" in rendered
-
-
-def test_latest_pypi_version_uses_json_request_headers_and_timeout(monkeypatch) -> None:
-    response = Mock()
-    response.read.return_value = b'{"info": {"version": "1.2.3"}}'
-    response.__enter__ = Mock(return_value=response)
-    response.__exit__ = Mock(return_value=None)
-    urlopen = Mock(return_value=response)
-    monkeypatch.setattr("pbi_agent.maintenance.__version__", "1.0.0")
-    monkeypatch.setattr("pbi_agent.maintenance.urllib.request.urlopen", urlopen)
-
-    assert _latest_pypi_version() == "1.2.3"
-
-    request = urlopen.call_args.args[0]
-    assert request.full_url == "https://pypi.org/pypi/pbi-agent/json"
-    assert request.get_header("Accept") == "application/json"
-    assert request.get_header("User-agent") == "pbi-agent/1.0.0"
-    assert urlopen.call_args.kwargs == {"timeout": 2}
+    assert "pbi-agent upgrade" in rendered
 
 
 def test_referenced_upload_ids_reads_messages_and_kanban(tmp_path: Path) -> None:

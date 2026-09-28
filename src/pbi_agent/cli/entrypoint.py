@@ -37,6 +37,7 @@ from .parser import _argv_with_default_command, _web_runtime_flags_in_args, buil
 from .run import _handle_run_command
 from .sandbox import _handle_sandbox_command
 from .sessions import _handle_sessions_command, _load_session_record
+from .upgrade import UPGRADE_COMMANDS, _handle_upgrade_command
 from .web import _handle_web_command
 
 LOGGER = logging.getLogger(__name__)
@@ -46,7 +47,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     raw_argv = list(sys.argv[1:] if argv is None else argv)
     args = parser.parse_args(_argv_with_default_command(parser, raw_argv))
-    maintenance_result = run_startup_maintenance(render_notice=args.command != "web")
+    # `web` renders the notice itself; `upgrade` does its own PyPI check.
+    maintenance_result = run_startup_maintenance(
+        render_notice=args.command != "web",
+        check_updates=args.command not in UPGRADE_COMMANDS,
+    )
 
     # ---- commands that don't need settings ----
 
@@ -54,6 +59,9 @@ def main(argv: list[str] | None = None) -> int:
         return _handle_mcp_flag(args)
     if args.agents:
         return _handle_agents_flag(args)
+
+    if args.command in UPGRADE_COMMANDS:
+        return _handle_upgrade_command(args)
 
     if args.command == "skills":
         return _handle_skills_command(args)

@@ -25,8 +25,10 @@ If this is your first `uv tool install`, reload your shell before running `pbi-a
 To update an existing installation later, run:
 
 ```bash
-uv tool install pbi-agent --upgrade
+pbi-agent upgrade
 ```
+
+This detects the install method and runs the matching upgrade, such as `uv tool upgrade pbi-agent` for uv tool installs. See [`pbi-agent upgrade`](/cli#pbi-agent-upgrade).
 
 ## Install from Source
 

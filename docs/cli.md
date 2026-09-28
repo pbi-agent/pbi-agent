@@ -209,6 +209,37 @@ By default, existing bootstrap files are skipped. Use `--force` or `--overwrite`
 
 Init reports created, installed, overwritten, skipped, and failed items. Catalog install failures are shown in the summary without hiding successful `AGENTS.md` handling.
 
+## `pbi-agent upgrade`
+
+Upgrade `pbi-agent` to the latest release published on PyPI. `pbi-agent update` is an alias.
+
+```bash
+pbi-agent upgrade
+pbi-agent upgrade --check
+```
+
+| Option | Description |
+| --- | --- |
+| `--check` | Only report whether a newer version is available; do not install. |
+
+`--check` exit codes: `0` when up to date, `100` when an update is available, and `1` when PyPI cannot be reached. The error message includes the underlying network cause.
+
+The command detects how `pbi-agent` was installed and runs the matching upgrade:
+
+| Install method | Upgrade command |
+| --- | --- |
+| `uv tool install` | `uv tool upgrade pbi-agent` (keeps extras, `--with` packages, and the Python pin from the original install) |
+| `pipx install` | `pipx upgrade pbi-agent` |
+| `pip` inside a virtual environment | `python -m pip install --upgrade pbi-agent` |
+
+After the installer finishes, the command checks the installed version. If it did not change, for example because the original install pinned a version, the command exits with an error.
+
+The command does not upgrade source installs (editable checkouts, local paths, or git URLs). Update the source checkout and reinstall it instead. If `uv` or `pipx` is not on `PATH`, or the install method cannot be detected, the command prints the manual upgrade command and exits with an error.
+
+On Windows, the running `pbi-agent.exe` and its Python files are locked. The installer therefore starts in the same console after `pbi-agent` exits.
+
+The startup update notice uses the same detection. It suggests `pbi-agent upgrade` only when that command can run for your install.
+
 ## `pbi-agent kanban`
 
 Create and manage Kanban board tasks for the current workspace.

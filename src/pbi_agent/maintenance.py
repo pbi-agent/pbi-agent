@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import json
-import re
 import sys
-import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -14,11 +11,17 @@ from rich.text import Text
 
 from pbi_agent import __version__
 from pbi_agent.config import load_internal_config
+from pbi_agent.self_update import (
+    UpdateCheckError,
+    detect_upgrade_plan,
+    is_newer_version,
+    latest_pypi_version,
+    update_available_message,
+)
 from pbi_agent.session_store import SessionStore
 from pbi_agent.web.uploads import purge_old_unreferenced_uploads
 
-PYPI_URL = "https://pypi.org/pypi/pbi-agent/json"
-UPDATE_COMMAND = "uv tool install pbi-agent --upgrade"
+BACKGROUND_CHECK_TIMEOUT_SECONDS = 2
 
 
 @dataclass(slots=True)
@@ -27,7 +30,9 @@ class MaintenanceResult:
     update_notice: str | None = None
 
 
-def run_startup_maintenance(*, render_notice: bool = True) -> MaintenanceResult:
+def run_startup_maintenance(
+    *, render_notice: bool = True, check_updates: bool = True
+) -> MaintenanceResult:
     today = datetime.now(timezone.utc).date().isoformat()
     success = False
     claimed = False
@@ -44,7 +49,7 @@ def run_startup_maintenance(*, render_notice: bool = True) -> MaintenanceResult:
                 cutoff=cutoff,
                 referenced_upload_ids=referenced_upload_ids,
             )
-            notice = check_update_notice()
+            notice = check_update_notice() if check_updates else None
             if notice and render_notice:
                 render_update_notice(notice)
             success = True
@@ -62,15 +67,14 @@ def run_startup_maintenance(*, render_notice: bool = True) -> MaintenanceResult:
 
 
 def check_update_notice() -> str | None:
-    latest = _latest_pypi_version()
-    if latest is None:
+    try:
+        latest = latest_pypi_version(timeout=BACKGROUND_CHECK_TIMEOUT_SECONDS)
+    except UpdateCheckError:
+        return None  # background update checks stay silent on failure
+    if not is_newer_version(latest, __version__):
         return None
-    if _is_newer_version(latest, __version__):
-        return (
-            f"Update available: pbi-agent {__version__} -> {latest}. "
-            f"Run: {UPDATE_COMMAND}"
-        )
-    return None
+    message = update_available_message(__version__, latest)
+    return f"{message}\n{detect_upgrade_plan().hint}"
 
 
 def render_update_notice(
@@ -80,46 +84,10 @@ def render_update_notice(
     centered: bool = False,
 ) -> None:
     active_console = console or Console(stderr=True)
-    body = Text(notice.replace(". Run: ", ".\nRun: "))
     panel = Panel(
-        body,
+        Text(notice),
         title="Update available",
         border_style="yellow",
         expand=False,
     )
     active_console.print(Align.center(panel) if centered else panel)
-
-
-def _latest_pypi_version() -> str | None:
-    try:
-        request = urllib.request.Request(
-            PYPI_URL,
-            headers={
-                "Accept": "application/json",
-                "User-Agent": f"pbi-agent/{__version__}",
-            },
-        )
-        with urllib.request.urlopen(request, timeout=2) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except Exception:  # noqa: BLE001 - update checks must be silent on failure
-        return None
-    if not isinstance(payload, dict):
-        return None
-    info = payload.get("info")
-    if not isinstance(info, dict):
-        return None
-    version = info.get("version")
-    return version if isinstance(version, str) and version else None
-
-
-def _is_newer_version(candidate: str, current: str) -> bool:
-    try:
-        from packaging.version import Version
-
-        return Version(candidate) > Version(current)
-    except Exception:  # noqa: BLE001 - fallback for environments without packaging
-        return _version_tuple(candidate) > _version_tuple(current)
-
-
-def _version_tuple(value: str) -> tuple[int, ...]:
-    return tuple(int(part) for part in re.findall(r"\d+", value))
