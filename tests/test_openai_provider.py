@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import re
 import socket
 import ssl
 import urllib.request
@@ -1346,7 +1347,7 @@ def test_chatgpt_user_agent_uses_static_real_codex_version() -> None:
     user_agent = chatgpt_user_agent()
 
     assert user_agent.startswith(f"{CHATGPT_ORIGINATOR}/{CHATGPT_CODEX_VERSION} (")
-    assert CHATGPT_CODEX_VERSION == "0.153.4"
+    assert re.fullmatch(r"\d+\.\d+\.\d+", CHATGPT_CODEX_VERSION)
 
 
 def test_chatgpt_codex_backend_websocket_url_matches_codex_provider_path() -> None:

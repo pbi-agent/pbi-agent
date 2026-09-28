@@ -37,7 +37,6 @@ _SUPPORTED_DISCOVERY_PROVIDERS = frozenset(
         "generic",
     }
 )
-_OPENAI_CHATGPT_MIN_CLIENT_VERSION = CHATGPT_CODEX_VERSION
 _OAUTH_REFRESH_SKEW_SECS = 3600
 _MANUAL_ENTRY_ONLY_REASONS: dict[str, str] = {}
 _XAI_ACCOUNT_CURATED_MODELS: tuple[str, ...] = (
@@ -560,7 +559,7 @@ def _request_headers(
 def _openai_chatgpt_models_url() -> str:
     return _append_query_params(
         _replace_path_suffix(OPENAI_CHATGPT_RESPONSES_URL, "models"),
-        {"client_version": _openai_chatgpt_client_version()},
+        {"client_version": CHATGPT_CODEX_VERSION},
     )
 
 
@@ -680,39 +679,6 @@ def _oauth_refresh_due(auth: OAuthSessionAuth) -> bool:
 
 def _is_xai_account_auth(auth: object) -> bool:
     return isinstance(auth, OAuthSessionAuth) and auth.backend == "xai_account"
-
-
-def _whole_version(version: str) -> str:
-    return version.split("-", 1)[0]
-
-
-def _openai_chatgpt_client_version() -> str:
-    return _max_semver(
-        _whole_version(__version__),
-        _OPENAI_CHATGPT_MIN_CLIENT_VERSION,
-    )
-
-
-def _max_semver(*versions: str) -> str:
-    best = versions[0]
-    best_parts = _semver_parts(best)
-    for candidate in versions[1:]:
-        candidate_parts = _semver_parts(candidate)
-        if candidate_parts > best_parts:
-            best = candidate
-            best_parts = candidate_parts
-    return best
-
-
-def _semver_parts(version: str) -> tuple[int, int, int]:
-    parts = version.split(".")
-    numbers: list[int] = []
-    for index in range(3):
-        try:
-            numbers.append(int(parts[index]))
-        except (IndexError, ValueError):
-            numbers.append(0)
-    return (numbers[0], numbers[1], numbers[2])
 
 
 def _string_value(value: Any) -> str | None:
