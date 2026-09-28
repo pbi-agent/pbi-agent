@@ -1,2 +1,6 @@
-- [x] Compress MEMORY.md; retain durable decisions, open follow-ups, and active-day events.
-- [x] Review structure and technical guidance; record outcome.
+- [x] Preflight: gh auth, fetch tags/master; origin/master already at v0.36.0 (#354), local master fast-forwarded.
+- [x] Reconcile uncommitted Codex 0.158.0 bump + discovery `client_version` fix onto `chore/release-v0.37.0`; bookkeeping rebased on upstream MEMORY.
+- [x] Commit Codex fix 70e969f6; bump 0.37.0, changelog page/index/sidebar.
+- [x] Validate: Ruff lint/format, basedpyright, dead code, full pytest, docs build, uv lock check passed.
+- [x] Release commit 45885427 pushed; PR #355 CI passed and merged as 35facde5.
+- [x] Release/Tests/Docs/Dependency Graph workflows passed; tag v0.37.0 = 35facde5; GitHub notes frontmatter stripped; PyPI wheel+sdist live; master fast-forwarded.
