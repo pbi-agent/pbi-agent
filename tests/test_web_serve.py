@@ -1793,10 +1793,7 @@ def test_web_server_prints_banner_and_starts_uvicorn() -> None:
 
 
 def test_web_server_prints_centered_update_notice_below_banner() -> None:
-    notice = (
-        "Update available: pbi-agent 1.0.0 -> 1.2.0. "
-        "Run: uv tool install pbi-agent --upgrade"
-    )
+    notice = "Update available: pbi-agent 1.0.0 -> 1.2.0.\nRun: pbi-agent upgrade"
     server = PBIWebServer(settings=_settings(), port=9001, update_notice=notice)
     output = StringIO()
     server.console = Console(file=output, width=80, highlight=False, color_system=None)

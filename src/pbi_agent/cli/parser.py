@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import shutil
 
+from collections.abc import Sequence
 from pathlib import Path
 
 from pbi_agent import __version__
@@ -252,9 +253,12 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="<command>",
     )
 
-    def add_command_parser(name: str, help_text: str) -> argparse.ArgumentParser:
+    def add_command_parser(
+        name: str, help_text: str, *, aliases: Sequence[str] = ()
+    ) -> argparse.ArgumentParser:
         return subparsers.add_parser(
             name,
+            aliases=list(aliases),
             prog=f"pbi-agent {name}",
             description=help_text,
             help=help_text,
@@ -305,6 +309,20 @@ def build_parser() -> argparse.ArgumentParser:
         dest="force",
         action="store_true",
         help="Overwrite existing init bootstrap files.",
+    )
+
+    upgrade_parser = add_command_parser(
+        "upgrade",
+        "Upgrade pbi-agent to the latest PyPI release.",
+        aliases=["update"],
+    )
+    upgrade_parser.add_argument(
+        "--check",
+        action="store_true",
+        help=(
+            "Only check for a newer version. Exits 0 when up to date, "
+            "100 when an update is available, 1 on error."
+        ),
     )
 
     web_parser = add_command_parser("web", "Serve the browser interface.")

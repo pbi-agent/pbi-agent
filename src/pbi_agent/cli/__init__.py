@@ -25,6 +25,7 @@ _MODULE_ATTRS = (
     "channels",
     "sessions",
     "shared",
+    "upgrade",
 )
 
 
