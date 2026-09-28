@@ -35,7 +35,10 @@ from pbi_agent import __version__
 from pbi_agent.agent.session import SessionTurnInterrupted
 from pbi_agent.branding import PBI_AGENT_TAGLINE
 from pbi_agent.cli import build_parser
-from pbi_agent.providers.chatgpt_codex_backend import CHATGPT_ORIGINATOR
+from pbi_agent.providers.chatgpt_codex_backend import (
+    CHATGPT_CODEX_VERSION,
+    CHATGPT_ORIGINATOR,
+)
 from pbi_agent.config import (
     ModelProfileConfig,
     ProviderConfig,
@@ -12537,8 +12540,8 @@ def test_provider_model_discovery_endpoint_lists_chatgpt_openai_models(
     assert payload["error"] is None
     assert len(requests_seen) == 1
     assert (
-        requests_seen[0].full_url
-        == "https://chatgpt.com/backend-api/codex/models?client_version=0.153.4"
+        requests_seen[0].full_url == "https://chatgpt.com/backend-api/codex/models"
+        f"?client_version={CHATGPT_CODEX_VERSION}"
     )
     headers = {key.lower(): value for key, value in requests_seen[0].header_items()}
     assert headers["authorization"].startswith("Bearer ")

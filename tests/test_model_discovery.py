@@ -16,6 +16,7 @@ from pbi_agent.config import (
     Settings,
 )
 from pbi_agent.providers import model_discovery
+from pbi_agent.providers.chatgpt_codex_backend import CHATGPT_CODEX_VERSION
 from pbi_agent.providers.model_discovery import discover_provider_models
 
 
@@ -218,3 +219,13 @@ def test_xai_model_discovery_proactively_refreshes_expiring_oauth_session(
     assert result.error is None
     assert authorizations == ["Bearer fresh-token"]
     assert settings.auth is refreshed_auth
+
+
+def test_chatgpt_models_url_uses_codex_version_not_package_version(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(model_discovery, "__version__", "99.0.0")
+
+    url = model_discovery._openai_chatgpt_models_url()
+
+    assert url.endswith(f"?client_version={CHATGPT_CODEX_VERSION}")
