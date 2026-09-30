@@ -38,57 +38,35 @@ AGENT_INSTALL_ROOT = Path(".agents/agents")
 
 AGENTS_TEMPLATE = """# AGENTS.md
 
-This file gives coding agents project-specific context and instructions.
-Treat it like a README for agents: keep it concise, accurate, and updated
-when project workflows change.
+Project context and instructions for coding agents. Keep it concise, accurate,
+and updated when workflows change.
 
-## Task Memory Protocol
+## Task Memory
 
-- Use a single `MEMORY.md` file for both durable memory and recent task history.
-- Keep `MEMORY.md` in three sections only: `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
-- At the start of substantive work, consult the preloaded `<workspace_memory>` system-prompt section for `Metadata`, `Long-Term Memory`, and any current-day detailed entries relevant to the task. Do not read `MEMORY.md` again with tools unless `<workspace_memory>` is absent, you are about to edit/compact it, or the user explicitly asks to inspect the file.
-- Keep `Long-Term Memory` compact and edited in place. Store only durable facts: stable repo conventions, important decisions, reusable validation patterns, active follow-ups, and artifacts that matter beyond one task.
-- Keep `Detailed Task Events` append-only within the active day. Group entries under one `## YYYY-MM-DD` heading per day.
-- After each implementation, append one short task entry to the current day with only: what changed, validation, and next context if needed.
-- On the first substantive task of a new day, compact the previous day's detailed entries before appending new ones.
-- During compaction, first review every prior-day detailed entry and explicitly write a compact resume of its durable outcome into `Long-Term Memory` before deleting the dated section. Do not delete a prior-day section unless its durable facts, decisions, validation patterns, and unresolved follow-ups have been promoted or consciously deemed non-durable.
-- Carry unresolved items into an active/open follow-up bullet if still relevant, then remove prior-day detail that is no longer needed.
-- Avoid duplicating long-term bullets. Merge with existing bullets when the fact already exists.
-- Keep the file token-efficient: prefer short bullets, avoid command noise, and do not preserve obsolete troubleshooting detail once compacted.
+- `MEMORY.md` holds durable memory and recent task history in exactly three sections: `Metadata`, `Long-Term Memory`, `Detailed Task Events`.
+- Start substantive work from the preloaded `<workspace_memory>` section. Read `MEMORY.md` with tools only if that section is absent, before editing/compacting it, or when asked.
+- `Long-Term Memory`: compact bullets edited in place; only durable facts (conventions, decisions, validation patterns, open follow-ups, lasting artifacts). Merge instead of duplicating.
+- `Detailed Task Events`: append-only per day under one `## YYYY-MM-DD` heading. After each implementation, add one short entry: what changed, validation, next context if needed.
+- On the first substantive task of a new day, compact prior days: promote every durable outcome and unresolved follow-up to `Long-Term Memory`, then delete the dated sections.
+- Stay token-efficient: short bullets, no command noise, no obsolete troubleshooting.
 
-## Session TODO Protocol
+## Session TODO
 
-- Use `TODO.md` for the current task session only.
-- Create or reset `TODO.md` before starting substantive work.
-- Use GitHub task-list bullets for every TODO entry: `- [ ]` pending, `- [>]` in progress, `- [x]` done, `- [!]` blocked, `- [-]` dropped.
-- Update `TODO.md` as you work. Mark steps complete when they finish, and revise the list when scope changes.
-- If TODO.md contains a completed task list, reset it before adding new changes. If it contains an unfinished list, append new `- [ ] ...` tasks instead of writing plain paragraphs.
+- `TODO.md` tracks the current session only; create or reset it before substantive work.
+- Use task-list bullets only: `- [ ]` pending, `- [>]` in progress, `- [x]` done, `- [!]` blocked, `- [-]` dropped.
+- Update `TODO.md` as work progresses and when scope changes.
+- If the existing list is complete, reset it; if unfinished, append new `- [ ]` tasks.
 
 ## Command Output
 
-Protect context usage. **Any command with unknown or potentially large output must be byte-capped.**
+- Protect context: byte-cap any command with unknown or potentially large output.
 
 ## Communication
 
-Before editing, state the approach only for non-trivial tasks.
-
-During complex work, keep updates very short:
-
-- what was found
-- what changed
-- what risk remains
-
-After work, summarize:
-
-- what changed
-- files touched
-- validation run, or why skipped
-- remaining risk
-- next logic steps
-
-Keep summaries short. Do not explain obvious edits.
-
-Oververbosity:low
+- Before editing, state the approach only for non-trivial tasks.
+- During complex work, keep updates very short: findings, changes, remaining risk.
+- After work, summarize briefly: what changed, files touched, validation run (or why skipped), remaining risk, next steps.
+- Keep output low-verbosity; do not explain obvious edits.
 """
 
 
