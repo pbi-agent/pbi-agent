@@ -1,6 +1,4 @@
-- [x] Reconcile local/remote commits: v0.38.0 → v0.39.0; local master contains all three unreleased commits, no remote divergence.
-- [x] Create `chore/release-v0.39.0`; update pyproject/lock version, changelog, index, and sidebar.
-- [x] Pass release validation plus web tests (722), lint/typecheck, API generation/static build drift checks; review five staged release-only files.
-- [x] Commit `65f03e74`, push, open PR #357, and merge as `319b91d1` after clean CI.
-- [x] Verify successful Release/master workflows, tag/GitHub Release, cleaned notes, PyPI wheel+sdist, and published wheel hash/content.
-- [x] Compact prior-day memory and record release outcome; fast-forward local master, leaving only MEMORY/TODO uncommitted.
+- [x] Update MCP 1.28.1, HTTPX2/httpcore2 2.12.0, and Vitest/coverage 4.1.11 while preserving the user's lockfile upgrades.
+- [x] Fix MCP HTTP headers/client ownership and isolate SDK lifetime tasks; 42 MCP tests cover real HTTP/stdio, failures, timeouts, cleanup, and daemon process exit.
+- [x] Validate 1,944 Python/722 web tests, Ruff/format/basedpyright/dead-code, lint/typecheck, web/docs builds, lock/pip and API/static drift checks. Checkpoint failure passed isolated and both full reruns; no unrelated fix.
+- [x] Final review clean; local versions exclude all 27 known GitHub alert ranges. Record results and packaging/live-validation follow-ups; no commit or push.

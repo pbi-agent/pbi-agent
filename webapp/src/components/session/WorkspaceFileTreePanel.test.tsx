@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { renderWithProviders } from "../../test/render";
 import {
   fetchWorkspaceFileDiff,
@@ -23,12 +23,12 @@ const mockFetchDiff = vi.mocked(fetchWorkspaceFileDiff);
 const mockFetchPreview = vi.mocked(fetchWorkspaceFilePreview);
 
 describe("WorkspaceFileTreePanel", () => {
-  let scrollIntoViewMock: ReturnType<typeof vi.fn>;
+  let scrollIntoViewMock: Mock<Element["scrollIntoView"]>;
 
   beforeEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
-    scrollIntoViewMock = vi.fn();
+    scrollIntoViewMock = vi.fn<Element["scrollIntoView"]>();
     Element.prototype.scrollIntoView = scrollIntoViewMock;
     mockFetchPreview.mockResolvedValue({
       path: "src/app.py",

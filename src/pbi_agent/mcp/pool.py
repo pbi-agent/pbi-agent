@@ -40,7 +40,8 @@ class McpToolBinding:
 class _ConnectedServer:
     config: McpServerConfig
     session: Any
-    stack: AsyncExitStack
+    task: asyncio.Task[None]
+    stop: asyncio.Event
     lock: asyncio.Lock
 
 
@@ -48,12 +49,19 @@ def _warn(message: str) -> None:
     print(message, file=sys.stderr)
 
 
-def _import_mcp_client_components() -> tuple[Any, Any, Any, Any]:
+def _import_mcp_client_components() -> tuple[Any, Any, Any, Any, Any]:
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
     from mcp.client.streamable_http import streamable_http_client
+    from mcp.shared._httpx_utils import create_mcp_http_client
 
-    return ClientSession, StdioServerParameters, stdio_client, streamable_http_client
+    return (
+        ClientSession,
+        StdioServerParameters,
+        stdio_client,
+        streamable_http_client,
+        create_mcp_http_client,
+    )
 
 
 class _McpToolHandler:
@@ -73,9 +81,9 @@ class McpServerPool:
         self._bindings: list[McpToolBinding] = []
         self._servers: dict[str, _ConnectedServer] = {}
         self._loop: asyncio.AbstractEventLoop | None = None
-        self._request_queue: queue.Queue[tuple[Awaitable[Any] | None, queue.Queue]] = (
-            queue.Queue()
-        )
+        self._request_queue: asyncio.Queue[
+            tuple[Awaitable[Any] | None, queue.Queue]
+        ] = asyncio.Queue()
         self._thread: threading.Thread | None = None
 
     @property
@@ -97,7 +105,9 @@ class McpServerPool:
         if self._loop is None or self._thread is None:
             return
         self._submit(self._close_all())
-        self._request_queue.put((None, queue.Queue()))
+        self._loop.call_soon_threadsafe(
+            self._request_queue.put_nowait, (None, queue.Queue())
+        )
         self._thread.join(timeout=15.0)
         if self._thread.is_alive():
             _log.warning("MCP worker thread did not shut down within 15 s")
@@ -137,24 +147,24 @@ class McpServerPool:
     def _start_loop_thread(self) -> None:
         ready = threading.Event()
 
-        def runner() -> None:
-            loop = asyncio.new_event_loop()
-            self._loop = loop
-            asyncio.set_event_loop(loop)
+        async def run_requests() -> None:
+            self._loop = asyncio.get_running_loop()
+            self._request_queue = asyncio.Queue()
             ready.set()
-            try:
-                while True:
-                    coroutine, result_queue = self._request_queue.get()
-                    if coroutine is None:
-                        break
-                    try:
-                        result = loop.run_until_complete(coroutine)
-                    except BaseException as exc:
-                        result_queue.put((False, exc))
-                    else:
-                        result_queue.put((True, result))
-            finally:
-                loop.close()
+            # Keep SDK background tasks running between synchronous pool requests.
+            while True:
+                coroutine, result_queue = await self._request_queue.get()
+                if coroutine is None:
+                    break
+                try:
+                    result = await coroutine
+                except BaseException as exc:
+                    result_queue.put((False, exc))
+                else:
+                    result_queue.put((True, result))
+
+        def runner() -> None:
+            asyncio.run(run_requests())
 
         self._thread = threading.Thread(
             target=runner,
@@ -165,10 +175,12 @@ class McpServerPool:
         ready.wait()
 
     def _submit(self, coroutine: Awaitable[Any]) -> Any:
-        if self._thread is None:
+        if self._thread is None or self._loop is None:
             raise RuntimeError("MCP worker thread is not running.")
         result_queue: queue.Queue = queue.Queue(maxsize=1)
-        self._request_queue.put((coroutine, result_queue))
+        self._loop.call_soon_threadsafe(
+            self._request_queue.put_nowait, (coroutine, result_queue)
+        )
         ok, value = result_queue.get()
         if ok:
             return value
@@ -200,56 +212,97 @@ class McpServerPool:
         self,
         config: McpServerConfig,
     ) -> tuple[_ConnectedServer, list[McpToolBinding]]:
-        ClientSession, StdioServerParameters, stdio_client, streamablehttp_client = (
-            _import_mcp_client_components()
+        ready: asyncio.Future[tuple[Any, list[McpToolBinding]]] = (
+            asyncio.get_running_loop().create_future()
         )
-        stack = AsyncExitStack()
+        stop = asyncio.Event()
+        task = asyncio.create_task(self._serve_connection(config, ready, stop))
         try:
-            if config.transport == "http":
-                read_stream, write_stream, _ = await stack.enter_async_context(
-                    streamablehttp_client(
-                        config.url or "", headers=config.headers or None
-                    )
-                )
-            else:
-                env = os.environ.copy()
-                env.update(config.env)
-                server_params = StdioServerParameters(
-                    command=config.command or "",
-                    args=list(config.args),
-                    env=env,
-                    cwd=str(config.cwd) if config.cwd is not None else None,
-                )
-                read_stream, write_stream = await stack.enter_async_context(
-                    stdio_client(server_params)
-                )
-            session = await stack.enter_async_context(
-                ClientSession(read_stream, write_stream)
-            )
-            await asyncio.wait_for(
-                session.initialize(), timeout=MCP_CONNECT_TIMEOUT_SECONDS
-            )
-            response = await asyncio.wait_for(
-                session.list_tools(), timeout=MCP_CONNECT_TIMEOUT_SECONDS
-            )
-        except Exception:
-            await stack.aclose()
+            session, bindings = await ready
+        except BaseException:
+            stop.set()
+            await task
             raise
-        bindings = _bindings_for_server(config, getattr(response, "tools", []))
         return (
             _ConnectedServer(
                 config=config,
                 session=session,
-                stack=stack,
+                task=task,
+                stop=stop,
                 lock=asyncio.Lock(),
             ),
             bindings,
         )
 
+    async def _serve_connection(
+        self,
+        config: McpServerConfig,
+        ready: asyncio.Future[tuple[Any, list[McpToolBinding]]],
+        stop: asyncio.Event,
+    ) -> None:
+        # Each connection owns its SDK cancel scopes in one task for its entire
+        # lifetime. A transport failure must not cancel the pool or other servers.
+        try:
+            async with AsyncExitStack() as stack:
+                session = await self._open_session(config, stack)
+                await asyncio.wait_for(
+                    session.initialize(), timeout=MCP_CONNECT_TIMEOUT_SECONDS
+                )
+                response = await asyncio.wait_for(
+                    session.list_tools(), timeout=MCP_CONNECT_TIMEOUT_SECONDS
+                )
+                bindings = _bindings_for_server(config, getattr(response, "tools", []))
+                ready.set_result((session, bindings))
+                await stop.wait()
+        except BaseException as exc:
+            error = (
+                exc
+                if isinstance(exc, Exception)
+                else RuntimeError(f"MCP server {config.name!r} connection interrupted.")
+            )
+            if not ready.done():
+                ready.set_exception(error)
+            else:
+                _log.warning("MCP server %r disconnected", config.name, exc_info=True)
+
+    async def _open_session(
+        self, config: McpServerConfig, stack: AsyncExitStack
+    ) -> Any:
+        (
+            ClientSession,
+            StdioServerParameters,
+            stdio_client,
+            streamable_http_client,
+            create_mcp_http_client,
+        ) = _import_mcp_client_components()
+        if config.transport == "http":
+            # The SDK does not close caller-provided clients. Enter it first
+            # so session/transport shutdown runs before the HTTP client closes.
+            http_client = await stack.enter_async_context(
+                create_mcp_http_client(headers=config.headers or None)
+            )
+            read_stream, write_stream, _ = await stack.enter_async_context(
+                streamable_http_client(config.url or "", http_client=http_client)
+            )
+        else:
+            env = os.environ.copy()
+            env.update(config.env)
+            server_params = StdioServerParameters(
+                command=config.command or "",
+                args=list(config.args),
+                env=env,
+                cwd=str(config.cwd) if config.cwd is not None else None,
+            )
+            read_stream, write_stream = await stack.enter_async_context(
+                stdio_client(server_params)
+            )
+        return await stack.enter_async_context(ClientSession(read_stream, write_stream))
+
     async def _close_all(self) -> None:
-        for name, server in self._servers.items():
+        for name, server in reversed(self._servers.items()):
             try:
-                await server.stack.aclose()
+                server.stop.set()
+                await server.task
             except Exception:
                 _log.warning("Failed to close MCP server %r", name, exc_info=True)
         self._servers.clear()
@@ -261,15 +314,30 @@ class McpServerPool:
         arguments: dict[str, Any],
     ) -> Any:
         server = self._servers.get(binding.server_name)
-        if server is None:
+        if server is None or server.task.done():
             raise RuntimeError(
                 f"MCP server {binding.server_name!r} is no longer connected."
             )
         async with server.lock:
-            return await asyncio.wait_for(
-                server.session.call_tool(binding.original_name, arguments),
-                timeout=MCP_CALL_TOOL_TIMEOUT_SECONDS,
+            call = asyncio.create_task(
+                server.session.call_tool(binding.original_name, arguments)
             )
+            try:
+                done, _ = await asyncio.wait(
+                    (call, server.task),
+                    timeout=MCP_CALL_TOOL_TIMEOUT_SECONDS,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if call in done:
+                    return call.result()
+                if server.task in done:
+                    raise RuntimeError(
+                        f"MCP server {binding.server_name!r} disconnected during tool call."
+                    )
+                raise TimeoutError(f"MCP tool {binding.public_name!r} timed out.")
+            finally:
+                call.cancel()
+                await asyncio.gather(call, return_exceptions=True)
 
 
 def _bindings_for_server(

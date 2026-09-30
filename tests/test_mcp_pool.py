@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
+import subprocess
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+import httpx
+import pytest
+from mcp.shared._httpx_utils import create_mcp_http_client
 
 from pbi_agent.agent import tool_runtime
 from pbi_agent.mcp.pool import (
@@ -110,19 +117,18 @@ async def _fake_stdio_client(_params: object):
 
 
 @asynccontextmanager
-async def _fake_streamable_http_client(
-    _url: str, headers: dict[str, str] | None = None
-):
-    del headers
+async def _fake_streamable_http_client(_url: str, *, http_client: httpx.AsyncClient):
+    assert not http_client.is_closed
     yield object(), object(), lambda: None
 
 
-def _fake_mcp_imports() -> tuple[object, object, object, object]:
+def _fake_mcp_imports() -> tuple[object, object, object, object, object]:
     return (
         _FakeSession,
         _FakeStdioServerParameters,
         _fake_stdio_client,
         _fake_streamable_http_client,
+        create_mcp_http_client,
     )
 
 
@@ -220,6 +226,238 @@ def test_mcp_server_pool_supports_http_transport(monkeypatch, tmp_path: Path) ->
 
     assert spec is not None
     assert spec.description == "Return a greeting."
+
+
+@pytest.mark.parametrize("headers", [{}, {"Authorization": "Bearer test-token"}])
+@pytest.mark.parametrize(
+    "failure",
+    [
+        None,
+        "initialize",
+        "tools/list",
+        "http:initialize",
+        "http:tools/call",
+        "network:initialize",
+        "network:tools/call",
+        "timeout:initialize",
+        "timeout:tools/call",
+    ],
+)
+@pytest.mark.parametrize("server_count", [1, 2])
+def test_mcp_http_real_sdk_requests_and_cleanup(
+    monkeypatch, tmp_path: Path, capsys, caplog, headers, failure, server_count
+) -> None:
+    """Keep the real SDK session/transport; replace only its network client."""
+    config_dir = tmp_path / ".agents"
+    config_dir.mkdir()
+    server_headers = {
+        f"server-{i}.test": (
+            {"Authorization": f"{headers['Authorization']}-{i}"} if headers else {}
+        )
+        for i in range(server_count)
+    }
+    (config_dir / "mcp.json").write_text(
+        json.dumps(
+            {
+                "servers": {
+                    f"remote{i}": {
+                        "type": "http",
+                        "url": f"https://server-{i}.test/mcp",
+                        "headers": server_headers[f"server-{i}.test"],
+                    }
+                    for i in range(server_count)
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    requests: list[httpx.Request] = []
+    clients: list[httpx.AsyncClient] = []
+    if failure and failure.startswith("timeout:"):
+        monkeypatch.setattr("pbi_agent.mcp.pool.MCP_CONNECT_TIMEOUT_SECONDS", 0.1)
+        monkeypatch.setattr("pbi_agent.mcp.pool.MCP_CALL_TOOL_TIMEOUT_SECONDS", 0.1)
+
+    async def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.method == "GET":
+            return httpx.Response(405)
+        if request.method == "DELETE":
+            return httpx.Response(204)
+        message = json.loads(request.content)
+        method = message["method"]
+        fail_method = failure.split(":", 1)[-1] if failure else None
+        if request.url.host == "server-0.test" and method == fail_method:
+            if failure.startswith("http:"):
+                return httpx.Response(401 if method == "initialize" else 503)
+            if failure.startswith("network:"):
+                raise httpx.ConnectError("test connection failure", request=request)
+            if failure.startswith("timeout:"):
+                await asyncio.sleep(30)
+            return httpx.Response(
+                200,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": message["id"],
+                    "error": {"code": -32603, "message": "test failure"},
+                },
+            )
+        if method == "notifications/initialized":
+            return httpx.Response(202)
+        result = {
+            "initialize": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "test-server", "version": "1"},
+            },
+            "tools/list": {
+                "tools": [
+                    {
+                        "name": "greet",
+                        "description": "Return a greeting.",
+                        "inputSchema": {"type": "object"},
+                    }
+                ]
+            },
+            "tools/call": {"content": [{"type": "text", "text": "Hello Ada"}]},
+        }[method]
+        return httpx.Response(
+            200,
+            headers={"mcp-session-id": "test-session"},
+            json={"jsonrpc": "2.0", "id": message["id"], "result": result},
+        )
+
+    def create_client(headers=None):
+        client = httpx.AsyncClient(
+            headers=headers, transport=httpx.MockTransport(respond)
+        )
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr("mcp.shared._httpx_utils.create_mcp_http_client", create_client)
+    startup_failure = failure is not None and not failure.endswith("tools/call")
+    with McpServerPool(tmp_path) as pool:
+        assert len(pool.bindings) == server_count - int(startup_failure)
+        for binding in pool.bindings:
+            if (
+                failure
+                and failure.endswith("tools/call")
+                and binding.server_name == "remote0"
+            ):
+                with pytest.raises(Exception):
+                    pool.call_tool(binding, {"name": "Ada"})
+            else:
+                output = pool.call_tool(binding, {"name": "Ada"})
+                assert output.result["content"] == [
+                    {"type": "text", "text": "Hello Ada"}
+                ]
+        if failure is None:
+            assert all(not client.is_closed for client in clients)
+
+    assert len(clients) == server_count
+    assert all(client.is_closed for client in clients)
+    assert requests
+    for request in requests:
+        assert request.headers.get("authorization") == server_headers[
+            request.url.host
+        ].get("Authorization")
+    if startup_failure:
+        assert "Skipping MCP server" in capsys.readouterr().err
+    else:
+        for i in range(server_count):
+            server_requests = [
+                request
+                for request in requests
+                if request.url.host == f"server-{i}.test"
+            ]
+            assert [
+                json.loads(request.content)["method"]
+                for request in server_requests
+                if request.method == "POST"
+            ] == [
+                "initialize",
+                "notifications/initialized",
+                "tools/list",
+                "tools/call",
+            ]
+            assert server_requests[-1].method == "DELETE"
+            assert server_requests[-1].headers["mcp-session-id"] == "test-session"
+        assert capsys.readouterr().err == ""
+    assert "Failed to close MCP server" not in caplog.text
+    assert "Attempted to exit cancel scope" not in caplog.text
+
+
+def test_mcp_stdio_real_sdk_lifecycle(tmp_path: Path, capsys, caplog) -> None:
+    """The HTTP lifecycle fix must also preserve SDK-owned stdio task groups."""
+    config_dir = tmp_path / ".agents"
+    config_dir.mkdir()
+    script = """
+import json
+import sys
+
+for line in sys.stdin:
+    message = json.loads(line)
+    if "id" not in message:
+        continue
+    result = {
+        "initialize": {
+            "protocolVersion": "2025-11-25",
+            "capabilities": {"tools": {}},
+            "serverInfo": {"name": "test-server", "version": "1"},
+        },
+        "tools/list": {
+            "tools": [{"name": "greet", "inputSchema": {"type": "object"}}]
+        },
+        "tools/call": {"content": [{"type": "text", "text": "Hello Ada"}]},
+    }[message["method"]]
+    print(json.dumps({"jsonrpc": "2.0", "id": message["id"], "result": result}), flush=True)
+"""
+    (config_dir / "mcp.json").write_text(
+        json.dumps(
+            {
+                "servers": {
+                    "local": {
+                        "command": sys.executable,
+                        "args": ["-u", "-c", script],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    with McpServerPool(tmp_path) as pool:
+        assert len(pool.bindings) == 1
+        output = pool.call_tool(pool.bindings[0], {"name": "Ada"})
+        assert output.result["content"] == [{"type": "text", "text": "Hello Ada"}]
+    assert capsys.readouterr().err == ""
+    assert "Failed to close MCP server" not in caplog.text
+    assert "MCP server 'local' disconnected" not in caplog.text
+
+
+def test_idle_mcp_worker_does_not_prevent_process_exit(tmp_path: Path) -> None:
+    # Web shutdown may stop waiting for a daemon session still in a provider call.
+    # An idle MCP worker must not leave a non-daemon executor blocked on queue.get.
+    script = """
+import asyncio
+import sys
+import threading
+from pathlib import Path
+from pbi_agent.mcp.pool import McpServerPool
+
+pool = McpServerPool(Path(sys.argv[1]))
+pool._start_loop_thread()
+pool._submit(asyncio.sleep(0))
+idle = threading.Event()
+pool._loop.call_soon_threadsafe(idle.set)
+assert idle.wait(2)
+# Deliberately leave the daemon worker running, as at application shutdown.
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(tmp_path)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr[:4000]
 
 
 def test_normalize_call_tool_result_preserves_mcp_error_payload() -> None:
