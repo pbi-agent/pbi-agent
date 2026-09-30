@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { TooltipProvider } from "../ui/tooltip";
 import { SessionTimeline } from "./SessionTimeline";
 import type { TimelineItem, UsagePayload } from "../../types";
@@ -3563,7 +3563,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
       HTMLImageElement.prototype,
       "complete",
     );
-    let rectSpy: ReturnType<typeof vi.spyOn> | undefined;
+    let rectSpy: MockInstance<HTMLElement["getBoundingClientRect"]> | undefined;
     Object.defineProperty(HTMLImageElement.prototype, "complete", {
       configurable: true,
       get: () => false,
@@ -3710,7 +3710,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
       HTMLImageElement.prototype,
       "complete",
     );
-    let rectSpy: ReturnType<typeof vi.spyOn> | undefined;
+    let rectSpy: MockInstance<HTMLElement["getBoundingClientRect"]> | undefined;
     Object.defineProperty(HTMLImageElement.prototype, "complete", {
       configurable: true,
       get: () => false,

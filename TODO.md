@@ -1,8 +1,4 @@
-Release v0.38.0:
-
-- [x] Create `chore/release-v0.38.0` from local `feat/cli-upgrade-command` (includes unpushed `bookkeeping` + upgrade command commits; `origin/master` == v0.37.0).
-- [x] Bump `pyproject.toml`, add `docs/changelog/v0.38.0.md`, update changelog index + VitePress sidebar.
-- [x] Validate: ruff, format, basedpyright, dead_code, full pytest, docs build.
-- [x] Commit, push, open PR, merge.
-- [x] Verify GitHub Release, tag, publish workflow.
-- [x] MEMORY.md task entry.
+- [x] Update MCP 1.28.1, HTTPX2/httpcore2 2.12.0, and Vitest/coverage 4.1.11 while preserving the user's lockfile upgrades.
+- [x] Fix MCP HTTP headers/client ownership and isolate SDK lifetime tasks; 42 MCP tests cover real HTTP/stdio, failures, timeouts, cleanup, and daemon process exit.
+- [x] Validate 1,944 Python/722 web tests, Ruff/format/basedpyright/dead-code, lint/typecheck, web/docs builds, lock/pip and API/static drift checks. Checkpoint failure passed isolated and both full reruns; no unrelated fix.
+- [x] Final review clean; local versions exclude all 27 known GitHub alert ranges. Record results and packaging/live-validation follow-ups; no commit or push.
