@@ -1,8 +1,6 @@
-Release v0.38.0:
-
-- [x] Create `chore/release-v0.38.0` from local `feat/cli-upgrade-command` (includes unpushed `bookkeeping` + upgrade command commits; `origin/master` == v0.37.0).
-- [x] Bump `pyproject.toml`, add `docs/changelog/v0.38.0.md`, update changelog index + VitePress sidebar.
-- [x] Validate: ruff, format, basedpyright, dead_code, full pytest, docs build.
-- [x] Commit, push, open PR, merge.
-- [x] Verify GitHub Release, tag, publish workflow.
-- [x] MEMORY.md task entry.
+- [x] Reconcile local/remote commits: v0.38.0 → v0.39.0; local master contains all three unreleased commits, no remote divergence.
+- [x] Create `chore/release-v0.39.0`; update pyproject/lock version, changelog, index, and sidebar.
+- [x] Pass release validation plus web tests (722), lint/typecheck, API generation/static build drift checks; review five staged release-only files.
+- [x] Commit `65f03e74`, push, open PR #357, and merge as `319b91d1` after clean CI.
+- [x] Verify successful Release/master workflows, tag/GitHub Release, cleaned notes, PyPI wheel+sdist, and published wheel hash/content.
+- [x] Compact prior-day memory and record release outcome; fast-forward local master, leaving only MEMORY/TODO uncommitted.
