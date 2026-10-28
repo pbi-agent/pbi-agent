@@ -1,4 +1,3 @@
-- [x] Update MCP 1.28.1, HTTPX2/httpcore2 2.12.0, and Vitest/coverage 4.1.11 while preserving the user's lockfile upgrades.
-- [x] Fix MCP HTTP headers/client ownership and isolate SDK lifetime tasks; 42 MCP tests cover real HTTP/stdio, failures, timeouts, cleanup, and daemon process exit.
-- [x] Validate 1,944 Python/722 web tests, Ruff/format/basedpyright/dead-code, lint/typecheck, web/docs builds, lock/pip and API/static drift checks. Checkpoint failure passed isolated and both full reruns; no unrelated fix.
-- [x] Final review clean; local versions exclude all 27 known GitHub alert ranges. Record results and packaging/live-validation follow-ups; no commit or push.
+- [x] Diagnose Copilot claude-opus-5.5 422 on tool follow-up (public-code content filter).
+- [x] Map bare 422 to actionable error + test.
+- [x] Validate: Copilot provider tests, Ruff, format, basedpyright.
