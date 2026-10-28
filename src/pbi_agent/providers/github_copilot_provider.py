@@ -514,7 +514,7 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
 
                 display.wait_stop()
                 raise RuntimeError(
-                    f"GitHub Copilot API error {exc.code}: {error_body}"
+                    _chat_completions_error_message(exc.code, error_body)
                 ) from exc
             except (
                 http.client.IncompleteRead,
@@ -581,6 +581,24 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
             reasoning_content=reasoning_text.strip(),
             provider_data=provider_data,
         )
+
+
+_PUBLIC_CODE_FILTER_HINT = (
+    "GitHub Copilot blocked the model response (HTTP 422). This usually means "
+    'the "Suggestions matching public code" policy is set to Block and the '
+    "answer matched public code (Copilot reports it as a TextCopyright content "
+    "filter). Ask the model to rephrase or paraphrase instead of reproducing "
+    "the text verbatim, or allow public-code matches in your GitHub Copilot "
+    "settings (https://github.com/settings/copilot)."
+)
+
+
+def _chat_completions_error_message(status_code: int, error_body: str) -> str:
+    # Copilot's non-streaming chat completions endpoint turns a content filter
+    # hit on the generated output into a bare "422 Unprocessable Entity".
+    if status_code == 422 and error_body.strip() in {"", "Unprocessable Entity"}:
+        return _PUBLIC_CODE_FILTER_HINT
+    return f"GitHub Copilot API error {status_code}: {error_body}"
 
 
 def _build_chat_completions_user_message(user_input: UserTurnInput) -> dict[str, Any]:

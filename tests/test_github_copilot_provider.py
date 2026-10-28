@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+import io
 import json
+import re
+import urllib.error
 import urllib.request
+from email.message import Message
+
+import pytest
 
 from pbi_agent.auth.models import OAuthSessionAuth
 from pbi_agent.auth.providers.github_copilot import GITHUB_COPILOT_RESPONSES_URL
@@ -446,6 +452,46 @@ def test_github_copilot_non_openai_model_uses_chat_completions(
     assert body["model"] == "claude-sonnet-4"
     assert body["stream"] is False
     assert body["messages"][1] == {"role": "user", "content": "Hello"}
+
+
+@pytest.mark.parametrize(
+    ("status_code", "body", "expected"),
+    [
+        (422, "Unprocessable Entity\n", "Suggestions matching public code"),
+        (422, '{"error": "bad tool schema"}', "API error 422: "),
+        (400, "Bad Request", "API error 400: Bad Request"),
+    ],
+)
+def test_github_copilot_chat_completions_explains_public_code_filter_422(
+    monkeypatch,
+    status_code: int,
+    body: str,
+    expected: str,
+) -> None:
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del timeout
+        raise urllib.error.HTTPError(
+            request.full_url,
+            status_code,
+            "error",
+            Message(),
+            io.BytesIO(body.encode("utf-8")),
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GitHubCopilotProvider(_make_settings(model="claude-opus-5.5"))
+
+    with pytest.raises(RuntimeError, match=re.escape(expected)):
+        provider.request_turn(
+            user_input=UserTurnInput(text="Hello"),
+            display=_DisplayStub(),
+            session_usage=TokenUsage(model="claude-opus-5.5"),
+            turn_usage=TokenUsage(model="claude-opus-5.5"),
+        )
 
 
 def test_github_copilot_parser_uses_output_index_for_function_calls_and_reasoning(
