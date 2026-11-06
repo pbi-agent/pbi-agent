@@ -7,7 +7,7 @@ import heapq
 import re
 import threading
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -501,6 +501,18 @@ def _rank_indexed_file(
     )
 
 
+def _ranked_files(
+    query: str,
+    candidates: Iterable[_IndexedWorkspaceFile],
+    *,
+    include_fuzzy: bool,
+) -> Iterator[tuple[FileMentionRank, _IndexedWorkspaceFile]]:
+    for candidate in candidates:
+        rank = _rank_indexed_file(query, candidate, include_fuzzy=include_fuzzy)
+        if rank is not None:
+            yield rank, candidate
+
+
 def file_mention_rank(query: str, path: str) -> FileMentionRank | None:
     """Return the shared rank tuple for a file mention candidate."""
 
@@ -536,18 +548,7 @@ def _search_index(
     if not normalized_query:
         ranked = heapq.nsmallest(
             limit,
-            (
-                (rank, candidate)
-                for candidate in candidates
-                if (
-                    rank := _rank_indexed_file(
-                        normalized_query,
-                        candidate,
-                        include_fuzzy=False,
-                    )
-                )
-                is not None
-            ),
+            _ranked_files(normalized_query, candidates, include_fuzzy=False),
             key=lambda item: item[0],
         )
         return [candidate for _rank, candidate in ranked], False
@@ -593,18 +594,7 @@ def _search_index(
     )
     fuzzy_matches = heapq.nsmallest(
         limit - len(direct_matches),
-        (
-            (rank, candidate)
-            for candidate in fuzzy_candidates
-            if (
-                rank := _rank_indexed_file(
-                    normalized_query,
-                    candidate,
-                    include_fuzzy=True,
-                )
-            )
-            is not None
-        ),
+        _ranked_files(normalized_query, fuzzy_candidates, include_fuzzy=True),
         key=lambda item: item[0],
     )
     return (

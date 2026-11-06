@@ -522,6 +522,12 @@ class WebWorkspaceCoordinator:
             return
         object.__setattr__(self, name, value)
 
+    def __delattr__(self, name: str) -> None:
+        if name in self.__dict__:
+            object.__delattr__(self, name)
+            return
+        delattr(self.active_manager, name)
+
     def start(self) -> None:
         manager = self.active_manager
         manager.start()

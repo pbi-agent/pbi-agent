@@ -25,6 +25,7 @@ requires `name`, `description`, and `input_schema`.
 # input_schema = { type = "object", properties = { path = { type = "string" } }, required = ["path"], additionalProperties = false }
 # ///
 
+
 def run(input: dict) -> dict:
     import pandas as pd
 
@@ -41,8 +42,7 @@ tools are skipped and reported by `/extensions`.
 The extension contract is:
 
 ```python
-def run(input: dict) -> dict:
-    ...
+def run(input: dict) -> dict: ...
 ```
 
 Manual slash invocation passes the text after the command:
