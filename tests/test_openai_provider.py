@@ -325,6 +325,10 @@ def test_openai_build_request_body_uses_chatgpt_backend_contract() -> None:
         "command",
         "working_directory",
         "timeout_ms",
+        "run_in_background",
+        "background_timeout_ms",
+        "background_action",
+        "task_id",
         "compression",
     ]
     assert shell_parameters["properties"]["working_directory"]["description"] == (

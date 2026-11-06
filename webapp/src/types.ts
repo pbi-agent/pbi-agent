@@ -13,6 +13,8 @@ import type {
   LiveSessionSnapshotModel,
   ProcessingStateModel,
   QueuedFollowUpModel,
+  BackgroundTaskModel,
+  BackgroundTaskOutputModel,
   RunSessionModel,
   SessionRecordModel,
   SkillCandidateViewModel,
@@ -147,6 +149,8 @@ export type PendingUserQuestions = {
 };
 
 export type QueuedFollowUp = QueuedFollowUpModel;
+export type BackgroundTask = BackgroundTaskModel;
+export type BackgroundTaskOutput = BackgroundTaskOutputModel;
 
 export type UserQuestionAnswer = {
   question_id: string;

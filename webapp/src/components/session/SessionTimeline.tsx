@@ -213,12 +213,36 @@ function timelineItemChangeKey(item: TimelineItem): string {
   ].join("\0");
 }
 
+const BACKGROUND_RESULT_RE =
+  /^<background_task_result task_id="([^"]+)" status="([^"]+)" exit_code="([^"]+)"[^>]*>\n?([\s\S]*?)(?:<\/background_task_result>[\s\S]*)?$/;
+
+export type BackgroundResultInfo = {
+  taskId: string;
+  status: string;
+  exitCode: string | null;
+  body: string;
+};
+
+export function parseBackgroundResult(item: TimelineItem): BackgroundResultInfo | null {
+  if (item.kind !== "message" || item.role !== "user") return null;
+  const match = BACKGROUND_RESULT_RE.exec(item.content);
+  if (!match) return null;
+  const [, taskId, status, exitCode, body] = match;
+  return {
+    taskId,
+    status: status.replace("_", " "),
+    exitCode: exitCode === "none" ? null : exitCode,
+    body: body.trim(),
+  };
+}
+
 function shouldCoalesceInWorkRun(
   item: TimelineItem,
   options: { showSubAgentCards: boolean },
 ): boolean {
   const { showSubAgentCards } = options;
-  return item.kind === "thinking"
+  return parseBackgroundResult(item) !== null
+    || item.kind === "thinking"
     || item.kind === "tool_group"
     || (showSubAgentCards && Boolean(item.subAgentId));
 }
@@ -267,6 +291,17 @@ function buildRenderUnits(
   return units;
 }
 
+function startsBackgroundWakeTurn(
+  unit: RenderUnit | undefined,
+  previous: RenderUnit | undefined,
+): boolean {
+  if (unit?.kind !== "work_run") return false;
+  const first = unit.items[0];
+  if (!first || parseBackgroundResult(first) === null) return false;
+  return previous === undefined
+    || (previous.kind === "message" && previous.item.role === "assistant");
+}
+
 function collapseCompletedTurnIntermediateResults(
   units: readonly RenderUnit[],
   collapse: boolean,
@@ -285,7 +320,7 @@ function collapseCompletedTurnIntermediateResults(
     const hasFinalAssistant = finalAssistantIndex >= 0;
     const hasUserMessage = turnUnits.some((unit) =>
       unit.kind === "message" && unit.item.role === "user",
-    );
+    ) || startsBackgroundWakeTurn(turnUnits[0], undefined);
     const hasRunningWork = turnUnits.some((unit) =>
       unit.kind === "work_run"
       && (
@@ -357,6 +392,10 @@ function collapseCompletedTurnIntermediateResults(
 
   for (const unit of units) {
     if (unit.kind === "message" && unit.item.role === "user") {
+      flushTurn();
+    } else if (startsBackgroundWakeTurn(unit, turnUnits.at(-1))) {
+      // An idle auto-wake from a finished background task starts a new turn:
+      // keep the previous final answer visible.
       flushTurn();
     }
     turnUnits.push(unit);
@@ -533,6 +572,7 @@ function toolEntriesForGroup(item: TimelineToolGroupItem): ToolListEntry[] {
 
 function workRunCountItems(items: WorkItem[], showSubAgentCards: boolean): CountSummaryItem[] {
   let thinkingCount = 0;
+  let backgroundCount = 0;
   const categoryCounts = new Map<ToolCategory, number>();
   const subAgentIds = new Set<string>();
 
@@ -543,6 +583,10 @@ function workRunCountItems(items: WorkItem[], showSubAgentCards: boolean): Count
     }
     if (item.kind === "thinking") {
       thinkingCount += 1;
+      continue;
+    }
+    if (parseBackgroundResult(item)) {
+      backgroundCount += 1;
       continue;
     }
     if (item.kind !== "tool_group") continue;
@@ -558,6 +602,12 @@ function workRunCountItems(items: WorkItem[], showSubAgentCards: boolean): Count
   return [
     { key: "thought", count: thinkingCount, singular: "thought", plural: "thoughts" },
     ...categoryCountItems(categoryCounts),
+    {
+      key: "background",
+      count: backgroundCount,
+      singular: "background result",
+      plural: "background results",
+    },
   ];
 }
 
@@ -873,6 +923,7 @@ type ToolListEntry = {
 type WorkingGroup =
   | { kind: "thinking"; key: string; items: TimelineThinkingItem[] }
   | { kind: "tool"; key: string; entry: ToolListEntry }
+  | { kind: "background"; key: string; itemId: string; info: BackgroundResultInfo }
   | { kind: "sub_agent"; key: string; subAgentId: string; items: WorkItem[]; running: boolean };
 
 function buildWorkingGroups(items: WorkItem[], showSubAgentCards: boolean): WorkingGroup[] {
@@ -934,6 +985,11 @@ function buildWorkingGroups(items: WorkItem[], showSubAgentCards: boolean): Work
       continue;
     }
     if (item.kind === "message") {
+      const info = parseBackgroundResult(item);
+      if (info) {
+        flushThinking();
+        groups.push({ kind: "background", key: `background-${item.itemId}`, itemId: item.itemId, info });
+      }
       continue;
     }
     flushThinking();
@@ -1267,6 +1323,39 @@ function WorkingItemsPanel({
                   parentSessionId={parentSessionId}
                 />
               </div>
+            );
+          }
+          if (group.kind === "background") {
+            const { info } = group;
+            return (
+              <AccordionItem
+                key={group.key}
+                value={group.key}
+                ref={setGroupRef(group.key)}
+                className="working-items__item working-items__accordion-item"
+              >
+                <AccordionPrimitive.Header className="working-items__accordion-header">
+                  <AccordionPrimitive.Trigger asChild>
+                    <Button type="button" variant="ghost" size="sm" className="working-items__tool-trigger" data-timeline-item-id={group.itemId}>
+                      <ChevronRightIcon className="timeline-entry__chevron" />
+                      <span className="working-items__tool-title">Background task</span>
+                      <span className="working-items__tool-subtitle">
+                        {`${info.taskId} · ${info.status}${info.exitCode !== null ? ` · exit ${info.exitCode}` : ""}`}
+                      </span>
+                    </Button>
+                  </AccordionPrimitive.Trigger>
+                </AccordionPrimitive.Header>
+                <AccordionPrimitive.Content
+                  data-slot="accordion-content"
+                  className="working-items__accordion-content"
+                >
+                  <div className="working-items__tool-detail">
+                    <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">
+                      {info.body || "(no output)"}
+                    </pre>
+                  </div>
+                </AccordionPrimitive.Content>
+              </AccordionItem>
             );
           }
           if (group.kind === "tool") {

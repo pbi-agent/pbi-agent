@@ -4925,3 +4925,45 @@ expect(screen.getAllByText("first output")[0]).toBeInTheDocument();
     expect(screen.queryByText("NEXT.md")).not.toBeInTheDocument();
   });
 });
+
+describe("SessionTimeline background task results", () => {
+  it("groups background results with tool steps instead of standalone rows", () => {
+    render(
+      <SessionTimeline
+        items={[
+          { kind: "message", itemId: "u1", role: "user", content: "go", markdown: false },
+          { kind: "message", itemId: "a1", role: "assistant", content: "Started", markdown: true },
+          {
+            kind: "message",
+            itemId: "bg1",
+            role: "user",
+            content: '<background_task_result task_id="bg-1" status="timed_out" exit_code="none" duration_seconds="3.0">\ncommand: sleep 30\nstdout:\nstart\n</background_task_result>\nContinue.',
+            markdown: false,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            label: "shell",
+            status: "completed",
+            items: [{ text: "ok", metadata: { tool_name: "shell", status: "completed" } }],
+          },
+          { kind: "message", itemId: "a2", role: "assistant", content: "All done", markdown: true },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    expect(screen.getByText("Started")).toBeInTheDocument();
+    expect(screen.getByText("All done")).toBeInTheDocument();
+    expect(screen.queryByText(/Background task bg-1 timed out/)).not.toBeInTheDocument();
+    const trigger = screen.getByRole("button", { name: /Intermediate results/ });
+    expect(trigger).toHaveTextContent(/1 background result/);
+    fireEvent.click(trigger);
+    openWorking();
+    expect(screen.getByText("bg-1 · timed out")).toBeInTheDocument();
+  });
+});

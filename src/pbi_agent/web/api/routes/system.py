@@ -23,6 +23,8 @@ from pbi_agent.web.api.schemas.config import ActiveProfileRequest
 from pbi_agent.web.api.schemas.system import (
     AllRunsResponse,
     AllRunsRunModel,
+    BackgroundTaskOutputModel,
+    BackgroundTaskOutputResponse,
     BootstrapResponse,
     AgentMentionItemModel,
     AgentMentionSuggestionItemModel,
@@ -332,6 +334,42 @@ def cancel_session_follow_up(
         session = manager.cancel_saved_session_follow_up(session_id, follow_up_id)
     except KeyError as exc:
         raise not_found("Queued follow-up not found.") from exc
+    except Exception as exc:
+        raise bad_request(str(exc)) from exc
+    return LiveSessionResponse(session=model_from_payload(LiveSessionModel, session))
+
+
+@router.get(
+    "/sessions/{session_id}/background-tasks/{task_id}/output",
+    response_model=BackgroundTaskOutputResponse,
+)
+def get_session_background_task_output(
+    session_id: SessionIdPath,
+    task_id: str,
+    manager: SessionManagerDep,
+) -> BackgroundTaskOutputResponse:
+    try:
+        task = manager.saved_session_background_task_output(session_id, task_id)
+    except KeyError as exc:
+        raise not_found("Background task not found.") from exc
+    return BackgroundTaskOutputResponse(
+        task=model_from_payload(BackgroundTaskOutputModel, task)
+    )
+
+
+@router.post(
+    "/sessions/{session_id}/background-tasks/{task_id}/kill",
+    response_model=LiveSessionResponse,
+)
+def kill_session_background_task(
+    session_id: SessionIdPath,
+    task_id: str,
+    manager: SessionManagerDep,
+) -> LiveSessionResponse:
+    try:
+        session = manager.kill_saved_session_background_task(session_id, task_id)
+    except KeyError as exc:
+        raise not_found("Background task not found.") from exc
     except Exception as exc:
         raise bad_request(str(exc)) from exc
     return LiveSessionResponse(session=model_from_payload(LiveSessionModel, session))

@@ -8,6 +8,7 @@ from pbi_agent.agent.error_formatting import format_user_facing_error
 from pbi_agent.media import load_workspace_image
 from pbi_agent.models.messages import ImageAttachment
 from pbi_agent.session_store import MessageImageAttachment
+from pbi_agent.tools.background_tasks import BackgroundTask, render_background_result
 from pbi_agent.web.session.serializers import (
     _message_image_attachment,
     _message_image_payload,
@@ -20,6 +21,7 @@ from pbi_agent.web.session.state import (
 from pbi_agent.web.uploads import load_uploaded_image, load_uploaded_image_record
 
 FollowUpDelivery = Literal["checkpoint", "after_finish"]
+MAX_CONSECUTIVE_BACKGROUND_WAKES = 5
 
 
 class FollowUpsMixin:
@@ -195,6 +197,9 @@ class FollowUpsMixin:
                 "created_at": item.created_at,
                 "failed": item.failed,
                 "error": item.error,
+                "kind": item.kind,
+                "task_id": item.task_id,
+                "auto_wake": item.auto_wake,
             }
             for item in live_session.queued_follow_ups
         ]
@@ -289,13 +294,17 @@ class FollowUpsMixin:
         )
         if item is None:
             raise KeyError(follow_up_id)
-        if item.delivery == "checkpoint" and not allow_checkpoint_fallback:
+        if (
+            item.delivery == "checkpoint"
+            and item.kind != "background_result"
+            and not allow_checkpoint_fallback
+        ):
             raise RuntimeError(
                 "Checkpoint follow-ups are sent at the next safe checkpoint."
             )
         if (
             manual
-            and item.delivery == "after_finish"
+            and (item.delivery == "after_finish" or item.kind == "background_result")
             and (
                 not live_session.snapshot.input_enabled
                 or live_session.snapshot.pending_user_questions is not None
@@ -308,6 +317,15 @@ class FollowUpsMixin:
         item = self._pop_queued_follow_up(live_session, follow_up_id)
         self._publish_queued_follow_ups_updated(live_session)
         try:
+            if item.kind == "background_result" and not manual:
+                wakes = live_session.background_auto_wakes + 1
+                result = self.submit_session_input(
+                    live_session.live_session_id,
+                    text=item.text,
+                    include_tool_history=item.include_tool_history,
+                )
+                live_session.background_auto_wakes = wakes
+                return result
             return self.submit_session_input(
                 live_session.live_session_id,
                 text=item.text,
@@ -352,6 +370,7 @@ class FollowUpsMixin:
                 entry
                 for entry in live_session.queued_follow_ups
                 if not entry.failed
+                and entry.auto_wake
                 and (entry.delivery == "after_finish" or entry.delivery == "checkpoint")
             ),
             None,
@@ -364,3 +383,80 @@ class FollowUpsMixin:
             manual=False,
             allow_checkpoint_fallback=True,
         )
+
+    # -- background shell tasks -------------------------------------------
+
+    def _publish_background_tasks_updated(self, live_session_id: str) -> None:
+        live_session = self._live_sessions.get(live_session_id)
+        if live_session is None or live_session.background_tasks is None:
+            return
+        try:
+            self._publish_live_event(
+                live_session_id,
+                "background_tasks_updated",
+                {"background_tasks": live_session.background_tasks.list()},
+            )
+        except Exception:
+            pass
+
+    def _deliver_background_result(
+        self,
+        live_session_id: str,
+        task: BackgroundTask,
+    ) -> None:
+        live_session = self._live_sessions.get(live_session_id)
+        if live_session is None or live_session.status == "ended":
+            return
+        auto_wake = (
+            live_session.background_auto_wakes < MAX_CONSECUTIVE_BACKGROUND_WAKES
+        )
+        follow_up = QueuedFollowUpInput(
+            follow_up_id=uuid.uuid4().hex,
+            delivery="checkpoint",
+            text=render_background_result(task),
+            file_paths=[],
+            image_paths=[],
+            image_upload_ids=[],
+            image_attachments=[],
+            profile_id=None,
+            interactive_mode=False,
+            include_tool_history=live_session.include_tool_history,
+            created_at=_now_iso(),
+            kind="background_result",
+            task_id=task.task_id,
+            auto_wake=auto_wake,
+        )
+        live_session.queued_follow_ups.append(follow_up)
+        self._publish_queued_follow_ups_updated(live_session)
+        if not auto_wake:
+            return
+        if not live_session.snapshot.input_enabled:
+            # A turn is running: steer at the next tool checkpoint. If the turn
+            # finishes first, the idle wake-up path picks the item up instead.
+            live_session.display.submit_checkpoint_follow_up(
+                follow_up.text,
+                include_tool_history=follow_up.include_tool_history,
+                item_id=follow_up.follow_up_id,
+            )
+        self._maybe_submit_deferred_follow_up(live_session_id)
+
+    def kill_saved_session_background_task(
+        self,
+        session_id: str,
+        task_id: str,
+    ) -> dict[str, Any]:
+        live_session = self._find_live_session_for_saved_session(session_id)
+        if live_session is None or live_session.background_tasks is None:
+            raise KeyError(session_id)
+        live_session.background_tasks.kill(task_id)
+        return self._serialize_live_session(live_session)
+
+    def saved_session_background_task_output(
+        self,
+        session_id: str,
+        task_id: str,
+    ) -> dict[str, Any]:
+        live_session = self._find_live_session_for_saved_session(session_id)
+        if live_session is None or live_session.background_tasks is None:
+            raise KeyError(session_id)
+        return live_session.background_tasks.output(task_id)

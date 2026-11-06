@@ -10,11 +10,13 @@ import {
   HistoryIcon,
   MessageCircleQuestionMark,
   PanelRightIcon,
+  SquareTerminalIcon,
 } from "lucide-react";
 import { AppSidebarLayout } from "../AppSidebar";
 import {
   ApiError,
   cancelQueuedFollowUp,
+  killBackgroundTask,
   createSession,
   enhancePrompt,
   expandSessionInput,
@@ -35,6 +37,7 @@ import {
   transcribeSttAudio,
   uploadSavedSessionImages,
 } from "../../api";
+import { BackgroundTasksPanel } from "./BackgroundTasksPanel";
 import type {
   HistoryItem,
   LiveSession,
@@ -223,7 +226,18 @@ export function SessionPage({
   const composerRef = useRef<ComposerHandle>(null);
   const submitInFlightRef = useRef(false);
   const [directSubmitPending, setDirectSubmitPending] = useState(false);
-  const [fileTreeOpen, setFileTreeOpen] = useState(false);
+  const [sidePanel, setSidePanel] = useState<"files" | "background" | null>(null);
+  const fileTreeOpen = sidePanel === "files";
+  const backgroundPanelOpen = sidePanel === "background";
+  const setFileTreeOpen = useCallback(
+    (next: boolean | ((current: boolean) => boolean)) => {
+      setSidePanel((current) => {
+        const open = typeof next === "function" ? next(current === "files") : next;
+        return open ? "files" : current === "files" ? null : current;
+      });
+    },
+    [],
+  );
   const refreshedEndedLiveSessionsRef = useRef<Set<string>>(new Set());
   const isSidebarOpen = useSidebarStore((state) => state.isOpen);
   const workspaceQueryKey = workspaceKey ?? workspaceRoot ?? null;
@@ -442,6 +456,21 @@ export function SessionPage({
     },
   });
 
+  const runningBackgroundTaskCount = (sessionState?.backgroundTasks ?? [])
+    .filter((task) => task.status === "running").length;
+  const killBackgroundTaskMutation = useMutation({
+    mutationFn: (taskId: string) => {
+      const sessionId = routeSessionId ?? sessionState?.sessionId;
+      if (!sessionId) throw new Error("No session available.");
+      return killBackgroundTask(sessionId, taskId);
+    },
+    onSuccess: (session) => {
+      if (selectedRouteSessionKey) {
+        updateRuntimeFromSession(selectedRouteSessionKey, session);
+      }
+    },
+  });
+
   const setSessionProfileMutation = useMutation({
     mutationFn: ({
       sessionId,
@@ -558,7 +587,7 @@ export function SessionPage({
     return () => {
       window.removeEventListener("keydown", handleWorkspaceExplorerShortcut, true);
     };
-  }, []);
+  }, [setFileTreeOpen]);
 
   useEffect(() => {
     const handleNewSessionShortcut = (event: KeyboardEvent) => {
@@ -1175,6 +1204,41 @@ export function SessionPage({
                 {workspaceExplorerTooltip}
               </TooltipContent>
             </Tooltip>
+            {!isSubAgentRoute ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Toggle
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="session-topbar-control session-file-tree-toggle"
+                    pressed={backgroundPanelOpen}
+                    aria-label={
+                      backgroundPanelOpen
+                        ? "Close background tasks"
+                        : "Open background tasks"
+                    }
+                    aria-expanded={backgroundPanelOpen}
+                    aria-controls="background-tasks-panel"
+                    onPressedChange={(pressed) =>
+                      setSidePanel(pressed ? "background" : null)}
+                  >
+                    <SquareTerminalIcon aria-hidden="true" />
+                    {runningBackgroundTaskCount > 0 && !backgroundPanelOpen ? (
+                      <span
+                        aria-hidden="true"
+                        className="session-file-tree-toggle__change-dot"
+                      />
+                    ) : null}
+                  </Toggle>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="end">
+                  {runningBackgroundTaskCount > 0
+                    ? `Background tasks: ${runningBackgroundTaskCount} running`
+                    : "Background tasks"}
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
           </div>
           {routeSessionId && !isSubAgentRoute ? (
             <RunHistory
@@ -1335,6 +1399,7 @@ export function SessionPage({
               </Button>
             </div>
           ) : (
+            <>
             <Composer
               ref={composerRef}
               inputEnabled={composerInputEnabled}
@@ -1387,6 +1452,7 @@ export function SessionPage({
                 interruptMutation.mutate();
               }}
             />
+            </>
           )}
         </>
       )}
@@ -1403,7 +1469,7 @@ export function SessionPage({
         data-debug-event-cursor={sessionState?.lastEventSeq ?? undefined}
         data-debug-connection={sessionState?.connection ?? undefined}
       >
-        {fileTreeOpen ? (
+        {sidePanel !== null && (fileTreeOpen || !isSubAgentRoute) ? (
           <ResizablePanelGroup
             direction="horizontal"
             className="session-file-split"
@@ -1423,10 +1489,21 @@ export function SessionPage({
               minSize="25%"
               className="session-file-split__files"
             >
-              <WorkspaceFileTreePanel
-                workspaceKey={workspaceQueryKey}
-                onClose={() => setFileTreeOpen(false)}
-              />
+              {fileTreeOpen ? (
+                <WorkspaceFileTreePanel
+                  workspaceKey={workspaceQueryKey}
+                  onClose={() => setFileTreeOpen(false)}
+                />
+              ) : (
+                <BackgroundTasksPanel
+                  sessionId={routeSessionId ?? sessionState?.sessionId ?? null}
+                  tasks={sessionState?.backgroundTasks ?? []}
+                  onKill={async (taskId) => {
+                    await killBackgroundTaskMutation.mutateAsync(taskId);
+                  }}
+                  onClose={() => setSidePanel(null)}
+                />
+              )}
             </ResizablePanel>
           </ResizablePanelGroup>
         ) : sessionPanel}

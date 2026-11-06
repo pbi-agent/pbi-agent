@@ -10,6 +10,7 @@ import type {
   ProcessingPhase,
   ProcessingState,
   QueuedFollowUp,
+  BackgroundTask,
   SessionWebEvent,
   TimelineItem,
   TimelineToolGroupEntry,
@@ -53,6 +54,7 @@ export type SessionRuntimeState = {
   fatalError: string | null;
   pendingUserQuestions: PendingUserQuestions | null;
   queuedFollowUps: QueuedFollowUp[];
+  backgroundTasks?: BackgroundTask[];
   items: TimelineItem[];
   itemsVersion: number;
   subAgents: Record<string, SubAgentState>;
@@ -107,6 +109,7 @@ export function createEmptySessionState(sessionId: string | null = null): Sessio
     fatalError: null,
     pendingUserQuestions: null,
     queuedFollowUps: [],
+    backgroundTasks: [],
     items: [],
     itemsVersion: 0,
     subAgents: {},
@@ -747,6 +750,9 @@ export function reduceSessionEvent(
     case "queued_follow_ups_updated":
       patch.queuedFollowUps = event.payload.queued_follow_ups ?? [];
       break;
+    case "background_tasks_updated":
+      patch.backgroundTasks = event.payload.background_tasks ?? [];
+      break;
     case "usage_updated": {
       const subAgentId = eventSubAgentId(event);
       if (subAgentId) {
@@ -1122,6 +1128,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
             fatalError: snapshot.fatal_error,
             pendingUserQuestions: snapshot.pending_user_questions ?? null,
             queuedFollowUps: snapshot.queued_follow_ups ?? [],
+            backgroundTasks: snapshot.background_tasks ?? [],
             items,
             itemsVersion: items.length,
             subAgents: normalizeSnapshotSubAgents(snapshot.sub_agents),

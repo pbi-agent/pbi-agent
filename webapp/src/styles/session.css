@@ -5343,3 +5343,114 @@
   pointer-events: auto;
   transform: translateY(0);
 }
+
+/* ── Background Tasks Panel ── */
+.background-tasks-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.background-tasks-panel__item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--card);
+  overflow: hidden;
+}
+
+.background-tasks-panel__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.background-tasks-panel__trigger {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.background-tasks-panel__trigger:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm, 4px);
+}
+
+.background-tasks-panel__chevron {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 4px;
+  color: var(--muted-foreground);
+  transition: transform var(--duration-fast) var(--ease);
+}
+
+.background-tasks-panel__chevron[data-open="true"] {
+  transform: rotate(90deg);
+}
+
+.background-tasks-panel__copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.background-tasks-panel__title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.background-tasks-panel__meta {
+  color: var(--muted-foreground);
+  font-size: var(--text-xs);
+}
+
+.background-tasks-panel__command {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.background-tasks-panel__output {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
+  border-top: 1px solid var(--border);
+}
+
+.background-tasks-panel__pre {
+  max-height: 320px;
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--muted);
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.background-tasks-panel__pre[data-stream="stderr"] {
+  color: var(--destructive);
+}

@@ -13768,3 +13768,72 @@ def test_list_all_runs_returns_paginated_runs(tmp_path, monkeypatch) -> None:
         payload = response.json()
         assert payload["total_count"] == 2
         assert all(run["status"] == "failed" for run in payload["runs"])
+
+
+def test_background_task_result_wakes_idle_session(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    started = threading.Event()
+    woke = threading.Event()
+    received: list[str] = []
+    task_ids: list[str] = []
+    release = threading.Event()
+
+    def fake_run_session_loop(_runtime, display, **_kwargs) -> int:
+        initial = display.user_prompt()
+        received.append(getattr(initial, "text", str(initial)))
+        display.assistant_start()
+        manager = display.background_task_manager
+        assert manager is not None
+        task = manager.start(
+            "echo bg-done",
+            display_command="echo bg-done",
+            working_directory=str(tmp_path),
+            shell_executable=None,
+            timeout_ms=5_000,
+            compression=False,
+            tool_call_id="call-1",
+        )
+        task_ids.append(task.task_id)
+        started.set()
+        display.assistant_stop()
+        wake = display.user_prompt()
+        received.append(getattr(wake, "text", str(wake)))
+        woke.set()
+        assert release.wait(timeout=5)
+        return 0
+
+    monkeypatch.setattr(
+        "pbi_agent.web.session.workers.run_session_loop",
+        fake_run_session_loop,
+    )
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        session_id = client.post("/api/sessions", json={"title": "BG"}).json()[
+            "session"
+        ]["session_id"]
+        response = client.post(
+            f"/api/sessions/{session_id}/messages", json={"text": "Start"}
+        )
+        assert response.status_code == 200
+        live_session_id = response.json()["session"]["live_session_id"]
+        assert started.wait(timeout=2)
+        assert woke.wait(timeout=5)
+        snapshot = app.state.manager.get_live_session_detail(live_session_id)[
+            "snapshot"
+        ]
+        assert snapshot["background_tasks"][0]["task_id"] == task_ids[0]
+        assert snapshot["background_tasks"][0]["status"] == "completed"
+        output = client.get(
+            f"/api/sessions/{session_id}/background-tasks/{task_ids[0]}/output"
+        )
+        assert output.status_code == 200
+        assert output.json()["task"]["stdout"].strip() == "bg-done"
+        release.set()
+        worker = app.state.manager._live_sessions[live_session_id].worker
+        assert worker is not None
+        worker.join(timeout=2)
+
+    assert received[0] == "Start"
+    assert received[1].startswith(f'<background_task_result task_id="{task_ids[0]}"')
+    assert "bg-done" in received[1]

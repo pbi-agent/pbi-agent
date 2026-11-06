@@ -12,6 +12,7 @@ const EVENT_TYPES = new Set([
   "user_questions_requested",
   "user_questions_resolved",
   "queued_follow_ups_updated",
+  "background_tasks_updated",
   "usage_updated",
   "message_added",
   "message_rekeyed",
@@ -169,6 +170,11 @@ function isValidPayload(type: string, payload: Record<string, unknown>): boolean
       return isString(payload.prompt_id);
     case "queued_follow_ups_updated":
       return isValidQueuedFollowUpsPayload(payload);
+    case "background_tasks_updated":
+      return Array.isArray(payload.background_tasks)
+        && payload.background_tasks.every(
+          (task) => isRecord(task) && isString(task.task_id) && isString(task.status),
+        );
     case "usage_updated":
       return (payload.scope === "session" || payload.scope === "turn")
         && isRecord(payload.usage);

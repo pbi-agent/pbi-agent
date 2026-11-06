@@ -313,6 +313,32 @@ class QueuedFollowUpModel(BaseModel):
     created_at: str
     failed: bool
     error: str | None = None
+    kind: Literal["user", "background_result"] = "user"
+    task_id: str | None = None
+    auto_wake: bool = True
+
+
+class BackgroundTaskModel(BaseModel):
+    task_id: str
+    command: str
+    working_directory: str
+    tool_call_id: str | None = None
+    status: Literal["running", "completed", "failed", "killed", "timed_out"]
+    exit_code: int | None = None
+    started_at: float
+    ended_at: float | None = None
+    elapsed_seconds: float
+
+
+class BackgroundTaskOutputModel(BackgroundTaskModel):
+    stdout: str
+    stderr: str
+    stdout_truncated: bool = False
+    stderr_truncated: bool = False
+
+
+class BackgroundTaskOutputResponse(BaseModel):
+    task: BackgroundTaskOutputModel
 
 
 class LiveSessionSnapshotModel(BaseModel):
@@ -328,6 +354,7 @@ class LiveSessionSnapshotModel(BaseModel):
     fatal_error: str | None
     pending_user_questions: PendingUserQuestionsModel | None
     queued_follow_ups: list[QueuedFollowUpModel] = Field(default_factory=list)
+    background_tasks: list[BackgroundTaskModel] = Field(default_factory=list)
     items: list[dict[str, Any]]
     sub_agents: dict[str, SubAgentSnapshotModel]
     last_event_seq: int
