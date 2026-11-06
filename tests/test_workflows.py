@@ -43,7 +43,7 @@ def test_tests_workflow_runs_local_release_validation_gates() -> None:
 def test_release_workflow_runs_validation_gates_and_changelog_notes() -> None:
     workflow = read_workflow("release.yml")
 
-    assert 'bun-version: "1.3.11"' in workflow
+    assert 'bun-version: "1.4.4"' in workflow
     assert "bun install --frozen-lockfile" in workflow
     assert_release_gates(workflow)
     assert "docs/changelog/v$VERSION.md" in workflow
@@ -259,7 +259,7 @@ def test_release_workflow_rebuilds_static_assets_before_distribution() -> None:
     diff_index = workflow.index("git diff --exit-code -- src/pbi_agent/web/static/app")
     distribution_index = workflow.index("python -m build")
 
-    assert 'bun-version: "1.3.11"' in workflow
+    assert 'bun-version: "1.4.4"' in workflow
     assert "bun install --frozen-lockfile" in workflow
     assert build_index < diff_index < distribution_index
 
@@ -315,4 +315,4 @@ def test_publish_workflow_is_not_a_downstream_release_side_effect() -> None:
 def test_docs_deploy_workflow_pins_bun_version() -> None:
     workflow = read_workflow("deploy-docs.yml")
 
-    assert 'bun-version: "1.3.11"' in workflow
+    assert 'bun-version: "1.4.4"' in workflow
