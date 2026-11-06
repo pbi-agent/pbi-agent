@@ -358,7 +358,11 @@ def test_execute_tool_calls_serializes_truncated_shell_output(
             ToolCall(
                 call_id="call_1",
                 name="shell",
-                arguments={"command": "python", "compression": False},
+                arguments={
+                    "command": "python",
+                    "intent": "Run python",
+                    "compression": False,
+                },
             )
         ],
         max_workers=1,
@@ -409,7 +413,13 @@ def test_execute_tool_calls_serializes_compressed_shell_output(
     )
 
     batch = tool_runtime.execute_tool_calls(
-        [ToolCall(call_id="call_1", name="shell", arguments={"command": "python"})],
+        [
+            ToolCall(
+                call_id="call_1",
+                name="shell",
+                arguments={"command": "python", "intent": "Run python"},
+            )
+        ],
         max_workers=1,
     )
 
@@ -445,7 +455,11 @@ def test_shell_tool_uses_configured_bootstrap_and_executable(
     monkeypatch.setenv(shell_tool.SHELL_EXECUTABLE_ENV, "/bin/bash")
 
     result = shell_tool.handle(
-        {"command": "bun --version", "compression": False},
+        {
+            "command": "bun --version",
+            "intent": "Check bun version",
+            "compression": False,
+        },
         Mock(),
     )
 
