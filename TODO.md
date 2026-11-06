@@ -1,3 +1,3 @@
-- [x] Diagnose Copilot claude-opus-5.5 422 on tool follow-up (public-code content filter).
-- [x] Map bare 422 to actionable error + test.
-- [x] Validate: Copilot provider tests, Ruff, format, basedpyright.
+- [x] Move background tasks dock to right sidebar tab (topbar icon)
+- [x] Group background_result timeline rows into collapsible intermediate steps
+- [x] Tests + validation

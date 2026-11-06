@@ -41,6 +41,7 @@ from pbi_agent.web.session.serializers import (
 from pbi_agent.web.session.events import TRANSIENT_WEB_EVENT_KEY
 from pbi_agent.web.session.follow_ups import FollowUpDelivery, FollowUpsMixin
 from pbi_agent.web.session.image_uploads import ImageUploadsMixin
+from pbi_agent.tools.background_tasks import BackgroundTaskManager
 from pbi_agent.web.session.state import (
     EventStream,
     LiveSessionSnapshot,
@@ -161,6 +162,15 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
                 created_at=_now_iso(),
                 include_tool_history=include_tool_history,
             )
+            live_session.background_tasks = BackgroundTaskManager(
+                on_finished=lambda task, current=new_live_session_id: (
+                    self._deliver_background_result(current, task)
+                ),
+                on_changed=lambda current=new_live_session_id: (
+                    self._publish_background_tasks_updated(current)
+                ),
+            )
+            display.background_task_manager = live_session.background_tasks
             self._live_sessions[new_live_session_id] = live_session
             self._create_live_run_projection(live_session)
             self._publish_live_session_runtime(live_session)
@@ -218,6 +228,7 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
             raise RuntimeError(
                 "Messages cannot be sent while a shell command is running."
             )
+        live_session.background_auto_wakes = 0
         if follow_up_delivery is not None:
             self._validate_follow_up_submission(live_session, text)
         if follow_up_delivery == "checkpoint" and self._should_defer_follow_up(
@@ -885,6 +896,11 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
             "fatal_error": live_session.snapshot.fatal_error,
             "pending_user_questions": live_session.snapshot.pending_user_questions,
             "queued_follow_ups": list(live_session.snapshot.queued_follow_ups),
+            "background_tasks": (
+                live_session.background_tasks.list()
+                if live_session.background_tasks is not None
+                else []
+            ),
             "items": list(live_session.snapshot.items),
             "sub_agents": dict(live_session.snapshot.sub_agents),
             "last_event_seq": live_session.snapshot.last_event_seq,

@@ -240,6 +240,8 @@ class LiveSessionState:
     terminal_status: str | None = None
     ended_at: str | None = None
     queued_follow_ups: list[QueuedFollowUpInput] = field(default_factory=list)
+    background_tasks: Any = None
+    background_auto_wakes: int = 0
     event_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
 
@@ -256,6 +258,7 @@ class LiveSessionSnapshot:
     fatal_error: str | None = None
     pending_user_questions: dict[str, Any] | None = None
     queued_follow_ups: list[dict[str, Any]] = None  # type: ignore[assignment]
+    background_tasks: list[dict[str, Any]] = None  # type: ignore[assignment]
     items: list[dict[str, Any]] = None  # type: ignore[assignment]
     sub_agents: dict[str, dict[str, Any]] = None  # type: ignore[assignment]
     last_event_seq: int = 0
@@ -263,6 +266,8 @@ class LiveSessionSnapshot:
     def __post_init__(self) -> None:
         if self.queued_follow_ups is None:
             self.queued_follow_ups = []
+        if self.background_tasks is None:
+            self.background_tasks = []
         if self.items is None:
             self.items = []
         if self.sub_agents is None:
@@ -284,6 +289,9 @@ class QueuedFollowUpInput:
     created_at: str
     failed: bool = False
     error: str | None = None
+    kind: str = "user"
+    task_id: str | None = None
+    auto_wake: bool = True
 
 
 @dataclass(slots=True)

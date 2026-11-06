@@ -458,7 +458,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     && !isSubmitting
     && inputEnabled
     && Boolean(onSendQueuedFollowUp)
-    && item.delivery === "after_finish";
+    && (item.delivery === "after_finish" || item.kind === "background_result");
   const canDraftFollowUp =
     Boolean(liveSessionId)
     && canQueueFollowUp
@@ -1672,19 +1672,26 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               && !isSubmitting
               && (inputEnabled || canQueueFollowUp)
               && Boolean(onCancelQueuedFollowUp)
-              && !promptEnhancementPending;
+              && !promptEnhancementPending
+              && item.kind !== "background_result";
             return (
               <div key={item.id} className="composer__follow-up-row">
                 <div className="composer__follow-up-copy">
                   <span className="composer__follow-up-title">
                     {item.failed
                       ? "Queued follow-up failed"
+                      : item.kind === "background_result"
+                        ? item.auto_wake === false
+                          ? `Background result · ${item.task_id ?? ""} · send to continue`
+                          : `Background result · ${item.task_id ?? ""} · will wake session`
                       : item.delivery === "checkpoint"
                         ? "Queued follow-up · after next checkpoint"
                         : "Queued follow-up · after assistant finishes"}
                   </span>
                   <span className="composer__follow-up-preview">
-                    {item.text}
+                    {item.kind === "background_result"
+                      ? (item.text.split("\n").find((line) => line.startsWith("command: ")) ?? "")
+                      : item.text}
                     {imageCount > 0
                       ? ` · ${imageCount} image${imageCount === 1 ? "" : "s"}`
                       : ""}

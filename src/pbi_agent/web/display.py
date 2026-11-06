@@ -1392,6 +1392,7 @@ class WebDisplay(_EventDisplayBase):
         self._input_block_prior_states: list[tuple[bool | None, int]] = []
         self._input_activity_sequence = 0
         self._input_delivery_pending = False
+        self.background_task_manager: Any | None = None
 
     def _publish_input_state(self, enabled: bool) -> None:
         with self._input_state_lock:

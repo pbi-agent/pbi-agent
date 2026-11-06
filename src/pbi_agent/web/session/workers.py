@@ -83,6 +83,8 @@ class WorkersMixin:
         previous_terminal_status = live_session.terminal_status
         if live_session.exit_code is None:
             live_session.exit_code = 0
+        if live_session.background_tasks is not None:
+            live_session.background_tasks.close()
         live_session.status = "ended"
         live_session.ended_at = _now_iso()
         try:

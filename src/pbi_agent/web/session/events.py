@@ -421,6 +421,10 @@ class EventsMixin:
             ) == payload.get("prompt_id"):
                 snapshot.pending_user_questions = None
             return
+        if event_type == "background_tasks_updated":
+            tasks = payload.get("background_tasks")
+            snapshot.background_tasks = list(tasks) if isinstance(tasks, list) else []
+            return
         if event_type == "queued_follow_ups_updated":
             queued = payload.get("queued_follow_ups")
             snapshot.queued_follow_ups = (

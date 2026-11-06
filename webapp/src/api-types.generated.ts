@@ -31,6 +31,16 @@ export type AllRunsResponse = { runs: AllRunsRunModel[]; total_count: number };
 
 export type AllRunsRunModel = { run_session_id: string; session_id: string | null; parent_run_session_id: string | null; agent_name: string | null; agent_type: string | null; provider: string | null; provider_id: string | null; profile_id: string | null; model: string | null; reasoning_effort: string | null; status: "started" | "completed" | "interrupted" | "failed" | "starting" | "running" | "waiting_for_input" | "ended" | "stale"; started_at: string; ended_at: string | null; total_duration_ms: number | null; input_tokens: number; cached_input_tokens: number; cache_write_tokens: number; cache_write_1h_tokens: number; output_tokens: number; reasoning_tokens: number; provider_total_tokens: number; estimated_cost_usd: number; total_tool_calls: number; total_api_calls: number; error_count: number; kind?: string; task_id?: string | null; project_dir?: string | null; last_event_seq?: number; snapshot?: unknown | null; exit_code?: number | null; fatal_error?: string | null; metadata: unknown | null; session_title?: string | null };
 
+export type BackgroundTaskModel = { task_id: string; command: string; working_directory: string; tool_call_id?: string | null; status: "running" | "completed" | "failed" | "killed" | "timed_out"; exit_code?: number | null; started_at: number; ended_at?: number | null; elapsed_seconds: number };
+
+export type BackgroundTaskOutputModel = { task_id: string; command: string; working_directory: string; tool_call_id?: string | null; status: "running" | "completed" | "failed" | "killed" | "timed_out"; exit_code?: number | null; started_at: number; ended_at?: number | null; elapsed_seconds: number; stdout: string; stderr: string; stdout_truncated?: boolean; stderr_truncated?: boolean };
+
+export type BackgroundTaskOutputResponse = { task: BackgroundTaskOutputModel };
+
+export type BackgroundTasksUpdatedSseEventModel = { seq: number; created_at: string; type: "background_tasks_updated"; payload: BackgroundTasksUpdatedSseEventPayloadModel };
+
+export type BackgroundTasksUpdatedSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; background_tasks?: BackgroundTaskModel[] };
+
 export type BoardStageModel = { id: string; name: string; position: number; profile_id?: string | null; command_id?: string | null; auto_start: boolean };
 
 export type BoardStageUpdateModel = { id?: string | null; name: string; profile_id?: string | null; command_id?: string | null; auto_start?: boolean };
@@ -127,7 +137,7 @@ export type LiveSessionResponse = { session: LiveSessionModel };
 
 export type LiveSessionShellCommandRequest = { command?: string };
 
-export type LiveSessionSnapshotModel = { live_session_id: string; session_id: string | null; runtime: RuntimeSummaryModel | null; input_enabled: boolean; wait_message: string | null; processing: ProcessingStateModel | null; session_usage: Record<string, unknown> | null; turn_usage: Record<string, unknown> | null; session_ended: boolean; fatal_error: string | null; pending_user_questions: PendingUserQuestionsModel | null; queued_follow_ups?: QueuedFollowUpModel[]; items: Record<string, unknown>[]; sub_agents: Record<string, SubAgentSnapshotModel>; last_event_seq: number };
+export type LiveSessionSnapshotModel = { live_session_id: string; session_id: string | null; runtime: RuntimeSummaryModel | null; input_enabled: boolean; wait_message: string | null; processing: ProcessingStateModel | null; session_usage: Record<string, unknown> | null; turn_usage: Record<string, unknown> | null; session_ended: boolean; fatal_error: string | null; pending_user_questions: PendingUserQuestionsModel | null; queued_follow_ups?: QueuedFollowUpModel[]; background_tasks?: BackgroundTaskModel[]; items: Record<string, unknown>[]; sub_agents: Record<string, SubAgentSnapshotModel>; last_event_seq: number };
 
 export type LiveSessionStartedSseEventModel = { seq: number; created_at: string; type: "live_session_started"; payload: LiveSessionLifecycleSseEventPayloadModel };
 
@@ -229,7 +239,7 @@ export type ProviderViewModel = { id: string; name: string; kind: string; auth_m
 
 export type QuestionAnswerRequest = { question_id: string; answer: string; selected_suggestion_index?: number | null; custom?: boolean; custom_note?: string | null };
 
-export type QueuedFollowUpModel = { id: string; delivery: "checkpoint" | "after_finish"; text: string; file_paths: string[]; image_attachments: ImageAttachmentModel[]; image_count: number; created_at: string; failed: boolean; error?: string | null };
+export type QueuedFollowUpModel = { id: string; delivery: "checkpoint" | "after_finish"; text: string; file_paths: string[]; image_attachments: ImageAttachmentModel[]; image_count: number; created_at: string; failed: boolean; error?: string | null; kind?: "user" | "background_result"; task_id?: string | null; auto_wake?: boolean };
 
 export type QueuedFollowUpsUpdatedSseEventModel = { seq: number; created_at: string; type: "queued_follow_ups_updated"; payload: QueuedFollowUpsUpdatedSseEventPayloadModel };
 
@@ -425,11 +435,11 @@ export type WorkspaceSwitchedSseEventPayloadModel = { workspace_key: string };
 
 export type AppSseEventModel = SessionCreatedSseEventModel | SessionUpdatedSseEventModel | BoardStagesUpdatedSseEventModel | TaskUpdatedSseEventModel | TaskDeletedSseEventModel | LiveSessionStartedSseEventModel | LiveSessionUpdatedSseEventModel | LiveSessionBoundSseEventModel | LiveSessionEndedSseEventModel | WorkspaceSwitchedSseEventModel;
 
-export type SessionSseEventModel = SessionResetSseEventModel | SessionIdentitySseEventModel | InputStateSseEventModel | WaitStateSseEventModel | ProcessingStateSseEventModel | UserQuestionsRequestedSseEventModel | UserQuestionsResolvedSseEventModel | QueuedFollowUpsUpdatedSseEventModel | UsageUpdatedSseEventModel | MessageAddedSseEventModel | MessageRekeyedSseEventModel | MessageRemovedSseEventModel | ThinkingUpdatedSseEventModel | ToolGroupAddedSseEventModel | SubAgentStateSseEventModel | SessionStateSseEventModel | SessionRuntimeUpdatedSseEventModel | WelcomeSseEventModel;
+export type SessionSseEventModel = SessionResetSseEventModel | SessionIdentitySseEventModel | InputStateSseEventModel | WaitStateSseEventModel | ProcessingStateSseEventModel | UserQuestionsRequestedSseEventModel | UserQuestionsResolvedSseEventModel | QueuedFollowUpsUpdatedSseEventModel | BackgroundTasksUpdatedSseEventModel | UsageUpdatedSseEventModel | MessageAddedSseEventModel | MessageRekeyedSseEventModel | MessageRemovedSseEventModel | ThinkingUpdatedSseEventModel | ToolGroupAddedSseEventModel | SubAgentStateSseEventModel | SessionStateSseEventModel | SessionRuntimeUpdatedSseEventModel | WelcomeSseEventModel;
 
 export type SseControlEventModel = ServerConnectedSseEventModel | ServerHeartbeatSseEventModel | ServerReplayIncompleteSseEventModel;
 
-export type SseEventModel = ServerConnectedSseEventModel | ServerHeartbeatSseEventModel | ServerReplayIncompleteSseEventModel | SessionResetSseEventModel | SessionIdentitySseEventModel | InputStateSseEventModel | WaitStateSseEventModel | ProcessingStateSseEventModel | UserQuestionsRequestedSseEventModel | UserQuestionsResolvedSseEventModel | QueuedFollowUpsUpdatedSseEventModel | UsageUpdatedSseEventModel | MessageAddedSseEventModel | MessageRekeyedSseEventModel | MessageRemovedSseEventModel | ThinkingUpdatedSseEventModel | ToolGroupAddedSseEventModel | SubAgentStateSseEventModel | SessionStateSseEventModel | SessionRuntimeUpdatedSseEventModel | WelcomeSseEventModel | SessionCreatedSseEventModel | SessionUpdatedSseEventModel | BoardStagesUpdatedSseEventModel | TaskUpdatedSseEventModel | TaskDeletedSseEventModel | LiveSessionStartedSseEventModel | LiveSessionUpdatedSseEventModel | LiveSessionBoundSseEventModel | LiveSessionEndedSseEventModel | WorkspaceSwitchedSseEventModel;
+export type SseEventModel = ServerConnectedSseEventModel | ServerHeartbeatSseEventModel | ServerReplayIncompleteSseEventModel | SessionResetSseEventModel | SessionIdentitySseEventModel | InputStateSseEventModel | WaitStateSseEventModel | ProcessingStateSseEventModel | UserQuestionsRequestedSseEventModel | UserQuestionsResolvedSseEventModel | QueuedFollowUpsUpdatedSseEventModel | BackgroundTasksUpdatedSseEventModel | UsageUpdatedSseEventModel | MessageAddedSseEventModel | MessageRekeyedSseEventModel | MessageRemovedSseEventModel | ThinkingUpdatedSseEventModel | ToolGroupAddedSseEventModel | SubAgentStateSseEventModel | SessionStateSseEventModel | SessionRuntimeUpdatedSseEventModel | WelcomeSseEventModel | SessionCreatedSseEventModel | SessionUpdatedSseEventModel | BoardStagesUpdatedSseEventModel | TaskUpdatedSseEventModel | TaskDeletedSseEventModel | LiveSessionStartedSseEventModel | LiveSessionUpdatedSseEventModel | LiveSessionBoundSseEventModel | LiveSessionEndedSseEventModel | WorkspaceSwitchedSseEventModel;
 
 export type ApiOperationResponses = {
   "GET /api/agents/search": AgentMentionSearchResponse;
@@ -498,6 +508,8 @@ export type ApiOperationResponses = {
   "DELETE /api/sessions/{session_id}": void;
   "GET /api/sessions/{session_id}": SessionDetailResponse;
   "PATCH /api/sessions/{session_id}": SessionResponse;
+  "POST /api/sessions/{session_id}/background-tasks/{task_id}/kill": LiveSessionResponse;
+  "GET /api/sessions/{session_id}/background-tasks/{task_id}/output": BackgroundTaskOutputResponse;
   "DELETE /api/sessions/{session_id}/follow-ups/{follow_up_id}": LiveSessionResponse;
   "POST /api/sessions/{session_id}/follow-ups/{follow_up_id}/send": LiveSessionResponse;
   "POST /api/sessions/{session_id}/fork": SessionResponse;
@@ -592,6 +604,8 @@ export type ApiOperationPathParams = {
   "DELETE /api/sessions/{session_id}": { session_id: string };
   "GET /api/sessions/{session_id}": { session_id: string };
   "PATCH /api/sessions/{session_id}": { session_id: string };
+  "POST /api/sessions/{session_id}/background-tasks/{task_id}/kill": { session_id: string; task_id: string };
+  "GET /api/sessions/{session_id}/background-tasks/{task_id}/output": { session_id: string; task_id: string };
   "DELETE /api/sessions/{session_id}/follow-ups/{follow_up_id}": { session_id: string; follow_up_id: string };
   "POST /api/sessions/{session_id}/follow-ups/{follow_up_id}/send": { session_id: string; follow_up_id: string };
   "POST /api/sessions/{session_id}/fork": { session_id: string };

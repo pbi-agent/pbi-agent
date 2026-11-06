@@ -11,6 +11,7 @@ from pbi_agent.web.api.schemas.system import (
     PendingUserQuestionsModel,
     ProcessingPhase,
     QueuedFollowUpModel,
+    BackgroundTaskModel,
     SessionRecordModel,
 )
 from pbi_agent.web.api.schemas.tasks import BoardStageModel, TaskRecordModel
@@ -124,6 +125,15 @@ class QueuedFollowUpsUpdatedSseEventPayloadModel(EventIdentityPayloadModel):
 class QueuedFollowUpsUpdatedSseEventModel(SseEventBaseModel):
     type: Literal["queued_follow_ups_updated"]
     payload: QueuedFollowUpsUpdatedSseEventPayloadModel
+
+
+class BackgroundTasksUpdatedSseEventPayloadModel(EventIdentityPayloadModel):
+    background_tasks: list[BackgroundTaskModel] = Field(default_factory=list)
+
+
+class BackgroundTasksUpdatedSseEventModel(SseEventBaseModel):
+    type: Literal["background_tasks_updated"]
+    payload: BackgroundTasksUpdatedSseEventPayloadModel
 
 
 class TokenUsagePayloadModel(BaseModel):
@@ -404,6 +414,7 @@ SESSION_SSE_EVENT_MODELS = [
     UserQuestionsRequestedSseEventModel,
     UserQuestionsResolvedSseEventModel,
     QueuedFollowUpsUpdatedSseEventModel,
+    BackgroundTasksUpdatedSseEventModel,
     UsageUpdatedSseEventModel,
     MessageAddedSseEventModel,
     MessageRekeyedSseEventModel,

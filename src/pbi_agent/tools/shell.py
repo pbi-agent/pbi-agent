@@ -37,7 +37,9 @@ SPEC = ToolSpec(
     description=("Run a shell command. Returns stdout, stderr, and exit code."),
     prompt_usage=(
         "Use `shell` for command execution, including git commands; byte-cap "
-        "commands with unknown or potentially large output."
+        "commands with unknown or potentially large output. Set "
+        "`run_in_background` for long-running commands; the result arrives "
+        "automatically later, so do not poll with sleep."
     ),
     parameters_schema={
         "type": "object",
@@ -60,6 +62,34 @@ SPEC = ToolSpec(
                     "maximum 300 000 (5 minutes)."
                 ),
             },
+            "run_in_background": {
+                "type": "boolean",
+                "description": (
+                    "Start the command in the background and return a task_id "
+                    "immediately. The result is delivered to you automatically "
+                    "when it finishes (even after you end your turn); do not poll. "
+                    "Use for long builds/tests, dev servers, watchers."
+                ),
+            },
+            "background_timeout_ms": {
+                "type": "integer",
+                "description": (
+                    "Background-only timeout in milliseconds. Defaults to "
+                    "1 800 000 (30 minutes), maximum 7 200 000 (2 hours)."
+                ),
+            },
+            "background_action": {
+                "type": "string",
+                "enum": ["status", "output", "kill"],
+                "description": (
+                    "Inspect or stop an existing background task given by "
+                    "`task_id`; `command` is ignored (pass an empty string)."
+                ),
+            },
+            "task_id": {
+                "type": "string",
+                "description": "Background task id for `background_action`.",
+            },
             "compression": {
                 "type": "boolean",
                 "description": (
@@ -77,6 +107,10 @@ SPEC = ToolSpec(
 
 def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     """Execute a single shell command and return structured output."""
+    background_action = arguments.get("background_action")
+    run_in_background = arguments.get("run_in_background", False)
+    if background_action is not None or run_in_background is not False:
+        return _handle_background(arguments, context)
     command = arguments.get("command", "")
     if not isinstance(command, str) or not command.strip():
         return {"error": "'command' must be a non-empty string."}
@@ -151,6 +185,107 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             "error": f"Shell execution failed: {exc}",
             **({"stderr_truncated": True} if stderr_truncated else {}),
         }
+
+
+def _background_manager(context: ToolContext) -> Any:
+    display = context.display
+    return getattr(display, "background_task_manager", None) if display else None
+
+
+def _handle_background(
+    arguments: dict[str, Any], context: ToolContext
+) -> dict[str, Any]:
+    if context.sub_agent_depth > 0:
+        return {"error": "Background shell tasks are not available to sub-agents."}
+    manager = _background_manager(context)
+    if manager is None:
+        return {
+            "error": (
+                "Background shell tasks are not supported in this mode. "
+                "Run the command in the foreground."
+            )
+        }
+    action = arguments.get("background_action")
+    if action is not None:
+        task_id = arguments.get("task_id")
+        if not isinstance(task_id, str) or not task_id:
+            return {"error": "'task_id' is required for 'background_action'."}
+        if action not in {"status", "output", "kill"}:
+            return {"error": "'background_action' must be status, output, or kill."}
+        try:
+            if action == "kill":
+                return {**manager.kill(task_id).summary(), "kill_requested": True}
+            if action == "status":
+                task = manager.get(task_id)
+                if task is None:
+                    raise KeyError(task_id)
+                return task.summary()
+            data = manager.output(task_id)
+        except KeyError:
+            return {"error": f"Unknown background task: {task_id}"}
+        bounded = _build_output_payload(
+            stdout=data.pop("stdout"),
+            stderr=data.pop("stderr"),
+            compression=False,
+        )
+        return {**data, **bounded}
+
+    if not isinstance(arguments.get("run_in_background"), bool):
+        return {"error": "'run_in_background' must be a boolean."}
+    command = arguments.get("command", "")
+    if not isinstance(command, str) or not command.strip():
+        return {"error": "'command' must be a non-empty string."}
+    try:
+        compression = (
+            _normalize_compression(arguments["compression"])
+            if "compression" in arguments
+            else True
+        )
+        timeout_ms = _normalize_background_timeout_ms(
+            arguments.get("background_timeout_ms")
+        )
+    except ValueError as exc:
+        return {"error": str(exc)}
+    root = (
+        context.workspace_root if context.workspace_root is not None else Path.cwd()
+    ).resolve()
+    try:
+        working_directory = _resolve_working_directory(
+            root, arguments.get("working_directory")
+        )
+        task = manager.start(
+            _bootstrap_command(command),
+            display_command=command,
+            working_directory=str(working_directory),
+            shell_executable=os.environ.get(SHELL_EXECUTABLE_ENV) or None,
+            timeout_ms=timeout_ms,
+            compression=compression,
+            tool_call_id=context.tool_call_id,
+        )
+    except Exception as exc:
+        return {"error": f"Failed to start background task: {exc}"}
+    return {
+        "background": True,
+        "task_id": task.task_id,
+        "status": "running",
+        "message": (
+            "Started in background. The result will be delivered automatically "
+            "when it finishes; do not poll."
+        ),
+    }
+
+
+def _normalize_background_timeout_ms(raw: Any) -> int:
+    from pbi_agent.tools.background_tasks import (
+        DEFAULT_BACKGROUND_TIMEOUT_MS,
+        MAX_BACKGROUND_TIMEOUT_MS,
+    )
+
+    if raw is None:
+        return DEFAULT_BACKGROUND_TIMEOUT_MS
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
+        raise ValueError("'background_timeout_ms' must be a positive integer.")
+    return min(raw, MAX_BACKGROUND_TIMEOUT_MS)
 
 
 def _run_interruptible(

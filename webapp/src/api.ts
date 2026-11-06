@@ -64,6 +64,7 @@ import type {
   WorkspaceListPayload,
   WorkspacePickerPayload,
   WorkspaceSwitchPayload,
+  BackgroundTaskOutput,
 } from "./types";
 
 type SessionListResponsePayload = { sessions: SessionRecord[] };
@@ -829,6 +830,41 @@ export async function cancelQueuedFollowUp(
     { method: "DELETE" },
   );
   return result.session;
+}
+
+export async function killBackgroundTask(
+  sessionId: string,
+  taskId: string,
+): Promise<LiveSession> {
+  const result = await apiRequest<
+    "POST /api/sessions/{session_id}/background-tasks/{task_id}/kill",
+    LiveSessionResponsePayload
+  >(
+    "POST /api/sessions/{session_id}/background-tasks/{task_id}/kill",
+    pathFor("POST /api/sessions/{session_id}/background-tasks/{task_id}/kill", {
+      session_id: sessionId,
+      task_id: taskId,
+    }),
+    { method: "POST" },
+  );
+  return result.session;
+}
+
+export async function getBackgroundTaskOutput(
+  sessionId: string,
+  taskId: string,
+): Promise<BackgroundTaskOutput> {
+  const result = await apiRequest<
+    "GET /api/sessions/{session_id}/background-tasks/{task_id}/output",
+    { task: BackgroundTaskOutput }
+  >(
+    "GET /api/sessions/{session_id}/background-tasks/{task_id}/output",
+    pathFor("GET /api/sessions/{session_id}/background-tasks/{task_id}/output", {
+      session_id: sessionId,
+      task_id: taskId,
+    }),
+  );
+  return result.task;
 }
 
 export async function runSessionShellCommand(
