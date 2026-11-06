@@ -5650,3 +5650,84 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.background-tasks-panel__intent {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Last tool intent ticker in the "Working" header */
+.working-intent {
+  display: inline-flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--color-muted-foreground);
+  font-weight: var(--weight-normal, 400);
+  transition: opacity var(--duration-normal) var(--ease-out);
+}
+
+.working-intent[data-faded="true"] {
+  opacity: 0.6;
+}
+
+.working-intent__divider {
+  flex: none;
+  width: 1px;
+  height: 0.9em;
+  background: var(--color-border);
+}
+
+.working-intent__viewport {
+  display: inline-flex;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.working-intent__text {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--sp-1);
+  animation: working-intent-in 220ms var(--ease-out) both;
+}
+
+.working-intent__icon {
+  flex: none;
+  width: 0.9em;
+  height: 0.9em;
+}
+
+.working-intent__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes working-intent-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .working-intent__text {
+    animation-name: working-intent-fade;
+  }
+}
+
+@keyframes working-intent-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

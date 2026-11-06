@@ -5273,7 +5273,7 @@ def test_follow_up_after_http_400_replays_unfinished_turn(
                             "type": "function_call",
                             "call_id": "call_before_failure",
                             "name": "shell",
-                            "arguments": '{"command": "pwd"}',
+                            "arguments": '{"intent": "Print working directory", "command": "pwd"}',
                         },
                     ]
                 )

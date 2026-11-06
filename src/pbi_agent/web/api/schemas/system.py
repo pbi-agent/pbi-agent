@@ -321,6 +321,7 @@ class QueuedFollowUpModel(BaseModel):
 class BackgroundTaskModel(BaseModel):
     task_id: str
     command: str
+    intent: str = ""
     working_directory: str
     tool_call_id: str | None = None
     status: Literal["running", "completed", "failed", "killed", "timed_out"]

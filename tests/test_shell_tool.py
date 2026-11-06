@@ -38,6 +38,7 @@ def test_shell_handle_runs_command_with_workspace_defaults(
     ) -> subprocess.CompletedProcess[bytes]:
         calls.append(
             {
+                "intent": "Run test command",
                 "command": command,
                 "cwd": cwd,
                 "check": check,
@@ -57,7 +58,9 @@ def test_shell_handle_runs_command_with_workspace_defaults(
 
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
 
-    result = shell_tool.handle({"command": "echo hi"}, ToolContext())
+    result = shell_tool.handle(
+        {"intent": "Run test command", "command": "echo hi"}, ToolContext()
+    )
 
     assert result == {
         "stdout": "stdout text",
@@ -66,6 +69,7 @@ def test_shell_handle_runs_command_with_workspace_defaults(
     }
     assert calls == [
         {
+            "intent": "Run test command",
             "command": "echo hi",
             "cwd": str(tmp_path.resolve()),
             "check": False,
@@ -116,6 +120,7 @@ def test_shell_handle_uses_requested_directory_and_clamps_timeout(
 
     shell_tool.handle(
         {
+            "intent": "Run test command",
             "command": "pwd",
             "working_directory": "nested",
             "timeout_ms": shell_tool.MAX_TIMEOUT_MS * 2,
@@ -161,7 +166,7 @@ def test_shell_handle_honors_requested_timeout(
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
 
     result = shell_tool.handle(
-        {"command": "echo hi", "timeout_ms": 12_345},
+        {"intent": "Run test command", "command": "echo hi", "timeout_ms": 12_345},
         ToolContext(),
     )
 
@@ -189,6 +194,7 @@ def test_shell_handle_interrupts_running_process_from_display(
     try:
         result = shell_tool.handle(
             {
+                "intent": "Run test command",
                 "command": command,
                 "compression": False,
                 "timeout_ms": 10_000,
@@ -231,6 +237,7 @@ def test_shell_handle_interrupts_only_targeted_tool_call(
     try:
         result = shell_tool.handle(
             {
+                "intent": "Run test command",
                 "command": command,
                 "compression": False,
                 "timeout_ms": 10_000,
@@ -263,6 +270,7 @@ def test_shell_handle_interrupts_descendant_after_shell_leader_exits(
     try:
         result = shell_tool.handle(
             {
+                "intent": "Run test command",
                 "command": "sleep 30 &",
                 "compression": False,
                 "timeout_ms": 10_000,
@@ -310,7 +318,7 @@ def test_shell_handle_stops_process_before_propagating_keyboard_interrupt(
 
     with pytest.raises(KeyboardInterrupt):
         shell_tool.handle(
-            {"command": "long-running"},
+            {"intent": "Run test command", "command": "long-running"},
             ToolContext(display=cast(Any, display)),
         )
 
@@ -341,7 +349,9 @@ def test_shell_handle_compresses_non_empty_streams_by_default(
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
     monkeypatch.setattr(shell_tool, "compress_text", fake_compress_text)
 
-    result = shell_tool.handle({"command": "cmd"}, ToolContext())
+    result = shell_tool.handle(
+        {"intent": "Run test command", "command": "cmd"}, ToolContext()
+    )
 
     assert result == {
         "stdout": "compressed: stdout text",
@@ -374,7 +384,7 @@ def test_shell_handle_skips_compression_when_disabled(
     monkeypatch.setattr(shell_tool, "compress_text", fake_compress_text)
 
     result = shell_tool.handle(
-        {"command": "cmd", "compression": False},
+        {"intent": "Run test command", "command": "cmd", "compression": False},
         ToolContext(),
     )
 
@@ -403,7 +413,7 @@ def test_shell_handle_rejects_invalid_timeout_without_running_subprocess(
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
 
     result = shell_tool.handle(
-        {"command": "echo hi", "timeout_ms": timeout_ms},
+        {"intent": "Run test command", "command": "echo hi", "timeout_ms": timeout_ms},
         ToolContext(),
     )
 
@@ -425,7 +435,11 @@ def test_shell_handle_rejects_invalid_compression_without_running_subprocess(
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
 
     result = shell_tool.handle(
-        {"command": "echo hi", "compression": compression},
+        {
+            "intent": "Run test command",
+            "command": "echo hi",
+            "compression": compression,
+        },
         ToolContext(),
     )
 
@@ -447,7 +461,7 @@ def test_shell_handle_returns_timeout_payload(tmp_path: Path, monkeypatch) -> No
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
 
     result = shell_tool.handle(
-        {"command": "sleep 10", "timeout_ms": 500},
+        {"intent": "Run test command", "command": "sleep 10", "timeout_ms": 500},
         ToolContext(),
     )
 
@@ -485,7 +499,7 @@ def test_shell_handle_compresses_timeout_partial_streams(
     monkeypatch.setattr(shell_tool, "compress_text", fake_compress_text)
 
     result = shell_tool.handle(
-        {"command": "sleep 10", "timeout_ms": 500},
+        {"intent": "Run test command", "command": "sleep 10", "timeout_ms": 500},
         ToolContext(),
     )
 
@@ -511,7 +525,9 @@ def test_shell_handle_returns_error_payload_for_subprocess_failure(
 
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
 
-    result = shell_tool.handle({"command": "bad-command"}, ToolContext())
+    result = shell_tool.handle(
+        {"intent": "Run test command", "command": "bad-command"}, ToolContext()
+    )
 
     assert result["stdout"] == ""
     assert result["stderr"] == "boom"
@@ -541,7 +557,9 @@ def test_shell_handle_falls_back_to_decoded_output_when_compression_fails(
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
     monkeypatch.setattr(shell_tool, "compress_text", fake_compress_text)
 
-    result = shell_tool.handle({"command": "cmd"}, ToolContext())
+    result = shell_tool.handle(
+        {"intent": "Run test command", "command": "cmd"}, ToolContext()
+    )
 
     assert result == {
         "stdout": "stdout text",
@@ -570,7 +588,7 @@ def test_shell_handle_bounds_large_stdout_and_stderr_when_compression_disabled(
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
 
     result = shell_tool.handle(
-        {"command": "python", "compression": False},
+        {"intent": "Run test command", "command": "python", "compression": False},
         ToolContext(),
     )
 
@@ -615,7 +633,9 @@ def test_shell_handle_bounds_output_after_compression(
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
     monkeypatch.setattr(shell_tool, "compress_text", fake_compress_text)
 
-    result = shell_tool.handle({"command": "python"}, ToolContext())
+    result = shell_tool.handle(
+        {"intent": "Run test command", "command": "python"}, ToolContext()
+    )
 
     assert result["exit_code"] == 0
     assert result["stdout_truncated"] is True
@@ -645,7 +665,7 @@ def test_shell_tool_schema_keeps_timeout_bounds_in_description_only() -> None:
 def test_shell_tool_schema_exposes_optional_compression() -> None:
     schema = shell_tool.SPEC.parameters_schema
 
-    assert schema["required"] == ["command"]
+    assert schema["required"] == ["intent", "command"]
     assert schema["properties"]["compression"] == {
         "type": "boolean",
         "description": (
@@ -667,3 +687,14 @@ def test_resolve_working_directory_allows_absolute_paths_outside_workspace(
         shell_tool._resolve_working_directory(workspace.resolve(), str(outside))
         == outside.resolve()
     )
+
+
+@pytest.mark.parametrize("intent", [None, "", "   ", 3])
+def test_shell_handle_requires_intent(intent: object) -> None:
+    arguments: dict[str, object] = {"command": "echo hi"}
+    if intent is not None:
+        arguments["intent"] = intent
+
+    result = shell_tool.handle(arguments, ToolContext())
+
+    assert "'intent'" in result["error"]

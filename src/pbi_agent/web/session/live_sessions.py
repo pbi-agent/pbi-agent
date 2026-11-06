@@ -660,7 +660,7 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
             )
             live_session.display.shell_start([normalized_command])
             result = shell_tool.handle(
-                {"command": normalized_command},
+                {"command": normalized_command, "intent": "Run user shell command"},
                 ToolContext(
                     settings=live_session.runtime.settings,
                     display=live_session.display,

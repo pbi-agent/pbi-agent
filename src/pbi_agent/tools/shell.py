@@ -44,6 +44,13 @@ SPEC = ToolSpec(
     parameters_schema={
         "type": "object",
         "properties": {
+            "intent": {
+                "type": "string",
+                "description": (
+                    "Short 3-8 word summary of what the command does, shown "
+                    "to the user (e.g. 'Run backend unit tests')."
+                ),
+            },
             "command": {
                 "type": "string",
                 "description": "The shell command to execute.",
@@ -98,11 +105,21 @@ SPEC = ToolSpec(
                 ),
             },
         },
-        "required": ["command"],
+        "required": ["intent", "command"],
         "additionalProperties": False,
     },
     is_destructive=True,
 )
+
+
+def _intent_error(arguments: dict[str, Any]) -> str | None:
+    intent = arguments.get("intent")
+    if not isinstance(intent, str) or not intent.strip():
+        return (
+            "'intent' must be a non-empty string briefly describing the command "
+            "(3-8 words)."
+        )
+    return None
 
 
 def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
@@ -111,6 +128,9 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     run_in_background = arguments.get("run_in_background", False)
     if background_action is not None or run_in_background is not False:
         return _handle_background(arguments, context)
+    intent_error = _intent_error(arguments)
+    if intent_error is not None:
+        return {"error": intent_error}
     command = arguments.get("command", "")
     if not isinstance(command, str) or not command.strip():
         return {"error": "'command' must be a non-empty string."}
@@ -233,6 +253,9 @@ def _handle_background(
 
     if not isinstance(arguments.get("run_in_background"), bool):
         return {"error": "'run_in_background' must be a boolean."}
+    intent_error = _intent_error(arguments)
+    if intent_error is not None:
+        return {"error": intent_error}
     command = arguments.get("command", "")
     if not isinstance(command, str) or not command.strip():
         return {"error": "'command' must be a non-empty string."}
@@ -257,6 +280,7 @@ def _handle_background(
         task = manager.start(
             _bootstrap_command(command),
             display_command=command,
+            intent=str(arguments["intent"]).strip(),
             working_directory=str(working_directory),
             shell_executable=os.environ.get(SHELL_EXECUTABLE_ENV) or None,
             timeout_ms=timeout_ms,
