@@ -62,12 +62,14 @@ class BackgroundTask:
     stdout: _StreamTail = field(default_factory=_StreamTail, repr=False)
     stderr: _StreamTail = field(default_factory=_StreamTail, repr=False)
     kill_reason: BackgroundTaskStatus | None = None
+    intent: str = ""
 
     def summary(self) -> dict[str, Any]:
         end = self.ended_at if self.ended_at is not None else time.time()
         return {
             "task_id": self.task_id,
             "command": self.command,
+            "intent": self.intent,
             "working_directory": self.working_directory,
             "tool_call_id": self.tool_call_id,
             "status": self.status,
@@ -106,6 +108,7 @@ class BackgroundTaskManager:
         command: str,
         *,
         display_command: str,
+        intent: str = "",
         working_directory: str,
         shell_executable: str | None,
         timeout_ms: int,
@@ -124,6 +127,7 @@ class BackgroundTaskManager:
             task = BackgroundTask(
                 task_id=f"bg-{uuid.uuid4().hex[:8]}",
                 command=display_command,
+                intent=intent,
                 working_directory=working_directory,
                 tool_call_id=tool_call_id,
                 timeout_ms=timeout_ms,
@@ -306,6 +310,7 @@ def render_background_result(task: BackgroundTask) -> str:
     lines = [
         f'<background_task_result task_id="{task.task_id}" status="{task.status}" '
         f'exit_code="{exit_code}" duration_seconds="{duration}">',
+        *([f"intent: {task.intent}"] if task.intent else []),
         f"command: {task.command}",
     ]
     if task.stdout.dropped or payload.get("stdout_truncated"):

@@ -1,6 +1,6 @@
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { BotIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ChevronUpIcon } from "lucide-react";
+import { BotIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ChevronUpIcon, TerminalIcon, WrenchIcon } from "lucide-react";
 import { Accordion as AccordionPrimitive } from "radix-ui";
 import { useAutoScroll } from "../../hooks/useAutoScroll";
 import type { ConnectionState } from "../../store";
@@ -218,6 +218,7 @@ const BACKGROUND_RESULT_RE =
 
 export type BackgroundResultInfo = {
   taskId: string;
+  intent: string | null;
   status: string;
   exitCode: string | null;
   body: string;
@@ -230,6 +231,7 @@ export function parseBackgroundResult(item: TimelineItem): BackgroundResultInfo 
   const [, taskId, status, exitCode, body] = match;
   return {
     taskId,
+    intent: /^intent: (.+)$/m.exec(body)?.[1]?.trim() || null,
     status: status.replace("_", " "),
     exitCode: exitCode === "none" ? null : exitCode,
     body: body.trim(),
@@ -1014,6 +1016,9 @@ function toolSubtitle(entry: ToolListEntry) {
     );
   }
 
+  const intent = stringValue(entry.entry.metadata?.intent) ?? stringValue(args?.intent);
+  if (intent?.trim()) return intent.trim();
+
   const result = objectValue(entry.entry.metadata?.result);
   return (
     stringValue(entry.entry.metadata?.path)
@@ -1025,6 +1030,53 @@ function toolSubtitle(entry: ToolListEntry) {
     ?? stringValue(result?.url)
     ?? stringValue(args?.url)
     ?? entry.entry.text.split("\n")[0]
+  );
+}
+
+function baseName(value: string) {
+  const trimmed = value.trim().replace(/[\\/]+$/, "");
+  const parts = trimmed.split(/[\\/]/);
+  return parts[parts.length - 1] || trimmed;
+}
+
+export type LastWorkIntent = { text: string; isShell: boolean };
+
+function lastWorkIntent(items: WorkItem[]): LastWorkIntent | null {
+  for (let i = items.length - 1; i >= 0; i -= 1) {
+    const item = items[i];
+    if (item.kind !== "tool_group" || item.subAgentId) continue;
+    const entries = toolEntriesForGroup(item);
+    for (let j = entries.length - 1; j >= 0; j -= 1) {
+      const entry = entries[j];
+      const isShell = normalizeToolNameCandidate(entry.label) === "shell";
+      const args = objectValue(entry.entry.metadata?.arguments);
+      const intent = (stringValue(entry.entry.metadata?.intent) ?? stringValue(args?.intent))?.trim();
+      if (isShell) {
+        const text = intent || stringValue(entry.entry.metadata?.command) || stringValue(args?.command);
+        if (text?.trim()) return { text: text.trim().split("\n")[0], isShell: true };
+        continue;
+      }
+      if (intent) return { text: intent, isShell: false };
+      const subtitle = toolSubtitle(entry)?.split("\n")[0]?.trim();
+      const target = subtitle ? (/[\\/]/.test(subtitle) && !/\s/.test(subtitle) ? baseName(subtitle) : subtitle) : "";
+      return { text: target ? `${entry.displayLabel} ${target}` : entry.displayLabel, isShell: false };
+    }
+  }
+  return null;
+}
+
+function WorkingIntentTicker({ intent, faded }: { intent: LastWorkIntent; faded: boolean }) {
+  const Icon = intent.isShell ? TerminalIcon : WrenchIcon;
+  return (
+    <span className="working-intent" data-faded={faded ? "true" : "false"} title={intent.text}>
+      <span className="working-intent__divider" aria-hidden="true" />
+      <span className="working-intent__viewport" aria-live="polite">
+        <span key={intent.text} className="working-intent__text" data-testid="working-intent">
+          <Icon aria-hidden="true" className="working-intent__icon" />
+          <span className="working-intent__label">{intent.text}</span>
+        </span>
+      </span>
+    </span>
   );
 }
 
@@ -1340,7 +1392,7 @@ function WorkingItemsPanel({
                       <ChevronRightIcon className="timeline-entry__chevron" />
                       <span className="working-items__tool-title">Background task</span>
                       <span className="working-items__tool-subtitle">
-                        {`${info.taskId} · ${info.status}${info.exitCode !== null ? ` · exit ${info.exitCode}` : ""}`}
+                        {`${info.intent ?? info.taskId} · ${info.status}${info.exitCode !== null ? ` · exit ${info.exitCode}` : ""}`}
                       </span>
                     </Button>
                   </AccordionPrimitive.Trigger>
@@ -1637,6 +1689,7 @@ function WorkRun({
     [showSubAgentCards, subAgents, unit.items],
   );
   const hasVisibleSummary = workRunSummary.length > 0;
+  const workIntent = useMemo(() => lastWorkIntent(unit.items), [unit.items]);
   const isVisiblyActive =
     active || hasRunningSubAgentCard || (!sessionIsActive && unit.running);
   const showPlaceholderSummary = active && !hasVisibleSummary;
@@ -1722,6 +1775,9 @@ function WorkRun({
                     : "working-items__summary"
                 }
               />
+              {workIntent && !open ? (
+                <WorkingIntentTicker intent={workIntent} faded={!active} />
+              ) : null}
             </Button>
           </CollapsibleTrigger>
         </div>

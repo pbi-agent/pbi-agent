@@ -1512,7 +1512,7 @@ describe("SessionTimeline", () => {
     );
 
     const workingButton = screen.getByRole("button", { name: "Working 1 read" });
-    expect(workingButton).toHaveTextContent(/^Working1 read$/);
+    expect(workingButton).toHaveTextContent(/^Working1 read(?!\d)/);
   });
 
   it("shows turn duration in the collapsed Working header", () => {
@@ -1546,7 +1546,7 @@ describe("SessionTimeline", () => {
     );
 
     const workingButton = screen.getByRole("button", { name: "Working 1 shell · 1:05" });
-    expect(workingButton).toHaveTextContent(/^Working1 shell · 1:05$/);
+    expect(workingButton).toHaveTextContent(/^Working1 shell · 1:05(?!\d)/);
   });
 
   it("does not show turn cost in the active Working header summary", () => {
@@ -2477,7 +2477,7 @@ describe("SessionTimeline", () => {
 
     const workingButton = screen.getByRole("button", { name: /Working/ });
     expect(workingButton).toHaveAccessibleName("Working 1 agent");
-    expect(workingButton).toHaveTextContent(/^Working1 agent$/);
+    expect(workingButton).toHaveTextContent(/^Working1 agent/);
     expect(screen.queryByText("Researcher")).not.toBeInTheDocument();
   });
 
@@ -2508,7 +2508,7 @@ describe("SessionTimeline", () => {
     );
 
     const workingButton = screen.getByRole("button", { name: /Working 1 read/i });
-    expect(workingButton).toHaveTextContent(/^Working1 read$/);
+    expect(workingButton).toHaveTextContent(/^Working1 read(?!\d)/);
     expect(
       workingButton.querySelectorAll('[data-component="animated-number"]'),
     ).toHaveLength(1);
@@ -2539,7 +2539,7 @@ describe("SessionTimeline", () => {
     );
 
     const updatedWorkingButton = screen.getByRole("button", { name: /Working 2 reads/i });
-    expect(updatedWorkingButton).toHaveTextContent(/^Working2 reads$/);
+    expect(updatedWorkingButton).toHaveTextContent(/^Working2 reads(?!\d)/);
     expect(
       updatedWorkingButton.querySelector('[data-slot="animated-number-strip"]'),
     ).toHaveAttribute("data-animating", "true");
@@ -4264,7 +4264,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
     expect(workingButton).toHaveAttribute("aria-expanded", "false");
     // The inner shell command text should not be in the DOM yet because the
     // collapsible defaults to closed for running tools.
-    expect(screen.queryByText("ls -la")).not.toBeInTheDocument();
+    expect(screen.queryByText("ls -la", { selector: ":not(.working-intent__label)" })).not.toBeInTheDocument();
   });
 
   it("scrolls the timeline to the end of the expanded content on the first open of a running Working block", async () => {
@@ -4965,5 +4965,56 @@ describe("SessionTimeline background task results", () => {
     fireEvent.click(trigger);
     openWorking();
     expect(screen.getByText("bg-1 · timed out")).toBeInTheDocument();
+  });
+  it("shows the last tool intent in the collapsed Working header and animates updates", () => {
+    const shell = (command: string, intent: string) => ({
+      text: command,
+      metadata: { tool_name: "shell", command, arguments: { command, intent } },
+    });
+    const view = (entries: ReturnType<typeof shell>[], status: "running" | "completed", version: number) => (
+      <SessionTimeline
+        items={[{ kind: "tool_group", itemId: "tools-1", label: "shell", status, items: entries }]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={status === "running" ? { active: true, phase: "tool_execution", message: null } : null}
+        itemsVersion={version}
+      />
+    );
+    const { rerender } = render(view([shell("ls", "List repo files")], "running", 1));
+    expect(screen.getByTestId("working-intent")).toHaveTextContent("List repo files");
+    const first = screen.getByTestId("working-intent");
+
+    rerender(view([shell("ls", "List repo files"), shell("pytest", "Run unit tests")], "running", 2));
+    const second = screen.getByTestId("working-intent");
+    expect(second).toHaveTextContent("Run unit tests");
+    expect(second).not.toBe(first);
+
+    rerender(view([shell("ls", "List repo files"), shell("pytest", "Run unit tests")], "completed", 3));
+    expect(screen.getByTestId("working-intent")).toHaveTextContent("Run unit tests");
+    expect(document.querySelector(".working-intent")).toHaveAttribute("data-faded", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: /Working/ }));
+    expect(screen.queryByTestId("working-intent")).not.toBeInTheDocument();
+  });
+
+  it("labels non-shell tools in the Working header intent", () => {
+    render(
+      <SessionTimeline
+        items={[{
+          kind: "tool_group",
+          itemId: "tools-1",
+          label: "apply_patch",
+          status: "completed",
+          items: [{ text: "patched", metadata: { tool_name: "write_file", arguments: { path: "src/pbi_agent/tools/shell.py" } } }],
+        }]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+    expect(screen.getByTestId("working-intent")).toHaveTextContent(/shell\.py$/);
   });
 });

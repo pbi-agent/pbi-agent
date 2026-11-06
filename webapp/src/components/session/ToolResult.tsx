@@ -115,6 +115,7 @@ function ShellToolResult({
   const args = objectValue(metadata?.arguments);
   const result = objectValue(metadata?.result);
   const command = stringValue(metadata?.command) ?? stringValue(args?.command) ?? "<missing command>";
+  const intent = stringValue(metadata?.intent) ?? stringValue(args?.intent);
   const cwd = stringValue(metadata?.working_directory) ?? stringValue(args?.working_directory) ?? ".";
   const timeout = timeoutValue(metadata?.timeout_ms) ?? timeoutValue(args?.timeout_ms);
   const exitCode = typeof metadata?.exit_code === "number" || metadata?.exit_code === null
@@ -133,7 +134,7 @@ function ShellToolResult({
       metadata={metadata}
       running={running}
       icon={<TerminalIcon />}
-      title={command}
+      title={intent?.trim() || command}
       description={[cwd, timeout ? `timeout ${timeout}ms` : null].filter(Boolean).join(" · ")}
       statusLabel={interrupted ? "Interrupted" : timedOut ? "Timed out" : running || exitCode === null || exitCode === undefined ? "Running" : exitCode === 0 ? "Done" : `Exit ${exitCode}`}
       headerAction={

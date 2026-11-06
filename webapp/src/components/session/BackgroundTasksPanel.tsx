@@ -147,7 +147,7 @@ export function BackgroundTasksPanel({ sessionId, tasks, onKill, onClose }: Prop
                     <button
                       type="button"
                       className="background-tasks-panel__trigger"
-                      aria-label={`Toggle output for ${task.task_id}`}
+                      aria-label={`Toggle output for ${task.intent || task.task_id}`}
                     >
                       <ChevronRightIcon
                         aria-hidden="true"
@@ -168,9 +168,15 @@ export function BackgroundTasksPanel({ sessionId, tasks, onKill, onClose }: Prop
                             {task.task_id} · {formatElapsed(elapsedFor(task))}
                           </span>
                         </span>
-                        <code className="background-tasks-panel__command" title={task.command}>
-                          {task.command}
-                        </code>
+                        {task.intent ? (
+                          <span className="background-tasks-panel__intent" title={task.command}>
+                            {task.intent}
+                          </span>
+                        ) : (
+                          <code className="background-tasks-panel__command" title={task.command}>
+                            {task.command}
+                          </code>
+                        )}
                       </span>
                     </button>
                   </CollapsibleTrigger>
@@ -181,7 +187,7 @@ export function BackgroundTasksPanel({ sessionId, tasks, onKill, onClose }: Prop
                       size="sm"
                       className="tool-result-card__interrupt-button"
                       disabled={!onKill}
-                      aria-label={`Kill background task ${task.task_id}`}
+                      aria-label={`Kill background task ${task.intent || task.task_id}`}
                       onClick={() => void onKill?.(task.task_id)}
                     >
                       <SquareIcon data-icon="inline-start" aria-hidden="true" />

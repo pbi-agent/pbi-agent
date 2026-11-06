@@ -103,18 +103,27 @@ def _context(tmp_path: Path, manager: Any, *, depth: int = 0) -> ToolContext:
 def test_shell_run_in_background_returns_task_id(tmp_path: Path) -> None:
     manager, _finished, done = _collecting_manager()
     result = shell_tool.handle(
-        {"command": "echo hi", "run_in_background": True},
+        {"intent": "Run test command", "command": "echo hi", "run_in_background": True},
         _context(tmp_path, manager),
     )
     assert result["background"] is True
     assert result["status"] == "running"
     assert done.wait(timeout=5)
     output = shell_tool.handle(
-        {"command": "", "background_action": "output", "task_id": result["task_id"]},
+        {
+            "intent": "Run test command",
+            "command": "",
+            "background_action": "output",
+            "task_id": result["task_id"],
+        },
         _context(tmp_path, manager),
     )
     assert output["stdout"].strip() == "hi"
     assert output["status"] == "completed"
+    task = manager.get(result["task_id"])
+    assert task is not None
+    assert task.summary()["intent"] == "Run test command"
+    assert "intent: Run test command" in render_background_result(task)
 
 
 def test_shell_background_rejected_for_sub_agents_and_unsupported(
@@ -122,12 +131,12 @@ def test_shell_background_rejected_for_sub_agents_and_unsupported(
 ) -> None:
     manager, _finished, _done = _collecting_manager()
     sub = shell_tool.handle(
-        {"command": "true", "run_in_background": True},
+        {"intent": "Run test command", "command": "true", "run_in_background": True},
         _context(tmp_path, manager, depth=1),
     )
     assert "sub-agents" in sub["error"]
     unsupported = shell_tool.handle(
-        {"command": "true", "run_in_background": True},
+        {"intent": "Run test command", "command": "true", "run_in_background": True},
         _context(tmp_path, None),
     )
     assert "not supported" in unsupported["error"]
@@ -136,13 +145,36 @@ def test_shell_background_rejected_for_sub_agents_and_unsupported(
 @pytest.mark.parametrize(
     ("arguments", "message"),
     [
-        ({"command": "true", "run_in_background": "yes"}, "boolean"),
         (
-            {"command": "true", "run_in_background": True, "background_timeout_ms": 0},
+            {
+                "intent": "Run test command",
+                "command": "true",
+                "run_in_background": "yes",
+            },
+            "boolean",
+        ),
+        (
+            {
+                "intent": "Run test command",
+                "command": "true",
+                "run_in_background": True,
+                "background_timeout_ms": 0,
+            },
             "positive",
         ),
-        ({"command": "", "background_action": "kill"}, "task_id"),
-        ({"command": "", "background_action": "status", "task_id": "bg-x"}, "Unknown"),
+        (
+            {"intent": "Run test command", "command": "", "background_action": "kill"},
+            "task_id",
+        ),
+        (
+            {
+                "intent": "Run test command",
+                "command": "",
+                "background_action": "status",
+                "task_id": "bg-x",
+            },
+            "Unknown",
+        ),
     ],
 )
 def test_shell_background_argument_validation(

@@ -9358,7 +9358,7 @@ def test_saved_session_shell_command_persists_origin_and_reenables_input(
                     "exit_code": 0,
                     "timed_out": False,
                 },
-            ),
+            ) as shell_handle,
         ):
             created = manager.create_live_session(session_id=session_id)
             live_session_id = str(created["live_session_id"])
@@ -9377,6 +9377,9 @@ def test_saved_session_shell_command_persists_origin_and_reenables_input(
                     session_id,
                     command="pwd",
                 )
+            shell_args = shell_handle.call_args.args[0]
+            assert shell_args["command"] == "pwd"
+            assert shell_args["intent"].strip()
             events = live_session.event_stream.snapshot()
             input_enabled_after_command = live_session.snapshot.input_enabled
             last_event_seq_after_command = live_session.snapshot.last_event_seq
