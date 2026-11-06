@@ -36,6 +36,7 @@ type ComposerActionShortcutEvent = {
 
 interface UseComposerActionsParams {
   input: string;
+  hasReplySnippets?: boolean;
   canSend: boolean;
   isProcessing: boolean;
   showStopButton: boolean;
@@ -90,6 +91,7 @@ export function isComposerActionShortcut(
 
 export function useComposerActions({
   input,
+  hasReplySnippets = false,
   canSend,
   isProcessing,
   showStopButton,
@@ -111,9 +113,9 @@ export function useComposerActions({
   const inputStartsCommand = trimmedStart.startsWith("/") || trimmedStart.startsWith("!");
   const dictationInProgress = dictationState !== "idle";
   const showDictationAction =
-    !showStopButton && !isShellMode && (inputIsEmpty || dictationInProgress);
+    !showStopButton && !isShellMode && ((inputIsEmpty && !hasReplySnippets) || dictationInProgress);
   const canStartDictation =
-    canSend && inputIsEmpty && dictationAvailable && hasDictationHandler;
+    canSend && inputIsEmpty && !hasReplySnippets && dictationAvailable && hasDictationHandler;
   const showEnhancePromptAction =
     Boolean(onEnhancePrompt) &&
     canSend &&

@@ -19,6 +19,8 @@ import {
 import { searchSlashCommands } from "../../api";
 import type { AgentMentionItem, FileMentionItem, QueuedFollowUp, SkillMentionItem, SlashCommandItem } from "../../types";
 import { cn } from "../../lib/utils";
+import { serializeReplyMessage, type ReplySnippet } from "../../lib/replySnippets";
+import { ReplySnippetCard } from "./ReplySnippetCard";
 import { createWavRecorder, type WavRecorder } from "../../lib/audioRecorder";
 import { DictationWaveform } from "./DictationWaveform";
 import {
@@ -49,6 +51,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 export interface ComposerHandle {
   focus: () => void;
+  addReplySnippet: (quote: string, comment: string) => void;
 }
 
 interface ComposerProps {
@@ -422,6 +425,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const showStopButton = canInterrupt;
   const [input, setInput] = useState("");
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
+  const [replySnippets, setReplySnippets] = useState<ReplySnippet[]>([]);
   const [attachmentMessage, setAttachmentMessage] = useState<string | null>(null);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [cursorIndex, setCursorIndex] = useState(0);
@@ -440,6 +444,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   useImperativeHandle(ref, () => ({
     focus: () => textareaRef.current?.focus(),
+    addReplySnippet: (quote: string, comment: string) => {
+      setReplySnippets((current) => [
+        ...current,
+        { id: `reply-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, quote, comment },
+      ]);
+      textareaRef.current?.focus();
+    },
   }));
 
   const autoResize = useCallback(() => {
@@ -709,6 +720,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   const composerActions = useComposerActions({
     input,
+    hasReplySnippets: replySnippets.length > 0,
     canSend: canSend || canDraftFollowUp,
     isProcessing,
     showStopButton,
@@ -730,7 +742,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     }
   }, [closeCompletions, composerInputAvailable]);
   const showFollowUpSubmitButton =
-    canDraftFollowUp && input.trim().length > 0;
+    canDraftFollowUp && (input.trim().length > 0 || replySnippets.length > 0);
   const showActionStopButton = showStopButton && !showFollowUpSubmitButton;
   const showFollowUpReadyAnimation =
     isProcessing
@@ -1001,6 +1013,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   const clearComposerDraft = useCallback(() => {
     clearPendingImages();
+    setReplySnippets([]);
     resetHistoryBrowsing();
     setInput("");
     setAttachmentMessage(null);
@@ -1056,7 +1069,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     async (textValue: string) => {
       if (isPromptEnhancementPending()) return;
       const trimmed = textValue.trim();
-      if (!trimmed) return;
+      if (!trimmed && replySnippets.length === 0) return;
+      if (trimmed.startsWith("!") && replySnippets.length > 0) {
+        setAttachmentMessage("Shell commands cannot include reply snippets.");
+        return;
+      }
       if (trimmed.startsWith("!") && pendingImages.length > 0) {
         setAttachmentMessage(
           "Shell commands cannot include image attachments.",
@@ -1076,7 +1093,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       try {
         refocusAfterSubmitRef.current = true;
         await onSubmit({
-          text: trimmed,
+          text: serializeReplyMessage(replySnippets, trimmed),
           images: pendingImages.map((image) => image.file),
         });
         clearComposerDraft();
@@ -1087,7 +1104,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         );
       }
     },
-    [canDraftFollowUp, canSend, clearComposerDraft, closeCompletions, isPromptEnhancementPending, onSubmit, pendingImages],
+    [canDraftFollowUp, canSend, clearComposerDraft, closeCompletions, isPromptEnhancementPending, onSubmit, pendingImages, replySnippets],
   );
 
   const queueFollowUp = useCallback(
@@ -1102,7 +1119,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       }
       const textValue = textareaRef.current?.value ?? input;
       const trimmed = textValue.trim();
-      if (!trimmed) return;
+      if (!trimmed && replySnippets.length === 0) return;
       if (trimmed.startsWith("!")) {
         setAttachmentMessage("Shell commands cannot be sent as follow-ups while the assistant is processing.");
         setFollowUpChoicesOpen(false);
@@ -1111,7 +1128,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       setFollowUpChoicesOpen(false);
       try {
         await onSubmit({
-          text: trimmed,
+          text: serializeReplyMessage(replySnippets, trimmed),
           images: pendingImages.map((image) => image.file),
           followUpDelivery: timing,
         });
@@ -1124,7 +1141,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         );
       }
     },
-    [canDraftFollowUp, clearComposerDraft, input, liveSessionId, onSubmit, pendingImages],
+    [canDraftFollowUp, clearComposerDraft, input, liveSessionId, onSubmit, pendingImages, replySnippets],
   );
 
   useEffect(() => {
@@ -1752,6 +1769,23 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               </div>
             );
           })}
+        </div>
+      ) : null}
+
+      {replySnippets.length > 0 ? (
+        <div className="composer__reply-snippets" aria-label="Reply snippets">
+          {replySnippets.map((snippet) => (
+            <ReplySnippetCard
+              key={snippet.id}
+              quote={snippet.quote}
+              comment={snippet.comment}
+              onRemove={
+                composerInputAvailable
+                  ? () => setReplySnippets((current) => current.filter((item) => item.id !== snippet.id))
+                  : undefined
+              }
+            />
+          ))}
         </div>
       ) : null}
 

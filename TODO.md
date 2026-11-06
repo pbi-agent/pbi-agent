@@ -1,3 +1,6 @@
-- [x] Move background tasks dock to right sidebar tab (topbar icon)
-- [x] Group background_result timeline rows into collapsible intermediate steps
+# TODO
+- [x] Reply snippet helpers (serialize/parse)
+- [x] Selection reply popover in session timeline
+- [x] Composer snippet cards + send serialization
+- [x] Timeline user message snippet cards
 - [x] Tests + validation
