@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pbi_agent.config import Settings
+from pbi_agent.display.protocol import DisplayProtocol
 from pbi_agent.models.messages import CompletedResponse, TokenUsage, UserTurnInput
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.types import ParentContextSnapshot
-from pbi_agent.display.protocol import DisplayProtocol
 
 if TYPE_CHECKING:
-    from pbi_agent.observability import RunTracer
     from pbi_agent.hooks.runtime import HookRuntime
+    from pbi_agent.observability import RunTracer
 
 
 class Provider(ABC):
@@ -51,7 +51,7 @@ class Provider(ABC):
         display: DisplayProtocol,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
     ) -> CompletedResponse:
         """Send a turn and return the model response.
 
@@ -74,8 +74,8 @@ class Provider(ABC):
         turn_usage: TokenUsage,
         sub_agent_depth: int = 0,
         parent_context: ParentContextSnapshot | None = None,
-        tracer: "RunTracer | None" = None,
-        hook_runtime: "HookRuntime | None" = None,
+        tracer: RunTracer | None = None,
+        hook_runtime: HookRuntime | None = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         """Execute every tool call present in *response*.
 
@@ -91,14 +91,14 @@ class Provider(ABC):
 
     # -- session resume -------------------------------------------------------
 
-    def set_previous_response_id(self, response_id: str | None) -> None:
+    def set_previous_response_id(self, response_id: str | None) -> None:  # noqa: B027
         """Set conversation continuation ID for session resume. No-op by default."""
 
     def get_conversation_checkpoint(self) -> str | None:
         """Return the current provider conversation checkpoint when supported."""
         return None
 
-    def restore_messages(self, messages: list[MessageRecord]) -> None:
+    def restore_messages(self, messages: list[MessageRecord]) -> None:  # noqa: B027
         """Restore persisted conversation messages for client-side history providers."""
 
     def restore_history_items(self, items: list[dict[str, Any]]) -> None:
@@ -111,10 +111,10 @@ class Provider(ABC):
         ]
         self.restore_messages(messages)
 
-    def set_system_prompt(self, system_prompt: str) -> None:
+    def set_system_prompt(self, system_prompt: str) -> None:  # noqa: B027
         """Replace the provider-level system prompt for future turns. No-op by default."""
 
-    def refresh_tools(self) -> None:
+    def refresh_tools(self) -> None:  # noqa: B027
         """Rebuild provider tool definitions when dynamic schemas change."""
 
     def set_excluded_tools(self, excluded_tools: set[str]) -> None:

@@ -5,8 +5,7 @@ from collections.abc import Callable
 from threading import Lock
 from typing import Any
 
-from pbi_agent.display.protocol import DisplayProtocol
-from pbi_agent.display.protocol import PendingToolCall
+from pbi_agent.display.protocol import DisplayProtocol, PendingToolCall
 from pbi_agent.models.messages import ToolCall
 from pbi_agent.tools.apply_patch import (
     SPEC as APPLY_PATCH_SPEC,

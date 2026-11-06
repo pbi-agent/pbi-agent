@@ -5,8 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from pbi_agent.models.messages import ImageAttachment
-from pbi_agent.tools.workspace_access import relative_workspace_path
-from pbi_agent.tools.workspace_access import resolve_safe_path
+from pbi_agent.tools.workspace_access import relative_workspace_path, resolve_safe_path
 
 SUPPORTED_IMAGE_MIME_TYPES = (
     "image/png",

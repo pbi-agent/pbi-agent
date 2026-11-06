@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import urllib.request
+from pathlib import Path
 
 from pbi_agent.stt.base import ResolvedSttProvider, SttProviderError
 from pbi_agent.stt.http_client import (

@@ -67,7 +67,7 @@ def _handle_sandbox_command(args: argparse.Namespace) -> int:  # pyright: ignore
     image = str(args.image).strip() or DEFAULT_SANDBOX_IMAGE
     if args.rebuild or not _docker_image_exists(image):
         build_command = _build_sandbox_image_command(image, dockerfile)
-        build_result = subprocess.run(build_command)
+        build_result = subprocess.run(build_command, check=False)
         if build_result.returncode != 0:
             return build_result.returncode
 
@@ -90,6 +90,7 @@ def _handle_sandbox_command(args: argparse.Namespace) -> int:  # pyright: ignore
             completed = subprocess.run(
                 run_command,
                 env=container_env,
+                check=False,
                 capture_output=True,
                 text=True,
             )
@@ -110,7 +111,7 @@ def _handle_sandbox_command(args: argparse.Namespace) -> int:  # pyright: ignore
                     status_message=None,
                 )
         else:
-            completed = subprocess.run(run_command, env=container_env)
+            completed = subprocess.run(run_command, env=container_env, check=False)
     except KeyboardInterrupt:
         return 130
     return completed.returncode
@@ -120,6 +121,7 @@ def _check_docker_available() -> str | None:
     try:
         completed = subprocess.run(
             ["docker", "version", "--format", "{{.Server.Version}}"],
+            check=False,
             capture_output=True,
             text=True,
             timeout=10,
@@ -140,6 +142,7 @@ def _check_docker_available() -> str | None:
 def _docker_image_exists(image: str) -> bool:
     completed = subprocess.run(
         ["docker", "image", "inspect", image],
+        check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )

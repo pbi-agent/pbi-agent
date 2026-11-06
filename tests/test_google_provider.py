@@ -9,10 +9,10 @@ import pytest
 from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.cli import build_parser
 from pbi_agent.config import (
-    ConfigError,
     DEFAULT_GOOGLE_INTERACTIONS_URL,
     DEFAULT_GOOGLE_MODEL,
     DEFAULT_MAX_TOKENS,
+    ConfigError,
     Settings,
     resolve_settings,
 )
@@ -669,7 +669,10 @@ def test_google_execute_tool_calls_returns_function_results(
         "pbi_agent.providers.google_provider._execute_tool_calls",
         lambda calls, max_workers, context=None, on_result=None: (
             (
-                [on_result(call, result) for call, result in zip(calls, batch.results)]
+                [
+                    on_result(call, result)
+                    for call, result in zip(calls, batch.results, strict=False)
+                ]
                 if on_result is not None
                 else None
             )
@@ -1357,7 +1360,10 @@ def test_google_execute_tool_calls_serializes_image_attachments(
         "pbi_agent.providers.google_provider._execute_tool_calls",
         lambda calls, max_workers, context=None, on_result=None: (
             (
-                [on_result(call, result) for call, result in zip(calls, batch.results)]
+                [
+                    on_result(call, result)
+                    for call, result in zip(calls, batch.results, strict=False)
+                ]
                 if on_result is not None
                 else None
             )

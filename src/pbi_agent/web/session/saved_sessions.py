@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 from pbi_agent.config import ResolvedRuntime
@@ -86,12 +86,12 @@ def _serialize_run_detail_run(
     detail_events = [event for event in events if event.event_type != "web_event"]
     started_at = datetime.fromisoformat(run.started_at)
     if started_at.tzinfo is None:
-        started_at = started_at.replace(tzinfo=timezone.utc)
+        started_at = started_at.replace(tzinfo=UTC)
     serialized.update(
         {
             "total_duration_ms": max(
                 0,
-                int((datetime.now(timezone.utc) - started_at).total_seconds() * 1000),
+                int((datetime.now(UTC) - started_at).total_seconds() * 1000),
             ),
             "input_tokens": sum(event.prompt_tokens or 0 for event in detail_events),
             "cached_input_tokens": sum(

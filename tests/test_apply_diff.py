@@ -55,7 +55,7 @@ def test_apply_diff_trimmed_whitespace_fallback_after_rstrip_fails() -> None:
 
 
 def test_apply_diff_unicode_normalization_fallback_reports_warning() -> None:
-    original = "message = 'smart “quote” – dash'"
+    original = "message = 'smart “quote” – dash'"  # noqa: RUF001
     diff = "-message = 'smart \"quote\" - dash'\n+message = 'plain'"
 
     result = apply_diff(original, diff)

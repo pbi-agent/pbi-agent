@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 AUTH_MODE_API_KEY = "api_key"
@@ -49,7 +49,7 @@ class OAuthSessionAuth:
     def is_expired(self, *, now: datetime | None = None) -> bool:
         if self.expires_at is None:
             return False
-        current = now or datetime.now(timezone.utc)
+        current = now or datetime.now(UTC)
         return self.expires_at <= int(current.timestamp())
 
 

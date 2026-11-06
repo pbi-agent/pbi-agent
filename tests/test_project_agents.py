@@ -9,7 +9,6 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
-
 from pathlib import Path
 
 import pytest
@@ -20,7 +19,6 @@ from pbi_agent.agents.project_catalog import (
     discover_installed_project_agents,
     render_installed_project_agents,
 )
-from pbi_agent.agents.state import set_agent_enabled
 from pbi_agent.agents.project_installer import (
     DEFAULT_AGENTS_SOURCE,
     GitHubAgentSource,
@@ -33,6 +31,7 @@ from pbi_agent.agents.project_installer import (
     render_remote_agent_listing,
     resolve_default_agents_source,
 )
+from pbi_agent.agents.state import set_agent_enabled
 
 
 def _write_agent(
@@ -544,7 +543,7 @@ def test_install_rejects_agent_names_that_are_not_single_path_segments(
 
     with pytest.raises(
         ProjectAgentInstallError,
-        match="single path segment|must not be empty",
+        match=r"single path segment|must not be empty",
     ):
         install_project_agent(str(agent_file), workspace=tmp_path / "workspace")
 

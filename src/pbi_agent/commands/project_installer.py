@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import shutil
-
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -10,10 +9,10 @@ from rich.console import Console
 from rich.table import Table
 
 from pbi_agent.config import (
+    RESERVED_COMMAND_ALIASES,
     CommandConfig,
     CommandManifestError,
     ConfigError,
-    RESERVED_COMMAND_ALIASES,
     parse_command_markdown,
     slugify,
 )

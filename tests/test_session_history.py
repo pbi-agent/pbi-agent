@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
 import io
 import json
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
 
 import pytest
 

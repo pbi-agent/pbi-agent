@@ -49,7 +49,7 @@ class ToolCatalog:
         *,
         directory_key: str | None = None,
         visible_sub_agent_names: tuple[str, ...] | None = None,
-    ) -> "ToolCatalog":
+    ) -> ToolCatalog:
         from pbi_agent.tools.sub_agent import visible_agent_type_values
 
         entries: dict[str, ToolCatalogEntry] = {}
@@ -77,7 +77,7 @@ class ToolCatalog:
         *,
         directory_key: str | None = None,
         visible_sub_agent_names: tuple[str, ...] | None = None,
-    ) -> "ToolCatalog":
+    ) -> ToolCatalog:
         from pbi_agent.tools.sub_agent import build_spec, visible_agent_type_values
 
         agent_type_values = visible_agent_type_values(
@@ -100,7 +100,7 @@ class ToolCatalog:
         extra_entries: list[ToolCatalogEntry],
         *,
         source_label: str = "MCP",
-    ) -> "ToolCatalog":
+    ) -> ToolCatalog:
         merged = dict(self._entries)
         for entry in extra_entries:
             if entry.spec.name in self._entries:
@@ -121,7 +121,7 @@ class ToolCatalog:
         spec: ToolSpec,
         *,
         sub_agent_type_values: tuple[str, ...] | None = None,
-    ) -> "ToolCatalog":
+    ) -> ToolCatalog:
         entry = self._entries.get(spec.name)
         if entry is None:
             return self

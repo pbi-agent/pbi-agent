@@ -4,7 +4,7 @@ import io
 import json
 import urllib.error
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from email.message import Message
 from typing import Any
 
@@ -212,7 +212,7 @@ def test_xai_model_discovery_proactively_refreshes_expiring_oauth_session(
     )
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
-    expires_at = int((datetime.now(timezone.utc) + timedelta(minutes=30)).timestamp())
+    expires_at = int((datetime.now(UTC) + timedelta(minutes=30)).timestamp())
     settings = _xai_settings(_xai_auth("expiring-token", expires_at=expires_at))
     result = discover_provider_models(settings)
 

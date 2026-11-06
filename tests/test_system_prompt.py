@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import stat
+from pathlib import Path
 
 import pytest
 
-from pbi_agent.config import CommandConfig, Settings, update_user_profile_config
 from pbi_agent.agent.session.shared import _turn_instructions
 from pbi_agent.agent.system_prompt import (
     _MAX_FILE_BYTES,
@@ -18,6 +17,7 @@ from pbi_agent.agent.system_prompt import (
     load_project_rules,
     load_workspace_memory,
 )
+from pbi_agent.config import CommandConfig, Settings, update_user_profile_config
 
 
 def _assert_builtin_prompt_base(prompt: str) -> None:
@@ -49,7 +49,7 @@ def _write_sub_agent(tmp_path: Path, name: str, description: str) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# load_project_rules – unit tests
+# load_project_rules - unit tests
 # ---------------------------------------------------------------------------
 
 
@@ -122,7 +122,7 @@ def test_encoding_errors_replaced(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# load_workspace_memory – unit tests
+# load_workspace_memory - unit tests
 # ---------------------------------------------------------------------------
 
 
@@ -178,7 +178,7 @@ def test_workspace_memory_encoding_errors_replaced(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# load_instructions – unit tests
+# load_instructions - unit tests
 # ---------------------------------------------------------------------------
 
 

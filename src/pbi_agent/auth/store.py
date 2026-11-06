@@ -4,7 +4,7 @@ import json
 import os
 import tempfile
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -84,7 +84,7 @@ def build_auth_session(
     metadata: dict[str, Any] | None = None,
     previous: StoredAuthSession | None = None,
 ) -> StoredAuthSession:
-    current_iso = datetime.now(timezone.utc).isoformat()
+    current_iso = datetime.now(UTC).isoformat()
     created_at = previous.created_at if previous is not None else current_iso
     return StoredAuthSession(
         provider_id=provider_id,

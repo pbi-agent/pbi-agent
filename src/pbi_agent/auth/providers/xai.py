@@ -7,7 +7,7 @@ import secrets
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from pbi_agent.auth.browser_callback import BrowserAuthCallbackOptions
@@ -350,7 +350,7 @@ def _string_value(value: object) -> str | None:
 
 
 def _expires_at_from_duration(expires_in: int) -> int:
-    current_timestamp = int(datetime.now(timezone.utc).timestamp())
+    current_timestamp = int(datetime.now(UTC).timestamp())
     return current_timestamp + max(expires_in, 0)
 
 

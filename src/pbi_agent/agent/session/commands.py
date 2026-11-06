@@ -5,6 +5,23 @@ import shlex
 from pathlib import Path
 from typing import Any
 
+from pbi_agent.agent.session.shared import (
+    COMPACT_COMMAND,
+    INIT_COMMAND,
+    TEMPORARY_LOCAL_COMMANDS,
+)
+from pbi_agent.agent.session.shared import (
+    active_mcp_tool_names_by_workspace as _ACTIVE_MCP_TOOL_NAMES_BY_WORKSPACE,
+)
+from pbi_agent.agent.session.shared import (
+    active_mcp_tool_names_context as _ACTIVE_MCP_TOOL_NAMES,
+)
+from pbi_agent.agent.session.shared import (
+    active_mcp_tool_names_lock as _ACTIVE_MCP_TOOL_NAMES_LOCK,
+)
+from pbi_agent.agent.session.shared import (
+    log as _log,
+)
 from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.config import Settings, list_command_configs
 from pbi_agent.display.protocol import DisplayProtocol
@@ -19,16 +36,6 @@ from pbi_agent.observability import RunTracer
 from pbi_agent.providers.base import Provider
 from pbi_agent.session_store import SessionStore
 from pbi_agent.tools.catalog import ToolCatalog
-
-from pbi_agent.agent.session.shared import (
-    COMPACT_COMMAND,
-    INIT_COMMAND,
-    TEMPORARY_LOCAL_COMMANDS,
-    active_mcp_tool_names_by_workspace as _ACTIVE_MCP_TOOL_NAMES_BY_WORKSPACE,
-    active_mcp_tool_names_context as _ACTIVE_MCP_TOOL_NAMES,
-    active_mcp_tool_names_lock as _ACTIVE_MCP_TOOL_NAMES_LOCK,
-    log as _log,
-)
 
 
 def _close_store(store: SessionStore | None) -> None:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import fnmatch
-from typing import Callable
+from collections.abc import Callable
 
 # All entries are stored case-folded so that the lookup in
 # ``should_skip_directory_name`` (which also case-folds its argument) works

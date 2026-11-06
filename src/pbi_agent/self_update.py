@@ -57,7 +57,7 @@ def latest_pypi_version(*, timeout: float = 10) -> str:
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except Exception as exc:  # noqa: BLE001 - normalized for callers
+    except Exception as exc:
         raise UpdateCheckError(f"{type(exc).__name__}: {exc}") from exc
     info = payload.get("info") if isinstance(payload, dict) else None
     version = info.get("version") if isinstance(info, dict) else None
@@ -71,7 +71,7 @@ def is_newer_version(candidate: str, current: str) -> bool:
         from packaging.version import Version
 
         return Version(candidate) > Version(current)
-    except Exception:  # noqa: BLE001 - fallback for environments without packaging
+    except Exception:
         return _version_tuple(candidate) > _version_tuple(current)
 
 

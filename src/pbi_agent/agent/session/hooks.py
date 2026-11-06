@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
+from pbi_agent.agent.session.shared import selected_model as _selected_model
 from pbi_agent.config import Settings
 from pbi_agent.display.protocol import DisplayProtocol
 from pbi_agent.hooks.runtime import HookRuntime, HookRuntimeResult
@@ -10,9 +11,6 @@ from pbi_agent.hooks.schemas import HookEventName
 from pbi_agent.models.messages import CompletedResponse, TokenUsage
 from pbi_agent.observability import RunTracer
 from pbi_agent.session_store import SessionStore
-
-from pbi_agent.agent.session.shared import selected_model as _selected_model
-
 
 ToolIterationRunner = Callable[..., tuple[CompletedResponse, bool, int]]
 
@@ -41,7 +39,7 @@ class SessionHookCoordinator:
         session_id: str | None,
         workspace_directory_key: str | None,
         tracer: RunTracer | None = None,
-    ) -> "SessionHookCoordinator":
+    ) -> SessionHookCoordinator:
         return cls(
             HookRuntime(
                 workspace=workspace,

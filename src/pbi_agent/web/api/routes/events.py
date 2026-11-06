@@ -5,8 +5,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncIterator
-from typing import Annotated, Any
-from typing import cast
+from typing import Annotated, Any, cast
 
 from fastapi import (
     APIRouter,
@@ -256,7 +255,7 @@ def _format_sse(event: dict[str, Any], *, event_id: int | None = None) -> str:
 
 
 def _sse_response(
-    stream,  # noqa: ANN001
+    stream,
     *,
     since: int,
     requested_since: int | None = None,
@@ -281,7 +280,7 @@ def _sse_response(
 
 
 async def _iter_sse_events(
-    stream,  # noqa: ANN001
+    stream,
     *,
     since: int,
     requested_since: int | None = None,

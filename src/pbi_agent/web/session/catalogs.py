@@ -9,11 +9,11 @@ from pbi_agent.extensions import discover_extensions
 from pbi_agent.hooks.discovery import discover_hooks
 from pbi_agent.hooks.review import format_hook_warning, hooks_requiring_review
 from pbi_agent.tools.catalog import ToolCatalog
+from pbi_agent.web.agent_mentions import search_agent_mentions
 from pbi_agent.web.command_registry import (
     list_slash_commands,
     search_slash_command_tuples,
 )
-from pbi_agent.web.agent_mentions import search_agent_mentions
 from pbi_agent.web.input_mentions import (
     MentionSearchPayload,
     WorkspaceFileIndex,

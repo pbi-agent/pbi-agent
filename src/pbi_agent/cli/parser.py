@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import shutil
-
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -37,7 +36,7 @@ class ExplicitPortAction(argparse.Action):
     ) -> None:
         del parser, option_string
         setattr(namespace, self.dest, values)
-        setattr(namespace, "_explicit_web_port", True)
+        namespace._explicit_web_port = True
 
 
 class CleanHelpFormatter(argparse.HelpFormatter):

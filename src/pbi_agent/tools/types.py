@@ -2,18 +2,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Protocol
 
 from pbi_agent.models.messages import ImageAttachment
 from pbi_agent.session_store import MessageRecord
 
 if TYPE_CHECKING:
     from pbi_agent.config import Settings
+    from pbi_agent.display.protocol import DisplayProtocol
     from pbi_agent.hooks.runtime import HookRuntime
     from pbi_agent.models.messages import TokenUsage
     from pbi_agent.observability import RunTracer
     from pbi_agent.tools.catalog import ToolCatalog
-    from pbi_agent.display.protocol import DisplayProtocol
 
 
 @dataclass(slots=True)

@@ -10,14 +10,15 @@ import json
 import re
 import time
 import urllib.parse
-from datetime import datetime, timedelta, timezone
-from typing import Any, TYPE_CHECKING, cast
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any, cast
 
 from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import execute_tool_calls as _execute_tool_calls
 from pbi_agent.auth.models import OAuthSessionAuth, RequestAuthConfig
 from pbi_agent.auth.service import build_runtime_request_auth, refresh_runtime_auth
 from pbi_agent.config import Settings
+from pbi_agent.display.protocol import DisplayProtocol
 from pbi_agent.models.messages import (
     CompletedResponse,
     TokenUsage,
@@ -49,7 +50,6 @@ from pbi_agent.tools.availability import (
 )
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot
-from pbi_agent.display.protocol import DisplayProtocol
 
 if TYPE_CHECKING:
     from pbi_agent.hooks.runtime import HookRuntime
@@ -146,7 +146,7 @@ class XAIProvider(Provider):
         display: DisplayProtocol,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
     ) -> CompletedResponse:
         del session_id
         if user_input is None and user_message is not None:
@@ -226,8 +226,8 @@ class XAIProvider(Provider):
         turn_usage: TokenUsage,
         sub_agent_depth: int = 0,
         parent_context: ParentContextSnapshot | None = None,
-        tracer: "RunTracer | None" = None,
-        hook_runtime: "HookRuntime | None" = None,
+        tracer: RunTracer | None = None,
+        hook_runtime: HookRuntime | None = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         if not response.function_calls:
             return [], False
@@ -260,7 +260,7 @@ class XAIProvider(Provider):
         input_items: list[dict[str, Any]],
         instructions: str,
         display: DisplayProtocol,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
     ) -> CompletedResponse:
         request_body = self._build_request_body(
             input_items=input_items,
@@ -530,10 +530,10 @@ def _build_user_input_item(prompt: str) -> dict[str, Any]:
 def _oauth_refresh_due(auth: OAuthSessionAuth) -> bool:
     if auth.expires_at is None:
         return False
-    refresh_at = datetime.fromtimestamp(auth.expires_at, timezone.utc) - timedelta(
+    refresh_at = datetime.fromtimestamp(auth.expires_at, UTC) - timedelta(
         seconds=_OAUTH_REFRESH_SKEW_SECS
     )
-    return datetime.now(timezone.utc) >= refresh_at
+    return datetime.now(UTC) >= refresh_at
 
 
 def _history_items_to_input_items(

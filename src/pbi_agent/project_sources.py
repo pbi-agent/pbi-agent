@@ -11,7 +11,6 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
-
 from dataclasses import dataclass
 from pathlib import Path
 

@@ -6,11 +6,10 @@ import shlex
 import subprocess
 import sys
 import unittest
-
-import pytest
-
 from pathlib import Path
 from unittest.mock import Mock, patch
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 

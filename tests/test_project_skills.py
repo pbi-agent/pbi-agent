@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -9,7 +10,6 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
-
 from pathlib import Path
 
 import pytest
@@ -628,7 +628,9 @@ def test_install_project_skill_rejects_missing_name_or_description(
 
     with pytest.raises(
         ProjectSkillInstallError,
-        match="No valid skills found. Skills require a SKILL.md with name and description.",
+        match=re.escape(
+            "No valid skills found. Skills require a SKILL.md with name and description."
+        ),
     ):
         install_project_skill("owner/repo", workspace=tmp_path)
     assert "missing non-empty 'name'" in capsys.readouterr().err
@@ -648,7 +650,9 @@ def test_install_project_skill_rejects_unsupported_manifest_structure(
 
     with pytest.raises(
         ProjectSkillInstallError,
-        match="No valid skills found. Skills require a SKILL.md with name and description.",
+        match=re.escape(
+            "No valid skills found. Skills require a SKILL.md with name and description."
+        ),
     ):
         install_project_skill("owner/repo", workspace=tmp_path)
     assert "not a key-value pair" in capsys.readouterr().err
@@ -708,7 +712,9 @@ def test_install_project_skill_rejects_block_scalar_name(
 
     with pytest.raises(
         ProjectSkillInstallError,
-        match="No valid skills found. Skills require a SKILL.md with name and description.",
+        match=re.escape(
+            "No valid skills found. Skills require a SKILL.md with name and description."
+        ),
     ):
         install_project_skill("owner/repo", workspace=tmp_path)
 

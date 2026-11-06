@@ -10,12 +10,12 @@ from contextvars import copy_context
 from dataclasses import dataclass, replace
 from typing import Any
 
+from pbi_agent.hooks.schemas import HookEventName
 from pbi_agent.media import data_url_for_image
 from pbi_agent.models.messages import ToolCall
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.registry import get_tool_handler, get_tool_spec
 from pbi_agent.tools.types import ToolContext, ToolOutput, ToolResult
-from pbi_agent.hooks.schemas import HookEventName
 
 _log = logging.getLogger(__name__)
 

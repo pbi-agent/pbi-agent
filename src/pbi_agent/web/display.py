@@ -2,24 +2,13 @@ from __future__ import annotations
 
 import queue
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from rich.errors import MarkupError
 from rich.text import Text
 
-from pbi_agent.models.messages import TokenUsage, WebSearchSource
-from pbi_agent.session_store import MessageRecord
-from pbi_agent.display.protocol import (
-    DisplayProtocol,
-    PendingToolCall,
-    PendingToolGroup,
-    PendingToolGroupItem,
-    PendingUserQuestion,
-    QueuedInput,
-    QueuedRuntimeChange,
-    UserQuestionAnswer,
-)
 from pbi_agent.display.formatting import (
     REDACTED_THINKING_NOTICE,
     format_wait_seconds,
@@ -30,7 +19,18 @@ from pbi_agent.display.formatting import (
     status_markup,
     tool_item_class,
 )
-
+from pbi_agent.display.protocol import (
+    DisplayProtocol,
+    PendingToolCall,
+    PendingToolGroup,
+    PendingToolGroupItem,
+    PendingUserQuestion,
+    QueuedInput,
+    QueuedRuntimeChange,
+    UserQuestionAnswer,
+)
+from pbi_agent.models.messages import TokenUsage, WebSearchSource
+from pbi_agent.session_store import MessageRecord
 
 EventPublisher = Callable[[str, dict[str, Any]], None]
 SummaryPublisher = Callable[[str], None]
@@ -1745,11 +1745,11 @@ class WebDisplay(_EventDisplayBase):
                     if self._shutdown.is_set():
                         raise RuntimeError(
                             "Session shut down while waiting for user answers."
-                        )
+                        ) from None
                     if self._interrupt.is_set():
                         raise RuntimeError(
                             "Assistant turn interrupted while waiting for user answers."
-                        )
+                        ) from None
                     self._question_response_event.wait(timeout=0.5)
                     self._question_response_event.clear()
                     continue

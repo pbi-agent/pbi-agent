@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from contextvars import ContextVar
-from dataclasses import replace
 import logging
 import threading
+from contextvars import ContextVar
+from dataclasses import replace
 from pathlib import Path
 
+from pbi_agent.agent.skill_discovery import extract_explicit_skill_names
+from pbi_agent.agent.sub_agent_discovery import extract_explicit_agent_names
 from pbi_agent.agent.system_prompt import (
     get_system_prompt,
 )
-from pbi_agent.agent.skill_discovery import extract_explicit_skill_names
-from pbi_agent.agent.sub_agent_discovery import extract_explicit_agent_names
 from pbi_agent.config import (
     CommandConfig,
     ResolvedRuntime,
@@ -18,12 +18,12 @@ from pbi_agent.config import (
     find_command_config_by_alias,
     resolve_runtime_for_profile_id,
 )
+from pbi_agent.display.protocol import (
+    DisplayProtocol,
+)
 from pbi_agent.providers.base import Provider
 from pbi_agent.providers.github_copilot_backend import (
     github_copilot_backend_for_model,
-)
-from pbi_agent.display.protocol import (
-    DisplayProtocol,
 )
 
 _log = logging.getLogger("pbi_agent.agent.session")

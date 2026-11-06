@@ -75,7 +75,7 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     }
 
 
-def _parse_questions(raw_questions: Any) -> list["PendingUserQuestion"]:
+def _parse_questions(raw_questions: Any) -> list[PendingUserQuestion]:
     from pbi_agent.display.protocol import PendingUserQuestion
 
     if not isinstance(raw_questions, list) or not raw_questions:

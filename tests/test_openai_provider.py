@@ -3,17 +3,16 @@ from __future__ import annotations
 import http.client
 import json
 import re
-import socket
 import ssl
 import urllib.request
 from unittest.mock import Mock
 
 import pytest
 
-from pbi_agent.cli import build_parser
+from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.auth.models import OAuthSessionAuth
 from pbi_agent.auth.providers.openai_chatgpt import OPENAI_CHATGPT_RESPONSES_URL
-from pbi_agent.agent.tool_runtime import ToolExecutionBatch
+from pbi_agent.cli import build_parser
 from pbi_agent.config import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL,
@@ -38,13 +37,13 @@ from pbi_agent.providers.chatgpt_codex_backend import (
     websocket_url_for_responses_url,
 )
 from pbi_agent.providers.chatgpt_codex_transport import (
-    CHATGPT_TURN_STATE_HEADER,
     _WS_CLOSE_TIMEOUT_SECS,
     _WS_OPCODE_PING,
     _WS_OPCODE_PONG,
     _WS_OPCODE_TEXT,
     _WS_RESPONSE_START_TIMEOUT_SECS,
     _WS_WRITE_TIMEOUT_SECS,
+    CHATGPT_TURN_STATE_HEADER,
     ChatGPTCodexWebSocketError,
     ResponsesWebSocket,
 )
@@ -55,8 +54,7 @@ from pbi_agent.providers.openai_provider import (
 )
 from pbi_agent.session_store import MessageImageAttachment, MessageRecord
 from pbi_agent.tools.catalog import ToolCatalog, ToolCatalogEntry
-from pbi_agent.tools.types import ToolSpec
-from pbi_agent.tools.types import ToolResult
+from pbi_agent.tools.types import ToolResult, ToolSpec
 from pbi_agent.web import uploads
 
 
@@ -1459,7 +1457,7 @@ def test_chatgpt_codex_websocket_protocol_headers_override_conflicts(
 
 
 def test_chatgpt_codex_websocket_connect_timeout_is_retryable(monkeypatch) -> None:
-    connect_error = socket.timeout("timed out")
+    connect_error = TimeoutError("timed out")
 
     def fake_create_connection(address, timeout):
         del address, timeout
@@ -2379,7 +2377,10 @@ def test_openai_execute_tool_calls_returns_only_outputs_for_chatgpt_backend(
         "pbi_agent.providers.openai_provider._execute_tool_calls",
         lambda calls, max_workers, context=None, on_result=None: (
             (
-                [on_result(call, result) for call, result in zip(calls, batch.results)]
+                [
+                    on_result(call, result)
+                    for call, result in zip(calls, batch.results, strict=False)
+                ]
                 if on_result is not None
                 else None
             )
@@ -2427,8 +2428,8 @@ def test_openai_execute_tool_calls_clears_only_chatgpt_sub_agent_continuation(
 ) -> None:
     provider = OpenAIProvider(_make_settings(responses_url=responses_url))
     websocket = Mock()
-    setattr(provider._chatgpt_backend, "_websocket", websocket)
-    setattr(provider._chatgpt_backend, "_turn_state", "old-turn-state")
+    provider._chatgpt_backend._websocket = websocket
+    provider._chatgpt_backend._turn_state = "old-turn-state"
     provider.set_previous_response_id("resp_1")
     response = CompletedResponse(
         response_id="resp_1",
@@ -2465,14 +2466,14 @@ def test_openai_execute_tool_calls_clears_only_chatgpt_sub_agent_continuation(
         del calls, max_workers, context, on_result
         if clears_continuation:
             websocket.close.assert_called_once()
-            assert getattr(provider._chatgpt_backend, "_websocket") is None
-            assert getattr(provider._chatgpt_backend, "_turn_state") is None
+            assert provider._chatgpt_backend._websocket is None
+            assert provider._chatgpt_backend._turn_state is None
             assert provider._previous_response_id is None
             assert provider.get_conversation_checkpoint() is None
         else:
             websocket.close.assert_not_called()
-            assert getattr(provider._chatgpt_backend, "_websocket") is websocket
-            assert getattr(provider._chatgpt_backend, "_turn_state") == "old-turn-state"
+            assert provider._chatgpt_backend._websocket is websocket
+            assert provider._chatgpt_backend._turn_state == "old-turn-state"
             assert provider._previous_response_id == "resp_1"
             assert provider.get_conversation_checkpoint() == "resp_1"
         return batch
@@ -2530,7 +2531,10 @@ def test_openai_execute_tool_calls_skips_generic_display_for_sub_agent(
         "pbi_agent.providers.openai_provider._execute_tool_calls",
         lambda calls, max_workers, context=None, on_result=None: (
             (
-                [on_result(call, result) for call, result in zip(calls, batch.results)]
+                [
+                    on_result(call, result)
+                    for call, result in zip(calls, batch.results, strict=False)
+                ]
                 if on_result is not None
                 else None
             )
@@ -4686,7 +4690,10 @@ def test_openai_execute_tool_calls_serializes_image_attachments(
         "pbi_agent.providers.openai_provider._execute_tool_calls",
         lambda calls, max_workers, context=None, on_result=None: (
             (
-                [on_result(call, result) for call, result in zip(calls, batch.results)]
+                [
+                    on_result(call, result)
+                    for call, result in zip(calls, batch.results, strict=False)
+                ]
                 if on_result is not None
                 else None
             )

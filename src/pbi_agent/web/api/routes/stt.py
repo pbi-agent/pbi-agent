@@ -40,8 +40,7 @@ async def _read_single_file_upload(request: Request) -> _UploadedFile:
         raise SttInputError("Multipart upload body is empty.")
 
     message_bytes = (
-        f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("utf-8")
-        + body
+        f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode() + body
     )
     try:
         message = BytesParser(policy=policy.default).parsebytes(message_bytes)

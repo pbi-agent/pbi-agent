@@ -6,9 +6,9 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from pbi_agent.config import ResolvedRuntime
+from pbi_agent.display.formatting import tool_group_class
 from pbi_agent.models.messages import ImageAttachment, TokenUsage, WebSearchSource
 from pbi_agent.session_store import MessageImageAttachment, MessageRecord
-from pbi_agent.display.formatting import tool_group_class
 
 
 @dataclass(slots=True)
@@ -194,7 +194,7 @@ class DisplayProtocol(Protocol):
         task_instruction: str,
         reasoning_effort: str | None = None,
         name: str = "sub_agent",
-    ) -> "DisplayProtocol": ...
+    ) -> DisplayProtocol: ...
 
     def finish_sub_agent(self, *, status: str) -> None: ...
 
@@ -318,10 +318,10 @@ __all__ = [
     "CheckpointFollowUpDisplay",
     "DisplayProtocol",
     "PendingToolCall",
-    "PendingUserQuestion",
     "PendingToolGroup",
     "PendingToolGroupItem",
+    "PendingUserQuestion",
     "QueuedInput",
-    "UserQuestionAnswer",
     "QueuedRuntimeChange",
+    "UserQuestionAnswer",
 ]

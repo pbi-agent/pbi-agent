@@ -14,8 +14,8 @@ from pbi_agent.agent.tool_display import display_tool_results
 from pbi_agent.models.messages import ToolCall
 from pbi_agent.tools import apply_patch as apply_patch_tool
 from pbi_agent.tools import shell as shell_tool
-from pbi_agent.tools.output import MAX_OUTPUT_CHARS
 from pbi_agent.tools.catalog import ToolCatalog, ToolCatalogEntry
+from pbi_agent.tools.output import MAX_OUTPUT_CHARS
 from pbi_agent.tools.types import ToolContext, ToolOutput, ToolResult, ToolSpec
 
 
@@ -257,7 +257,7 @@ def test_execute_tool_calls_falls_back_to_serial_when_threads_are_exhausted(
         def __init__(self, max_workers: int) -> None:
             attempted_workers.append(max_workers)
 
-        def __enter__(self) -> "FailingExecutor":
+        def __enter__(self) -> FailingExecutor:
             return self
 
         def __exit__(self, *args: object) -> None:

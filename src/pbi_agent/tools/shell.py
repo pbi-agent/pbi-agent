@@ -1,4 +1,4 @@
-"""Custom ``shell`` tool – executes shell commands in a subprocess.
+"""Custom ``shell`` tool - executes shell commands in a subprocess.
 
 This replaces the provider-specific native shell tools (OpenAI ``shell``,
 Anthropic ``bash``) with a single, provider-agnostic function tool that goes
@@ -151,6 +151,7 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         completed = subprocess.run(
             effective_command,
             cwd=str(working_directory),
+            check=False,
             capture_output=True,
             text=False,
             shell=True,

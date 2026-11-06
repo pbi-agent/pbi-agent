@@ -24,9 +24,13 @@ from pbi_agent.session_store import (
     SessionStore,
 )
 from pbi_agent.tools import shell as shell_tool
+from pbi_agent.tools.background_tasks import BackgroundTaskManager
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ToolContext
 from pbi_agent.web.display import WebDisplay, persisted_message_payload
+from pbi_agent.web.session.events import TRANSIENT_WEB_EVENT_KEY
+from pbi_agent.web.session.follow_ups import FollowUpDelivery, FollowUpsMixin
+from pbi_agent.web.session.image_uploads import ImageUploadsMixin
 from pbi_agent.web.session.serializers import (
     _format_shell_command_output,
     _is_active_live_session,
@@ -38,10 +42,6 @@ from pbi_agent.web.session.serializers import (
     _session_title_for_input,
     _snapshot_item_id,
 )
-from pbi_agent.web.session.events import TRANSIENT_WEB_EVENT_KEY
-from pbi_agent.web.session.follow_ups import FollowUpDelivery, FollowUpsMixin
-from pbi_agent.web.session.image_uploads import ImageUploadsMixin
-from pbi_agent.tools.background_tasks import BackgroundTaskManager
 from pbi_agent.web.session.state import (
     EventStream,
     LiveSessionSnapshot,

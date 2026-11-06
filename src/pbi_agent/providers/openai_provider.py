@@ -11,14 +11,15 @@ import json
 import time
 import urllib.error
 import urllib.request
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pbi_agent import __version__
-from pbi_agent.auth.models import OAuthSessionAuth
-from pbi_agent.auth.service import build_runtime_request_auth, refresh_runtime_auth
 from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import execute_tool_calls as _execute_tool_calls
+from pbi_agent.auth.models import OAuthSessionAuth
+from pbi_agent.auth.service import build_runtime_request_auth, refresh_runtime_auth
 from pbi_agent.config import Settings
+from pbi_agent.display.protocol import DisplayProtocol
 from pbi_agent.media import data_url_for_image
 from pbi_agent.models.messages import (
     CompletedResponse,
@@ -49,7 +50,6 @@ from pbi_agent.tools.availability import (
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot, ToolResult
 from pbi_agent.web.uploads import load_uploaded_image
-from pbi_agent.display.protocol import DisplayProtocol
 
 if TYPE_CHECKING:
     from pbi_agent.hooks.runtime import HookRuntime
@@ -184,7 +184,7 @@ class OpenAIProvider(Provider):
         display: DisplayProtocol,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
     ) -> CompletedResponse:
         if user_input is None and user_message is not None:
             user_input = UserTurnInput(text=user_message)
@@ -280,8 +280,8 @@ class OpenAIProvider(Provider):
         turn_usage: TokenUsage,
         sub_agent_depth: int = 0,
         parent_context: ParentContextSnapshot | None = None,
-        tracer: "RunTracer | None" = None,
-        hook_runtime: "HookRuntime | None" = None,
+        tracer: RunTracer | None = None,
+        hook_runtime: HookRuntime | None = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         if not response.function_calls:
             return [], False
@@ -325,7 +325,7 @@ class OpenAIProvider(Provider):
         instructions: str,
         session_id: str | None,
         display: DisplayProtocol,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
         is_user_turn: bool = False,
     ) -> CompletedResponse:
         display.wait_start(waiting_message_for_input(input_items))
@@ -807,7 +807,7 @@ class OpenAIProvider(Provider):
         instructions: str,
         session_id: str | None,
         display: DisplayProtocol,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
         is_user_turn: bool = False,
         request_body: dict[str, Any] | None = None,
     ) -> CompletedResponse:

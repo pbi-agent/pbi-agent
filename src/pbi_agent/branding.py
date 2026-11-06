@@ -71,10 +71,10 @@ def rich_brand_block(*, accent: str = PBI_AGENT_ACCENT) -> str:
     return "\n".join(lines)
 
 
-def startup_panel() -> "Align":
+def startup_panel() -> Align:
     """Return a centered, bordered Rich panel for the CLI startup banner."""
-    from rich.align import Align
     from rich import box
+    from rich.align import Align
     from rich.panel import Panel
     from rich.text import Text
 

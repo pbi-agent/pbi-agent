@@ -3,12 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from pbi_agent.agents.state import set_agent_enabled
 from pbi_agent.agents.project_installer import (
     DEFAULT_AGENTS_SOURCE,
     ProjectAgentInstallError,
     install_project_agent,
 )
+from pbi_agent.agents.state import set_agent_enabled
 from pbi_agent.commands.project_installer import (
     DEFAULT_COMMANDS_SOURCE,
     ProjectCommandInstallError,
@@ -265,7 +265,7 @@ def _install_default_agent(
             workspace=workspace,
             directory_key=directory_key,
         )
-    except Exception as exc:  # noqa: BLE001 - report per-item init failures
+    except Exception as exc:
         if not pre_existing:
             result.install_path.unlink(missing_ok=True)
         return InitBootstrapItemResult(

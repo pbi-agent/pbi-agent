@@ -4,8 +4,9 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, cast
+from typing import Any, cast
 
 from pbi_agent import extensions
 from pbi_agent.agent import session as session_module

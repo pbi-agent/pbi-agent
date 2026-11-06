@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
-
 
 WORKSPACE_KEY_ENV = "PBI_AGENT_WORKSPACE_KEY"
 WORKSPACE_DISPLAY_PATH_ENV = "PBI_AGENT_WORKSPACE_DISPLAY_PATH"

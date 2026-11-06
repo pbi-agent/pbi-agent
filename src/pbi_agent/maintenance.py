@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from rich.align import Align
 from rich.console import Console
@@ -33,7 +33,7 @@ class MaintenanceResult:
 def run_startup_maintenance(
     *, render_notice: bool = True, check_updates: bool = True
 ) -> MaintenanceResult:
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = datetime.now(UTC).date().isoformat()
     success = False
     claimed = False
     try:
@@ -42,7 +42,7 @@ def run_startup_maintenance(
                 return MaintenanceResult(ran=False)
             claimed = True
             retention_days = load_internal_config().maintenance.retention_days
-            cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+            cutoff = datetime.now(UTC) - timedelta(days=retention_days)
             store.purge_old_data(cutoff.isoformat())
             referenced_upload_ids = store.referenced_upload_ids()
             purge_old_unreferenced_uploads(
@@ -54,7 +54,7 @@ def run_startup_maintenance(
                 render_update_notice(notice)
             success = True
             return MaintenanceResult(ran=True, update_notice=notice)
-    except Exception as exc:  # noqa: BLE001 - startup maintenance is best-effort
+    except Exception as exc:
         print(f"Warning: maintenance skipped: {exc}", file=sys.stderr)
         return MaintenanceResult(ran=False)
     finally:
@@ -62,7 +62,7 @@ def run_startup_maintenance(
             try:
                 with SessionStore() as store:
                     store.finish_daily_maintenance(success=success)
-            except Exception:  # noqa: BLE001 - best effort bookkeeping
+            except Exception:
                 pass
 
 

@@ -38,13 +38,15 @@ from pbi_agent.providers.endpoints import (
     google_gcp_endpoint_url,
     google_gcp_express_endpoint_url,
 )
+from pbi_agent.providers.protocols.anthropic_messages import (
+    normalize_http_error as normalize_anthropic_http_error,
+)
+from pbi_agent.providers.protocols.anthropic_messages import (
+    render_messages_response,
+)
 from pbi_agent.providers.protocols.chat_completions import ChatCompletionsProtocol
 from pbi_agent.providers.protocols.gemini_generate_content import (
     GeminiGenerateContentProtocol,
-)
-from pbi_agent.providers.protocols.anthropic_messages import (
-    normalize_http_error as normalize_anthropic_http_error,
-    render_messages_response,
 )
 from pbi_agent.providers.protocols.openai_responses import (
     render_responses_display,
@@ -179,7 +181,7 @@ class GoogleGcpProvider(Provider):
         display: DisplayProtocol,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
     ) -> CompletedResponse:
         self._sync_shape_runtime_context()
         return self._shape.request_turn(
@@ -205,8 +207,8 @@ class GoogleGcpProvider(Provider):
         turn_usage: TokenUsage,
         sub_agent_depth: int = 0,
         parent_context: ParentContextSnapshot | None = None,
-        tracer: "RunTracer | None" = None,
-        hook_runtime: "HookRuntime | None" = None,
+        tracer: RunTracer | None = None,
+        hook_runtime: HookRuntime | None = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         self._sync_shape_runtime_context()
         return self._shape.execute_tool_calls(
@@ -232,7 +234,7 @@ class GoogleGcpProvider(Provider):
         self._tool_availability_overridden = overridden
         self._shape.set_tool_availability_overridden(overridden)
 
-    def _build_shape(self) -> "_GoogleGcpShapeStub":
+    def _build_shape(self) -> _GoogleGcpShapeStub:
         shape_name = google_gcp_shape_for_model(self._settings.model)
         shape = _create_google_gcp_shape(
             shape_name,
@@ -247,7 +249,7 @@ class GoogleGcpProvider(Provider):
 
     def _sync_shape_runtime_context(
         self,
-        shape: "_GoogleGcpShapeStub | None" = None,
+        shape: _GoogleGcpShapeStub | None = None,
     ) -> None:
         target = self._shape if shape is None else shape
         target.set_tool_availability_overridden(
@@ -386,7 +388,7 @@ class _GoogleGcpShapeStub:
         spec: JsonRequestSpec,
         *,
         display: DisplayProtocol,
-        tracer: "RunTracer | None",
+        tracer: RunTracer | None,
         parse_response: Callable[[dict[str, Any]], CompletedResponse],
         semantic_validator: Callable[[dict[str, Any]], None] | None = None,
     ) -> CompletedResponse:
@@ -446,7 +448,7 @@ class _GoogleGcpShapeStub:
         display: DisplayProtocol,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
     ) -> CompletedResponse:
         del (
             user_message,
@@ -471,8 +473,8 @@ class _GoogleGcpShapeStub:
         turn_usage: TokenUsage,
         sub_agent_depth: int = 0,
         parent_context: ParentContextSnapshot | None = None,
-        tracer: "RunTracer | None" = None,
-        hook_runtime: "HookRuntime | None" = None,
+        tracer: RunTracer | None = None,
+        hook_runtime: HookRuntime | None = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         del (
             response,
@@ -560,7 +562,7 @@ class _GeminiGenerateContentShape(_GoogleGcpShapeStub):
         display: DisplayProtocol,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
     ) -> CompletedResponse:
         del session_id
         wait_input = self._protocol.accept_turn(
@@ -595,8 +597,8 @@ class _GeminiGenerateContentShape(_GoogleGcpShapeStub):
         turn_usage: TokenUsage,
         sub_agent_depth: int = 0,
         parent_context: ParentContextSnapshot | None = None,
-        tracer: "RunTracer | None" = None,
-        hook_runtime: "HookRuntime | None" = None,
+        tracer: RunTracer | None = None,
+        hook_runtime: HookRuntime | None = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         if not response.function_calls:
             return [], False
@@ -630,7 +632,7 @@ class _GeminiGenerateContentShape(_GoogleGcpShapeStub):
         wait_input: str | list[dict[str, Any]],
         instructions: str,
         display: DisplayProtocol,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
     ) -> CompletedResponse:
         if not self._endpoint_url or not self._headers:
             self.connect()
@@ -736,7 +738,7 @@ class _OpenAIChatCompletionsShape(_GoogleGcpShapeStub):
         display: DisplayProtocol,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
     ) -> CompletedResponse:
         del session_id
         input_value = self._protocol.accept_turn(
@@ -771,8 +773,8 @@ class _OpenAIChatCompletionsShape(_GoogleGcpShapeStub):
         turn_usage: TokenUsage,
         sub_agent_depth: int = 0,
         parent_context: ParentContextSnapshot | None = None,
-        tracer: "RunTracer | None" = None,
-        hook_runtime: "HookRuntime | None" = None,
+        tracer: RunTracer | None = None,
+        hook_runtime: HookRuntime | None = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         return execute_provider_tool_calls(
             response.function_calls,
@@ -800,7 +802,7 @@ class _OpenAIChatCompletionsShape(_GoogleGcpShapeStub):
         input_value: str | list[dict[str, Any]],
         instructions: str,
         display: DisplayProtocol,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
     ) -> CompletedResponse:
         if not self._endpoint_url or not self._headers:
             self.connect()
@@ -920,7 +922,7 @@ class _OpenAIResponsesShape(_GoogleGcpShapeStub):
         display: DisplayProtocol,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
     ) -> CompletedResponse:
         del session_id
         _input_items, wait_input, simple_prompt = self._accept_turn(
@@ -955,8 +957,8 @@ class _OpenAIResponsesShape(_GoogleGcpShapeStub):
         turn_usage: TokenUsage,
         sub_agent_depth: int = 0,
         parent_context: ParentContextSnapshot | None = None,
-        tracer: "RunTracer | None" = None,
-        hook_runtime: "HookRuntime | None" = None,
+        tracer: RunTracer | None = None,
+        hook_runtime: HookRuntime | None = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         if not response.function_calls:
             return [], False
@@ -1018,7 +1020,7 @@ class _OpenAIResponsesShape(_GoogleGcpShapeStub):
         simple_prompt: str | None,
         instructions: str,
         display: DisplayProtocol,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
     ) -> CompletedResponse:
         if not self._endpoint_url or not self._headers:
             self.connect()
@@ -1302,7 +1304,7 @@ class _AnthropicMessagesShape(_GoogleGcpShapeStub):
         display: DisplayProtocol,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
     ) -> CompletedResponse:
         del session_id
         input_value = self._accept_turn(
@@ -1336,8 +1338,8 @@ class _AnthropicMessagesShape(_GoogleGcpShapeStub):
         turn_usage: TokenUsage,
         sub_agent_depth: int = 0,
         parent_context: ParentContextSnapshot | None = None,
-        tracer: "RunTracer | None" = None,
-        hook_runtime: "HookRuntime | None" = None,
+        tracer: RunTracer | None = None,
+        hook_runtime: HookRuntime | None = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         if not response.function_calls:
             return [], False
@@ -1398,7 +1400,7 @@ class _AnthropicMessagesShape(_GoogleGcpShapeStub):
         input_value: str | list[dict[str, Any]],
         system_prompt: str | None,
         display: DisplayProtocol,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
     ) -> CompletedResponse:
         if not self._endpoint_url or not self._headers:
             self.connect()
@@ -2143,8 +2145,8 @@ def _raise_shape_not_implemented(shape_name: GoogleGcpShapeName) -> NoReturn:
 
 
 __all__ = [
-    "GOOGLE_GCP_SHAPE_ENV",
     "GOOGLE_GCP_SHAPES",
+    "GOOGLE_GCP_SHAPE_ENV",
     "GoogleGcpProvider",
     "GoogleGcpShapeName",
     "google_gcp_shape_for_model",

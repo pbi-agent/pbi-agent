@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
 import urllib.error
+from typing import Any
 
 from pbi_agent.display.protocol import DisplayProtocol
 from pbi_agent.models.messages import CompletedResponse, WebSearchSource

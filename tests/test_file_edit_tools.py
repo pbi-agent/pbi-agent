@@ -203,7 +203,7 @@ def test_replace_in_file_unicode_normalization_fallback(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     target = tmp_path / "notes.txt"
-    target.write_text('message = "smart “quote” – dash"', encoding="utf-8")
+    target.write_text('message = "smart “quote” – dash"', encoding="utf-8")  # noqa: RUF001
 
     result = replace_in_file.handle(
         {

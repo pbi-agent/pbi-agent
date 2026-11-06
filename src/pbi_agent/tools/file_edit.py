@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import difflib
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from collections.abc import Sequence
 from typing import Any
 
 from pbi_agent.tools.apply_diff import diff_line_numbers

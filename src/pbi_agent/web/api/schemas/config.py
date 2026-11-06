@@ -19,7 +19,7 @@ class ProviderKindMetadataModel(BaseModel):
     description: str | None = None
     default_auth_mode: str
     auth_modes: list[str]
-    auth_mode_metadata: dict[str, "ProviderAuthModeMetadataModel"]
+    auth_mode_metadata: dict[str, ProviderAuthModeMetadataModel]
     default_model: str
     default_sub_agent_model: str | None
     default_responses_url: str | None
@@ -59,7 +59,7 @@ class ProviderViewModel(BaseModel):
     secret_env_var: str | None
     has_secret: bool
     supports_stt: bool
-    auth_status: "ProviderAuthStatusModel"
+    auth_status: ProviderAuthStatusModel
 
 
 class ProviderAuthStatusModel(BaseModel):

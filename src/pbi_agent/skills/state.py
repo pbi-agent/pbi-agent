@@ -77,5 +77,5 @@ def _disabled_names(workspace_key: str) -> set[str]:
                 name.casefold()
                 for name in store.list_disabled_project_skills(workspace_key)
             }
-    except Exception:  # noqa: BLE001 - skill state should not block prompt assembly
+    except Exception:
         return set()

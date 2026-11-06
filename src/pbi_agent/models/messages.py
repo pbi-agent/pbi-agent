@@ -228,10 +228,10 @@ class TokenUsage:
             + self.sub_agent_cost_usd
         )
 
-    def add(self, other: "TokenUsage") -> None:
+    def add(self, other: TokenUsage) -> None:
         self._add_snapshot(other.snapshot(), as_sub_agent=False)
 
-    def add_sub_agent(self, other: "TokenUsage") -> None:
+    def add_sub_agent(self, other: TokenUsage) -> None:
         self._add_snapshot(other.snapshot(), as_sub_agent=True)
 
     @property
@@ -244,9 +244,7 @@ class TokenUsage:
     def main_agent_total_tokens(self) -> int:
         return max(self.total_tokens - self.sub_agent_total_tokens, 0)
 
-    def _add_snapshot(
-        self, other_snapshot: "TokenUsage", *, as_sub_agent: bool
-    ) -> None:
+    def _add_snapshot(self, other_snapshot: TokenUsage, *, as_sub_agent: bool) -> None:
         with self._lock:
             self.input_tokens += other_snapshot.input_tokens
             self.cached_input_tokens += other_snapshot.cached_input_tokens
@@ -277,7 +275,7 @@ class TokenUsage:
             if not self.service_tier and other_snapshot.service_tier:
                 self.service_tier = other_snapshot.service_tier
 
-    def snapshot(self) -> "TokenUsage":
+    def snapshot(self) -> TokenUsage:
         with self._lock:
             return TokenUsage(
                 input_tokens=self.input_tokens,

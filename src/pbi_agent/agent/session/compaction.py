@@ -1,12 +1,38 @@
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
-import json
 from typing import Any
 
 from pbi_agent.agent.compaction_prompt import COMPACTION_PROMPT
 from pbi_agent.agent.conversation_context import model_context_messages
+from pbi_agent.agent.session.history import (
+    add_message as _add_message,
+)
+from pbi_agent.agent.session.history import (
+    delete_message as _delete_message,
+)
+from pbi_agent.agent.session.history import (
+    refresh_provider_history_from_store as _refresh_provider_history_from_store,
+)
+from pbi_agent.agent.session.history import (
+    update_session_after_turn as _update_session_after_turn,
+)
+from pbi_agent.agent.session.shared import (
+    COMPACTION_CONTINUATION_PROMPT,
+    COMPACTION_MARKER,
+    COMPACTION_SUMMARY_PREFIX,
+)
+from pbi_agent.agent.session.shared import (
+    log as _log,
+)
+from pbi_agent.agent.session.shared import (
+    run_reasoning_metadata as _run_reasoning_metadata,
+)
+from pbi_agent.agent.session.shared import (
+    selected_model as _selected_model,
+)
 from pbi_agent.config import ResolvedRuntime, Settings
 from pbi_agent.display.protocol import DisplayProtocol
 from pbi_agent.hooks.runtime import HookRuntime
@@ -16,21 +42,6 @@ from pbi_agent.observability import RunTracer
 from pbi_agent.providers.base import Provider
 from pbi_agent.session_store import MessageRecord, SessionStore
 from pbi_agent.tools.catalog import ToolCatalog
-
-from pbi_agent.agent.session.history import (
-    add_message as _add_message,
-    delete_message as _delete_message,
-    refresh_provider_history_from_store as _refresh_provider_history_from_store,
-    update_session_after_turn as _update_session_after_turn,
-)
-from pbi_agent.agent.session.shared import (
-    COMPACTION_CONTINUATION_PROMPT,
-    COMPACTION_MARKER,
-    COMPACTION_SUMMARY_PREFIX,
-    log as _log,
-    run_reasoning_metadata as _run_reasoning_metadata,
-    selected_model as _selected_model,
-)
 
 
 @contextmanager

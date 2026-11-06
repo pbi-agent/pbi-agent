@@ -28,7 +28,7 @@ class TelegramChannelConfig:
         return bool(self.allowed_users or self.allowed_chats)
 
     @classmethod
-    def from_dict(cls, payload: dict[str, object] | None) -> "TelegramChannelConfig":
+    def from_dict(cls, payload: dict[str, object] | None) -> TelegramChannelConfig:
         if not payload:
             return cls()
         token_source = str(payload.get("token_source") or "env")

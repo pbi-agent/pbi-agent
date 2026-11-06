@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import re
+from dataclasses import dataclass
 from typing import Any
 
 from pbi_agent.agent.system_prompt import get_system_prompt
@@ -25,7 +25,6 @@ from pbi_agent.tools.availability import (
 )
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ToolResult
-
 
 _THINK_TAG_RE = re.compile(
     r"<think(?:\s+[^>]*)?>(.*?)</think\s*>",

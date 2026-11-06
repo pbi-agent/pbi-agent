@@ -19,12 +19,12 @@ path. Do not restore over a live database.
 from __future__ import annotations
 
 import argparse
-from contextlib import closing
 import os
-from pathlib import Path
 import sqlite3
 import sys
 import tempfile
+from contextlib import closing
+from pathlib import Path
 
 
 def _needs_migration(connection: sqlite3.Connection) -> bool:

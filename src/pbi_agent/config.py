@@ -12,11 +12,6 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from pbi_agent.frontmatter import FrontmatterParseError, parse_simple_frontmatter
-from pbi_agent.models.capabilities import reasoning_capabilities_for_model
-from pbi_agent.tools.availability import BUILTIN_TOOL_CATEGORIES
-from pbi_agent.tools.availability import UI_ONLY_TOOL_CATEGORIES
-
 from pbi_agent.auth.models import (
     AUTH_MODE_API_KEY,
     AUTH_MODE_CHATGPT_ACCOUNT,
@@ -26,11 +21,18 @@ from pbi_agent.auth.models import (
 )
 from pbi_agent.auth.providers.github_copilot import GITHUB_COPILOT_RESPONSES_URL
 from pbi_agent.auth.providers.openai_chatgpt import OPENAI_CHATGPT_RESPONSES_URL
-from pbi_agent.auth.service import provider_auth_modes, resolve_runtime_auth
 from pbi_agent.auth.service import (
     provider_auth_account_label,
     provider_auth_flow_methods,
     provider_auth_mode_label,
+    provider_auth_modes,
+    resolve_runtime_auth,
+)
+from pbi_agent.frontmatter import FrontmatterParseError, parse_simple_frontmatter
+from pbi_agent.models.capabilities import reasoning_capabilities_for_model
+from pbi_agent.tools.availability import (
+    BUILTIN_TOOL_CATEGORIES,
+    UI_ONLY_TOOL_CATEGORIES,
 )
 
 DEFAULT_RESPONSES_URL = "https://api.openai.com/v1/responses"

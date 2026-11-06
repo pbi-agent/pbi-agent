@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-import os
 from typing import Literal, NoReturn, Protocol
 
 from pbi_agent import __version__

@@ -66,7 +66,7 @@ class _FakeSession:
     def __init__(self, _read_stream: object, _write_stream: object) -> None:
         self.calls: list[tuple[str, dict[str, object]]] = []
 
-    async def __aenter__(self) -> "_FakeSession":
+    async def __aenter__(self) -> _FakeSession:
         return self
 
     async def __aexit__(self, *_: object) -> None:
@@ -343,7 +343,7 @@ def test_mcp_http_real_sdk_requests_and_cleanup(
                 and failure.endswith("tools/call")
                 and binding.server_name == "remote0"
             ):
-                with pytest.raises(Exception):
+                with pytest.raises(Exception):  # noqa: B017
                     pool.call_tool(binding, {"name": "Ada"})
             else:
                 output = pool.call_tool(binding, {"name": "Ada"})
@@ -458,6 +458,7 @@ assert idle.wait(2)
 """
     result = subprocess.run(
         [sys.executable, "-c", script, str(tmp_path)],
+        check=False,
         capture_output=True,
         text=True,
         timeout=10,

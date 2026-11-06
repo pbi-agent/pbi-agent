@@ -192,9 +192,10 @@ def _handle_agents_add_command(args: argparse.Namespace) -> int:
 
 
 def _handle_mcp_flag(args: argparse.Namespace) -> int:  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint
-    from pbi_agent.mcp import discover_mcp_server_configs
     from rich.console import Console
     from rich.table import Table
+
+    from pbi_agent.mcp import discover_mcp_server_configs
 
     target_dir = _workspace_directory_for_args(args)
     servers = discover_mcp_server_configs(workspace=target_dir)
@@ -220,9 +221,10 @@ def _handle_mcp_flag(args: argparse.Namespace) -> int:  # pyright: ignore[report
 
 
 def _handle_agents_flag(args: argparse.Namespace) -> int:  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint
-    from pbi_agent.agent.sub_agent_discovery import discover_project_sub_agents
     from rich.console import Console
     from rich.table import Table
+
+    from pbi_agent.agent.sub_agent_discovery import discover_project_sub_agents
 
     target_dir = _workspace_directory_for_args(args)
     agents = discover_project_sub_agents(workspace=target_dir)

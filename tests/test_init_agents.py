@@ -5,12 +5,11 @@ from pathlib import Path
 import pytest
 
 import pbi_agent.init_agents as init_agents
-
-from pbi_agent.agents.state import agent_enabled_map
 from pbi_agent.agents.project_installer import (
     ProjectAgentInstallError,
     ProjectAgentInstallResult,
 )
+from pbi_agent.agents.state import agent_enabled_map
 from pbi_agent.commands.project_installer import (
     ProjectCommandInstallError,
     ProjectCommandInstallResult,

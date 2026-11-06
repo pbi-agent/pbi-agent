@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -22,7 +22,7 @@ from pbi_agent.web import uploads
 
 
 def _iso(days_ago: int) -> str:
-    return (datetime.now(timezone.utc) - timedelta(days=days_ago)).isoformat()
+    return (datetime.now(UTC) - timedelta(days=days_ago)).isoformat()
 
 
 def test_purge_old_session_run_events_leases_and_preserves_kanban(
@@ -80,19 +80,19 @@ def test_purge_old_session_run_events_leases_and_preserves_kanban(
             owner_id="owner",
             stale_after_seconds=999999,
         )
-        store._conn.execute(  # noqa: SLF001 - targeted fixture aging
+        store._conn.execute(
             "UPDATE sessions SET updated_at = ? WHERE session_id = ?",
             (_iso(40), old_session),
         )
-        store._conn.execute(  # noqa: SLF001
+        store._conn.execute(
             "UPDATE run_sessions SET started_at = ? WHERE run_session_id = ?",
             (_iso(40), old_run),
         )
-        store._conn.execute(  # noqa: SLF001
+        store._conn.execute(
             "UPDATE web_manager_leases SET heartbeat_at = ? WHERE directory = ?",
             (_iso(40), "/old"),
         )
-        store._conn.commit()  # noqa: SLF001
+        store._conn.commit()
 
         result = store.purge_old_data(_iso(30))
 
@@ -107,7 +107,7 @@ def test_purge_old_session_run_events_leases_and_preserves_kanban(
         assert (
             store._conn.execute("SELECT COUNT(*) FROM web_manager_leases").fetchone()[0]
             == 0
-        )  # noqa: SLF001
+        )
 
 
 def test_purge_old_data_batches_large_id_lists(tmp_path: Path, monkeypatch) -> None:
@@ -144,15 +144,15 @@ def test_purge_old_data_batches_large_id_lists(tmp_path: Path, monkeypatch) -> N
                 stage="backlog",
                 session_id=session_id,
             )
-        store._conn.execute(  # noqa: SLF001 - targeted fixture aging
+        store._conn.execute(
             "UPDATE sessions SET updated_at = ?",
             (_iso(40),),
         )
-        store._conn.execute(  # noqa: SLF001
+        store._conn.execute(
             "UPDATE run_sessions SET started_at = ?",
             (_iso(40),),
         )
-        store._conn.commit()  # noqa: SLF001
+        store._conn.commit()
 
         new_session_id = store.create_session("/w", "openai", "gpt", "new")
         store.create_run_session(
@@ -184,16 +184,16 @@ def test_purge_old_data_batches_large_id_lists(tmp_path: Path, monkeypatch) -> N
             store.get_session(session_id) is None for session_id in old_session_ids
         )
         assert store.get_session(new_session_id) is not None
-        assert store._conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 1  # noqa: SLF001
+        assert store._conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 1
         assert (
             store._conn.execute("SELECT COUNT(*) FROM run_sessions").fetchone()[0] == 1
-        )  # noqa: SLF001
+        )
         assert (
             store._conn.execute("SELECT COUNT(*) FROM observability_events").fetchone()[
                 0
             ]
             == 1
-        )  # noqa: SLF001
+        )
         assert [task.session_id for task in store.list_kanban_tasks("/w")] == [
             None,
             None,
@@ -206,7 +206,7 @@ def test_purge_old_data_batches_large_id_lists(tmp_path: Path, monkeypatch) -> N
 def test_upload_purge_preserves_referenced_and_deletes_old_orphans(
     tmp_path: Path,
 ) -> None:
-    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    cutoff = datetime.now(UTC) - timedelta(days=30)
     keep = tmp_path / "keep.bin"
     old = tmp_path / "old.bin"
     stray = tmp_path / "stray.tmp"
@@ -235,7 +235,7 @@ def test_daily_maintenance_runs_once_and_checks_update(
     uploads_root.mkdir()
     old_upload = uploads_root / "orphan.bin"
     old_upload.write_bytes(b"x")
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=31)).timestamp()
+    cutoff = (datetime.now(UTC) - timedelta(days=31)).timestamp()
     os.utime(old_upload, (cutoff, cutoff))
 
     monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(db_path))
@@ -378,10 +378,10 @@ def test_referenced_upload_ids_reads_messages_and_kanban(tmp_path: Path) -> None
             prompt="prompt",
             stage="backlog",
         )
-        store._conn.execute(  # noqa: SLF001
+        store._conn.execute(
             "UPDATE kanban_tasks SET image_attachments_json = ? WHERE task_id = ?",
             (json.dumps([{"upload_id": "task-upload"}]), task.task_id),
         )
-        store._conn.commit()  # noqa: SLF001
+        store._conn.commit()
 
         assert store.referenced_upload_ids() == {"message-upload", "task-upload"}

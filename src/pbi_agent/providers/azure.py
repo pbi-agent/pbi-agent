@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from pbi_agent.config import Settings
 
 
-class AzureEndpointKind(str, Enum):
+class AzureEndpointKind(str, Enum):  # noqa: UP042 - keep Enum str() semantics
     OPENAI_RESPONSES = "openai_responses"
     OPENAI_CHAT_COMPLETIONS = "openai_chat_completions"
     ANTHROPIC_MESSAGES = "anthropic_messages"

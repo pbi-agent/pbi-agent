@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -17,15 +18,15 @@ from pbi_agent.auth.providers.openai_chatgpt import OPENAI_CHATGPT_RESPONSES_URL
 from pbi_agent.auth.service import import_provider_auth_session
 from pbi_agent.cli import build_parser
 from pbi_agent.config import (
-    ConfigConflictError,
-    ConfigError,
+    USER_PROFILE_PREFERRED_NAME_MAX_LENGTH,
     CommandConfig,
     CommandManifestError,
+    ConfigConflictError,
+    ConfigError,
     InternalConfig,
     MaintenanceConfig,
     ModelProfileConfig,
     ProviderConfig,
-    USER_PROFILE_PREFERRED_NAME_MAX_LENGTH,
     UserProfileConfig,
     WebConfig,
     create_model_profile_config,
@@ -1734,7 +1735,7 @@ def test_reasoning_mode_requires_compatible_main_and_sub_agent_models(
         )
     )
 
-    with pytest.raises(ConfigError, match="gpt-5.4-mini"):
+    with pytest.raises(ConfigError, match=re.escape("gpt-5.4-mini")):
         create_model_profile_config(
             ModelProfileConfig(
                 id="bad-profile",

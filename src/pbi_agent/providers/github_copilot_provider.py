@@ -8,18 +8,19 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import replace
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pbi_agent import __version__
 from pbi_agent.auth.service import build_runtime_request_auth
 from pbi_agent.config import Settings
+from pbi_agent.display.protocol import DisplayProtocol
 from pbi_agent.media import data_url_for_image
 from pbi_agent.models.messages import CompletedResponse, TokenUsage, UserTurnInput
 from pbi_agent.providers import retry as provider_retry
 from pbi_agent.providers.base import Provider
 from pbi_agent.providers.chatgpt_codex_backend import (
-    ResponsesRequestOptions,
     ResponsesConversationReplay,
+    ResponsesRequestOptions,
 )
 from pbi_agent.providers.generic_provider import GenericProvider
 from pbi_agent.providers.github_copilot_backend import (
@@ -31,7 +32,6 @@ from pbi_agent.providers.wait_messages import waiting_message_for_input
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot
-from pbi_agent.display.protocol import DisplayProtocol
 
 if TYPE_CHECKING:
     from pbi_agent.hooks.runtime import HookRuntime
@@ -88,7 +88,7 @@ class GitHubCopilotProvider(Provider):
         display: DisplayProtocol,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
     ) -> CompletedResponse:
         return self._delegate.request_turn(
             user_message=user_message,
@@ -113,8 +113,8 @@ class GitHubCopilotProvider(Provider):
         turn_usage: TokenUsage,
         sub_agent_depth: int = 0,
         parent_context: ParentContextSnapshot | None = None,
-        tracer: "RunTracer | None" = None,
-        hook_runtime: "HookRuntime | None" = None,
+        tracer: RunTracer | None = None,
+        hook_runtime: HookRuntime | None = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         return self._delegate.execute_tool_calls(
             response,
@@ -282,7 +282,7 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
         display: DisplayProtocol,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
     ) -> CompletedResponse:
         del session_id
         if user_input is None and user_message is not None:
@@ -333,7 +333,7 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
         input_value: str | list[dict[str, Any]],
         instructions: str,
         display: DisplayProtocol,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
     ) -> CompletedResponse:
         display.wait_start(waiting_message_for_input(input_value))
 

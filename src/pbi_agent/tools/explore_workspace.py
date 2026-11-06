@@ -9,14 +9,17 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from codetool_explore import ExploreError, explore as codetool_explore
+from codetool_explore import ExploreError
+from codetool_explore import explore as codetool_explore
 
 from pbi_agent.media import detect_image_mime_type, load_image_bytes
 from pbi_agent.tools.output import bound_output
 from pbi_agent.tools.types import ToolContext, ToolOutput, ToolSpec
-from pbi_agent.tools.workspace_access import normalize_positive_int
-from pbi_agent.tools.workspace_access import relative_workspace_path
-from pbi_agent.tools.workspace_access import resolve_safe_path
+from pbi_agent.tools.workspace_access import (
+    normalize_positive_int,
+    relative_workspace_path,
+    resolve_safe_path,
+)
 
 DEFAULT_LIMIT = 50
 MAX_CONTEXT_LINES = 20

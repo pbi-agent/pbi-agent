@@ -1,14 +1,24 @@
 from __future__ import annotations
 
-from types import ModuleType
 import sys
+from types import ModuleType
 
 from pbi_agent.agent.session import (
     commands as session_commands,
+)
+from pbi_agent.agent.session import (
     compaction as session_compaction,
+)
+from pbi_agent.agent.session import (
     history as session_history,
+)
+from pbi_agent.agent.session import (
     runtime as session_runtime,
+)
+from pbi_agent.agent.session import (
     shared as session_shared,
+)
+from pbi_agent.agent.session import (
     subagents as session_subagents,
 )
 

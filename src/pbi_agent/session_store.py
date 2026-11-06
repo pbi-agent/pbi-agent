@@ -7,11 +7,11 @@ import os
 import sqlite3
 import threading
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass, field, fields
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterator
-
+from typing import Any
 
 SESSION_DB_PATH_ENV = "PBI_AGENT_SESSION_DB_PATH"
 DEFAULT_SESSION_DB_PATH = Path.home() / ".pbi-agent" / "sessions.db"
@@ -310,7 +310,7 @@ class MessageRecord:
     provider_id: str | None = None
     profile_id: str | None = None
     file_paths: list[str] = field(default_factory=list)
-    image_attachments: list["MessageImageAttachment"] = field(default_factory=list)
+    image_attachments: list[MessageImageAttachment] = field(default_factory=list)
     is_local_command: bool = False
 
 
@@ -554,7 +554,7 @@ def _normalize_project_agent_name(agent_name: str) -> str:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _sqlite_variable_batches(
@@ -575,8 +575,8 @@ def _is_stale_timestamp(timestamp: str, *, stale_after_seconds: float) -> bool:
     except ValueError:
         return True
     if observed.tzinfo is None:
-        observed = observed.replace(tzinfo=timezone.utc)
-    age_seconds = (datetime.now(timezone.utc) - observed).total_seconds()
+        observed = observed.replace(tzinfo=UTC)
+    age_seconds = (datetime.now(UTC) - observed).total_seconds()
     return age_seconds > stale_after_seconds
 
 
@@ -3282,7 +3282,7 @@ class SessionStore:
     ) -> None:
         if delta == 0:
             return
-        comparator = ">=" if delta > 0 else ">="
+        comparator = ">="
         self._conn.execute(
             f"UPDATE kanban_tasks "
             f"SET position = position + ?, updated_at = ? "

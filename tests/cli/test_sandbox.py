@@ -4,14 +4,12 @@ import os
 import sys
 import tempfile
 import unittest
-
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from pbi_agent import __version__
-from pbi_agent import cli
+from pbi_agent import __version__, cli
 from pbi_agent.cli import sandbox as cli_sandbox
 from pbi_agent.cli import shared as cli_shared
 
@@ -421,7 +419,9 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         self.assertEqual(rc, 0)
         mock_build_run.assert_called_once()
-        mock_run.assert_called_once_with(["docker", "run"], env={"ENV": "value"})
+        mock_run.assert_called_once_with(
+            ["docker", "run"], env={"ENV": "value"}, check=False
+        )
         mock_browser_thread.assert_called_once_with(
             "127.0.0.1",
             9001,
@@ -464,6 +464,7 @@ class DefaultWebCommandTests(unittest.TestCase):
         mock_run.assert_called_once_with(
             ["docker", "run", "--detach"],
             env={"ENV": "value"},
+            check=False,
             capture_output=True,
             text=True,
         )

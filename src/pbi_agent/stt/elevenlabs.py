@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import urllib.request
 from pathlib import Path
 from typing import Any
-import urllib.request
 
 from pbi_agent.stt.audio import (
     convert_wav_to_pcm_s16le_16k_mono,

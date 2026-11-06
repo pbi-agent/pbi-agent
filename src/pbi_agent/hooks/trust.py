@@ -8,7 +8,6 @@ from typing import Any
 
 from pbi_agent.hooks.schemas import HookHandlerConfig, HookTrustStatus
 
-
 DEFAULT_HOOK_STATE_PATH = Path.home() / ".pbi-agent" / "hooks_state.json"
 
 

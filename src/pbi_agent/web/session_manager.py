@@ -9,14 +9,13 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from pbi_agent.channels.manager import WorkspaceChannelManager
 from pbi_agent.channels.setup import (
     apply_telegram_channel_update,
     channels_payload,
 )
-
 from pbi_agent.config import ResolvedRuntime, Settings
 from pbi_agent.session_store import (
     RecentWorkspaceRecord,
@@ -184,8 +183,7 @@ def _choose_wsl_windows_workspace_folder(
             ],
             check=False,
             env=env,
-            stderr=subprocess.PIPE,
-            stdout=subprocess.PIPE,
+            capture_output=True,
             text=True,
             timeout=_WINDOWS_FOLDER_PICKER_TIMEOUT_SECS,
         )
@@ -221,8 +219,7 @@ def _wsl_to_windows_path(path: Path) -> str | None:
         completed = subprocess.run(
             ["wslpath", "-w", str(path)],
             check=False,
-            stderr=subprocess.PIPE,
-            stdout=subprocess.PIPE,
+            capture_output=True,
             text=True,
             timeout=_WSLPATH_TIMEOUT_SECS,
         )
@@ -246,8 +243,7 @@ def _windows_to_wsl_path(windows_path: str) -> str:
         completed = subprocess.run(
             ["wslpath", "-u", windows_path],
             check=False,
-            stderr=subprocess.PIPE,
-            stdout=subprocess.PIPE,
+            capture_output=True,
             text=True,
             timeout=_WSLPATH_TIMEOUT_SECS,
         )
@@ -452,7 +448,7 @@ class WebSessionManager(
 
 
 class WebWorkspaceCoordinator:
-    _COORDINATOR_ATTRS = {
+    _COORDINATOR_ATTRS: ClassVar[set[str]] = {
         "_settings",
         "_runtime_args",
         "_managers",

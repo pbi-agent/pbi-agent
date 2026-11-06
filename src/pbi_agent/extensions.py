@@ -7,9 +7,10 @@ import subprocess
 import textwrap
 import time
 import tomllib
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from pbi_agent.config import slugify
 from pbi_agent.tools.catalog import ToolCatalog, ToolCatalogEntry

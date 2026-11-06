@@ -5,7 +5,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from pbi_agent import __version__
@@ -13,6 +13,9 @@ from pbi_agent.auth.models import OAuthSessionAuth
 from pbi_agent.auth.providers.openai_chatgpt import OPENAI_CHATGPT_RESPONSES_URL
 from pbi_agent.auth.service import build_runtime_request_auth, refresh_runtime_auth
 from pbi_agent.config import ConfigError, Settings, missing_api_key_message
+from pbi_agent.models.capabilities import (
+    reasoning_capabilities_for_model,
+)
 from pbi_agent.providers.anthropic_provider import ANTHROPIC_VERSION
 from pbi_agent.providers.chatgpt_codex_backend import (
     CHATGPT_CODEX_VERSION,
@@ -20,9 +23,6 @@ from pbi_agent.providers.chatgpt_codex_backend import (
     chatgpt_user_agent,
 )
 from pbi_agent.providers.github_copilot_backend import GITHUB_COPILOT_MODELS_URL
-from pbi_agent.models.capabilities import (
-    reasoning_capabilities_for_model,
-)
 
 _DISCOVERY_TIMEOUT_SECS = 30.0
 _SUPPORTED_DISCOVERY_PROVIDERS = frozenset(
@@ -671,10 +671,10 @@ def _read_error_body(exc: urllib.error.HTTPError) -> str:
 def _oauth_refresh_due(auth: OAuthSessionAuth) -> bool:
     if auth.expires_at is None:
         return False
-    refresh_at = datetime.fromtimestamp(auth.expires_at, timezone.utc) - timedelta(
+    refresh_at = datetime.fromtimestamp(auth.expires_at, UTC) - timedelta(
         seconds=_OAUTH_REFRESH_SKEW_SECS
     )
-    return datetime.now(timezone.utc) >= refresh_at
+    return datetime.now(UTC) >= refresh_at
 
 
 def _is_xai_account_auth(auth: object) -> bool:

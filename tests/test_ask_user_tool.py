@@ -6,8 +6,8 @@ import time
 import pytest
 
 from pbi_agent.display.protocol import PendingUserQuestion, UserQuestionAnswer
-from pbi_agent.tools.availability import BUILTIN_TOOL_CATEGORIES, BUILTIN_TOOL_NAMES
 from pbi_agent.tools.ask_user import handle
+from pbi_agent.tools.availability import BUILTIN_TOOL_CATEGORIES, BUILTIN_TOOL_NAMES
 from pbi_agent.tools.registry import get_tool_specs
 from pbi_agent.tools.types import ToolContext
 from pbi_agent.web.display import WebDisplay

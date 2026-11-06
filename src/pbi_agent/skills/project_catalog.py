@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-import sys
 import re
-
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from pbi_agent.frontmatter import FrontmatterParseError, parse_simple_frontmatter
-from pbi_agent.skills.state import skill_enabled_map
-
 from rich.console import Console
 from rich.table import Table
+
+from pbi_agent.frontmatter import FrontmatterParseError, parse_simple_frontmatter
+from pbi_agent.skills.state import skill_enabled_map
 
 _DISCOVERY_ROOT = Path(".agents/skills")
 

@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-
 DEFAULT_STT_HTTP_TIMEOUT_SECONDS = 300.0
 DEFAULT_STT_MAX_RETRIES = 2
 

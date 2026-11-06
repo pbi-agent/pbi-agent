@@ -187,12 +187,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     command = build_vulture_command(args)
-    completed = subprocess.run(  # noqa: S603 - command is built from sys.executable plus local args.
+    completed = subprocess.run(
         command,
         check=False,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
 
     if completed.stderr:

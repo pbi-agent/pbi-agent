@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import logging
-from pathlib import Path
 import threading
 import time
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pbi_agent.session_store import SessionStore
@@ -367,7 +367,7 @@ class RunTracer:
             self.store.update_run_session(
                 self.run_session_id,
                 status=status if self._owns_run_session else None,
-                ended_at=datetime.now(timezone.utc).isoformat()
+                ended_at=datetime.now(UTC).isoformat()
                 if self._owns_run_session
                 else None,
                 total_duration_ms=duration_ms,

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import urllib.request
 from pathlib import Path
 from typing import Any
-import urllib.request
 
 from pbi_agent.stt.base import ResolvedSttProvider
 from pbi_agent.stt.http_client import (

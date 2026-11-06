@@ -11,14 +11,13 @@ from pbi_agent.config import (
     resolve_runtime,
     resolve_web_runtime,
 )
+from pbi_agent.hooks.discovery import discover_hooks
+from pbi_agent.hooks.review import format_hook_warning, hooks_requiring_review
 from pbi_agent.init_agents import format_init_bootstrap_result, init_workspace_bootstrap
 from pbi_agent.log_config import configure_logging
 from pbi_agent.maintenance import run_startup_maintenance
-from pbi_agent.hooks.discovery import discover_hooks
-from pbi_agent.hooks.review import format_hook_warning, hooks_requiring_review
 from pbi_agent.workspace_context import current_workspace_context
 
-from .channels import _handle_channels_command
 from .catalogs import (
     _handle_agents_command,
     _handle_agents_flag,
@@ -26,6 +25,7 @@ from .catalogs import (
     _handle_mcp_flag,
     _handle_skills_command,
 )
+from .channels import _handle_channels_command
 from .config import _handle_config_command
 from .hooks import (
     _handle_hooks_command,

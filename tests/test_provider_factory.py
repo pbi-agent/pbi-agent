@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from pbi_agent.config import Settings
 from pbi_agent.auth.models import OAuthSessionAuth
 from pbi_agent.auth.providers.github_copilot import GITHUB_COPILOT_RESPONSES_URL
+from pbi_agent.config import Settings
 from pbi_agent.providers import create_provider
 from pbi_agent.providers.anthropic_provider import AnthropicProvider
 from pbi_agent.providers.generic_provider import GenericProvider
@@ -21,7 +21,7 @@ def _provider_default_prompt(provider: object) -> str:
     prompt = getattr(provider, "_instructions", None)
     if isinstance(prompt, str):
         return prompt
-    prompt = getattr(provider, "_system_prompt")
+    prompt = provider._system_prompt
     assert isinstance(prompt, str)
     return prompt
 

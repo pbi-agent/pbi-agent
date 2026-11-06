@@ -2,20 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.text import Text
 from rich.tree import Tree
 
-from pbi_agent.models.messages import TokenUsage, WebSearchSource
-from pbi_agent.session_store import MessageRecord
-from pbi_agent.display.protocol import (
-    DisplayProtocol,
-    PendingToolCall,
-    PendingToolGroup,
-)
 from pbi_agent.display.formatting import (
     REDACTED_THINKING_NOTICE,
     TOOL_BORDER_STYLES,
@@ -32,6 +25,13 @@ from pbi_agent.display.formatting import (
     tool_group_class,
     tool_item_class,
 )
+from pbi_agent.display.protocol import (
+    DisplayProtocol,
+    PendingToolCall,
+    PendingToolGroup,
+)
+from pbi_agent.models.messages import TokenUsage, WebSearchSource
+from pbi_agent.session_store import MessageRecord
 
 if TYPE_CHECKING:
     from pbi_agent.display.console_display import ConsoleDisplay

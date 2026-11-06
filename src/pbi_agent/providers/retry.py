@@ -126,7 +126,7 @@ def trace_provider_call(
     request_payload: dict[str, Any],
     response_payload: dict[str, Any],
     duration_ms: int,
-    usage: "TokenUsage | None" = None,
+    usage: TokenUsage | None = None,
     prompt_tokens: int | None = None,
     completion_tokens: int | None = None,
     total_tokens: int | None = None,

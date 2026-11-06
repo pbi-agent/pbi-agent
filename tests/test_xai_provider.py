@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import Mock
 
 import pytest
@@ -502,7 +502,7 @@ def test_xai_request_turn_uses_oauth_session_bearer(monkeypatch) -> None:
         backend="xai_account",
         access_token="oauth-token",
         refresh_token="refresh-token",
-        expires_at=int(datetime.now(timezone.utc).timestamp()) + 7200,
+        expires_at=int(datetime.now(UTC).timestamp()) + 7200,
     )
     provider = XAIProvider(_make_settings(api_key="", auth=auth))
     provider.connect()
@@ -558,7 +558,10 @@ def test_xai_execute_tool_calls_returns_function_call_outputs(
         "pbi_agent.providers.xai_provider._execute_tool_calls",
         lambda calls, max_workers, context=None, on_result=None: (
             (
-                [on_result(call, result) for call, result in zip(calls, batch.results)]
+                [
+                    on_result(call, result)
+                    for call, result in zip(calls, batch.results, strict=False)
+                ]
                 if on_result is not None
                 else None
             )

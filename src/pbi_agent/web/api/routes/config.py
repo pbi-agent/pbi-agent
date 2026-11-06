@@ -5,7 +5,6 @@ from fastapi import APIRouter, HTTPException, Response
 from pbi_agent.agents.project_installer import ProjectAgentInstallError
 from pbi_agent.commands.project_installer import ProjectCommandInstallError
 from pbi_agent.skills.project_installer import ProjectSkillInstallError
-
 from pbi_agent.web.api.deps import (
     ConfigRevisionHeader,
     SessionManagerDep,
@@ -35,6 +34,8 @@ from pbi_agent.web.api.schemas.config import (
     ModelProfileResponse,
     ModelProfileUpdateRequest,
     ModelProfileViewModel,
+    PromptEnhancementProfileRequest,
+    PromptEnhancementProfileResponse,
     ProviderListResponse,
     ProviderModelFetchErrorModel,
     ProviderModelListResponse,
@@ -43,8 +44,6 @@ from pbi_agent.web.api.schemas.config import (
     ProviderResponse,
     ProviderUpdateRequest,
     ProviderViewModel,
-    PromptEnhancementProfileRequest,
-    PromptEnhancementProfileResponse,
     SkillCandidateRequest,
     SkillCandidatesResponse,
     SkillEnabledRequest,

@@ -108,7 +108,7 @@ class HookRunSummary:
     exit_code: int | None = None
     entries: tuple[HookOutputEntry, ...] = ()
     error_message: str | None = None
-    output: "ParsedHookOutput | None" = None
+    output: ParsedHookOutput | None = None
 
 
 @dataclass(frozen=True, slots=True)

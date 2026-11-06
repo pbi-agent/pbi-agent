@@ -4,9 +4,10 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
+import pbi_agent.web.session.prompt_enhancement as prompt_enhancement_module
 from pbi_agent.config import (
     ModelProfileConfig,
     ProviderConfig,
@@ -20,7 +21,6 @@ from pbi_agent.models.messages import CompletedResponse, TokenUsage
 from pbi_agent.observability import RunTracer
 from pbi_agent.session_store import SESSION_DB_PATH_ENV, SessionStore
 from pbi_agent.web.serve import create_app
-import pbi_agent.web.session.prompt_enhancement as prompt_enhancement_module
 
 
 def _settings() -> Settings:

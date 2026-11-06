@@ -11,8 +11,7 @@ def _git_init(path: Path) -> None:
         ["git", "init"],
         cwd=path,
         check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
 
 
@@ -51,8 +50,7 @@ def test_scan_workspace_files_excludes_gitignored_files_and_folders(
         ["git", "add", "-f", "ignored.txt", "build/bundle.js"],
         cwd=tmp_path,
         check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
 
     result = scan_workspace_files(tmp_path)

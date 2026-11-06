@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, File, Query, Response, UploadFile
 from fastapi.responses import FileResponse
 
+from pbi_agent.web.agent_mentions import AgentMentionItem
 from pbi_agent.web.api.deps import (
     LimitQuery,
     MentionLimitQuery,
@@ -21,14 +22,14 @@ from pbi_agent.web.api.errors import bad_request, not_found
 from pbi_agent.web.api.schemas.common import ImageAttachmentModel
 from pbi_agent.web.api.schemas.config import ActiveProfileRequest
 from pbi_agent.web.api.schemas.system import (
+    AgentMentionItemModel,
+    AgentMentionSearchResponse,
+    AgentMentionSuggestionItemModel,
     AllRunsResponse,
     AllRunsRunModel,
     BackgroundTaskOutputModel,
     BackgroundTaskOutputResponse,
     BootstrapResponse,
-    AgentMentionItemModel,
-    AgentMentionSuggestionItemModel,
-    AgentMentionSearchResponse,
     CreateSessionRequest,
     DailyBucketModel,
     DashboardOverviewModel,
@@ -50,8 +51,8 @@ from pbi_agent.web.api.schemas.system import (
     PromptEnhancementRequest,
     PromptEnhancementResponse,
     ProviderBreakdownModel,
-    RunSessionDetailResponse,
     RunFilterValuesResponse,
+    RunSessionDetailResponse,
     RunSessionModel,
     SessionDetailResponse,
     SessionImageUploadResponse,
@@ -62,21 +63,20 @@ from pbi_agent.web.api.schemas.system import (
     SkillMentionItemModel,
     SkillMentionSearchResponse,
     SlashCommandItemModel,
+    SlashCommandSearchResponse,
     SubmitQuestionResponseRequest,
     ToolCallInterruptRequest,
-    SlashCommandSearchResponse,
-    WorkspaceListResponse,
-    WorkspaceFilePreviewResponse,
+    UpdateSessionRequest,
     WorkspaceFileDiffResponse,
+    WorkspaceFilePreviewResponse,
     WorkspaceFileTreeItemModel,
     WorkspaceFileTreeResponse,
+    WorkspaceListResponse,
     WorkspacePickerResponse,
     WorkspaceRecordModel,
     WorkspaceSwitchRequest,
     WorkspaceSwitchResponse,
-    UpdateSessionRequest,
 )
-from pbi_agent.web.agent_mentions import AgentMentionItem
 from pbi_agent.web.git_files import workspace_git_diff, workspace_git_status
 from pbi_agent.web.input_mentions import WorkspaceFileTreePayload, expand_input_mentions
 from pbi_agent.web.session_manager import workspace_picker_available

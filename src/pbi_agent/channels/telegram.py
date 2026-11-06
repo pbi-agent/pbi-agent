@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from pbi_agent.agent.session.shared import NEW_COMMAND
+from pbi_agent.channels.telegram_markdown import format_telegram_markdown_chunks
+from pbi_agent.channels.types import ChannelRuntimeStatus, TelegramChannelConfig
 from pbi_agent.config import ResolvedRuntime
 from pbi_agent.display.protocol import (
     PendingToolCall,
@@ -30,8 +32,6 @@ from pbi_agent.models.messages import (
 )
 from pbi_agent.session_store import MessageImageAttachment, MessageRecord, SessionStore
 from pbi_agent.task_runner import run_single_turn_in_directory
-from pbi_agent.channels.telegram_markdown import format_telegram_markdown_chunks
-from pbi_agent.channels.types import ChannelRuntimeStatus, TelegramChannelConfig
 
 TELEGRAM_PLATFORM = "telegram"
 DEFAULT_IMAGE_PROMPT = "Please analyze the attached image."
@@ -242,7 +242,7 @@ class TelegramDisplay:
         task_instruction: str,
         reasoning_effort: str | None = None,
         name: str = "sub_agent",
-    ) -> "TelegramDisplay":
+    ) -> TelegramDisplay:
         return TelegramDisplay()
 
     def finish_sub_agent(self, *, status: str) -> None:

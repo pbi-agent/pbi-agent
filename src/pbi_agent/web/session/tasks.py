@@ -9,9 +9,9 @@ from pbi_agent.agent.error_formatting import format_user_facing_error
 from pbi_agent.config import ConfigError, ResolvedRuntime, load_internal_config, slugify
 from pbi_agent.display.formatting import shorten
 from pbi_agent.session_store import (
+    KANBAN_RUN_STATUS_FAILED,
     KANBAN_STAGE_BACKLOG,
     KANBAN_STAGE_DONE,
-    KANBAN_RUN_STATUS_FAILED,
     KanbanStageConfigRecord,
     KanbanStageConfigSpec,
     KanbanTaskRecord,

@@ -1,16 +1,188 @@
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
 from dataclasses import replace
 from pathlib import Path
-import time
-from typing import Any, Callable
+from typing import Any
 
-from pbi_agent.agent.skill_discovery import format_project_skills_markdown
-from pbi_agent.agent.skill_discovery import extract_explicit_skill_names
 from pbi_agent.agent.reference_resolution import (
     resolve_command_references,
     resolve_sub_agent_references,
+)
+from pbi_agent.agent.session.commands import (
+    build_user_turn_input as _build_user_turn_input,
+)
+from pbi_agent.agent.session.commands import (
+    close_store as _close_store,
+)
+from pbi_agent.agent.session.commands import (
+    format_extension_run_markdown as _format_extension_run_markdown,
+)
+from pbi_agent.agent.session.commands import (
+    mcp_workspace_key as _mcp_workspace_key,
+)
+from pbi_agent.agent.session.commands import (
+    normalize_user_command as _normalize_user_command,
+)
+from pbi_agent.agent.session.commands import (
+    parse_init_command_force as _parse_init_command_force,
+)
+from pbi_agent.agent.session.commands import (
+    reload_provider_initialization as _reload_provider_initialization,
+)
+from pbi_agent.agent.session.commands import (
+    remove_active_mcp_tool_names as _remove_active_mcp_tool_names,
+)
+from pbi_agent.agent.session.commands import (
+    request_user_turn as _request_user_turn,
+)
+from pbi_agent.agent.session.commands import (
+    reserved_slash_extension_names as _reserved_slash_extension_names,
+)
+from pbi_agent.agent.session.commands import (
+    session_title_for_user_turn as _session_title_for_user_turn,
+)
+from pbi_agent.agent.session.commands import (
+    user_turn_history_text as _user_turn_history_text,
+)
+from pbi_agent.agent.session.compaction import (
+    compact_live_session as _compact_live_session,
+)
+from pbi_agent.agent.session.compaction import (
+    compaction_continuation_prompt as _compaction_continuation_prompt,
+)
+from pbi_agent.agent.session.compaction import (
+    provider_has_server_side_compaction as _provider_has_server_side_compaction,
+)
+from pbi_agent.agent.session.compaction import (
+    should_auto_compact as _should_auto_compact,
+)
+from pbi_agent.agent.session.history import (
+    add_message as _add_message,
+)
+from pbi_agent.agent.session.history import (
+    create_session as _create_session,
+)
+from pbi_agent.agent.session.history import (
+    discard_interrupted_turn as _discard_interrupted_turn,
+)
+from pbi_agent.agent.session.history import (
+    open_store as _open_store,
+)
+from pbi_agent.agent.session.history import (
+    persist_runtime_change as _persist_runtime_change,
+)
+from pbi_agent.agent.session.history import (
+    publish_persisted_message as _publish_persisted_message,
+)
+from pbi_agent.agent.session.history import (
+    refresh_provider_history_from_store as _refresh_provider_history_from_store,
+)
+from pbi_agent.agent.session.history import (
+    resume_session as _resume_session,
+)
+from pbi_agent.agent.session.history import (
+    update_session_after_turn as _update_session_after_turn,
+)
+from pbi_agent.agent.session.history import (
+    update_session_title as _update_session_title,
+)
+from pbi_agent.agent.session.hooks import (
+    SessionHookCoordinator,
+)
+from pbi_agent.agent.session.hooks import (
+    append_hook_context as _append_hook_context,
+)
+from pbi_agent.agent.session.shared import (
+    AGENTS_COMMAND,
+    COMPACT_COMMAND,
+    EXTENSIONS_COMMAND,
+    HOOKS_COMMAND,
+    INTERACTIVE_ONLY_TOOLS,
+    MCP_COMMAND,
+    NEW_COMMAND,
+    NEW_SESSION_SENTINEL,
+    RELOAD_COMMAND,
+    RESUME_SESSION_PREFIX,
+    SKILLS_COMMAND,
+    SUB_AGENT_DISABLED_TOOLS,
+    SUB_AGENT_MAX_DEPTH,
+    SUB_AGENT_MAX_ELAPSED_SECONDS,
+    SUB_AGENT_MAX_REQUESTS,
+    SessionTurnInterrupted,
+    SubAgentRunError,
+)
+from pbi_agent.agent.session.shared import (
+    active_mcp_tool_names_by_workspace as _ACTIVE_MCP_TOOL_NAMES_BY_WORKSPACE,
+)
+from pbi_agent.agent.session.shared import (
+    active_mcp_tool_names_context as _ACTIVE_MCP_TOOL_NAMES,
+)
+from pbi_agent.agent.session.shared import (
+    active_mcp_tool_names_lock as _ACTIVE_MCP_TOOL_NAMES_LOCK,
+)
+from pbi_agent.agent.session.shared import (
+    agent_definition_declares_tool_availability as _agent_definition_declares_tool_availability,
+)
+from pbi_agent.agent.session.shared import (
+    bind_session as _bind_session,
+)
+from pbi_agent.agent.session.shared import (
+    coerce_runtime as _coerce_runtime,
+)
+from pbi_agent.agent.session.shared import (
+    extract_active_command as _extract_active_command,
+)
+from pbi_agent.agent.session.shared import (
+    log as _log,
+)
+from pbi_agent.agent.session.shared import (
+    raise_if_interrupted as _raise_if_interrupted,
+)
+from pbi_agent.agent.session.shared import (
+    requires_provider_reopen as _requires_provider_reopen,
+)
+from pbi_agent.agent.session.shared import (
+    run_reasoning_metadata as _run_reasoning_metadata,
+)
+from pbi_agent.agent.session.shared import (
+    runtime_for_active_command as _runtime_for_active_command,
+)
+from pbi_agent.agent.session.shared import (
+    runtime_from_provider as _runtime_from_provider,
+)
+from pbi_agent.agent.session.shared import (
+    selected_model as _selected_model,
+)
+from pbi_agent.agent.session.shared import (
+    selected_sub_agent_model as _selected_sub_agent_model,
+)
+from pbi_agent.agent.session.shared import (
+    set_provider_runtime_settings as _set_provider_runtime_settings,
+)
+from pbi_agent.agent.session.shared import (
+    set_provider_tool_availability_overridden as _set_provider_tool_availability_overridden,
+)
+from pbi_agent.agent.session.shared import (
+    settings_with_tool_availability as _settings_with_tool_availability,
+)
+from pbi_agent.agent.session.shared import (
+    turn_instructions as _turn_instructions,
+)
+from pbi_agent.agent.session.subagents import (
+    apply_sub_agent_parent_context as _apply_sub_agent_parent_context,
+)
+from pbi_agent.agent.session.subagents import (
+    build_parent_context_snapshot as _build_parent_context_snapshot,
+)
+from pbi_agent.agent.session.subagents import (
+    build_sub_agent_initial_message as _build_sub_agent_initial_message,
+)
+from pbi_agent.agent.skill_discovery import (
+    extract_explicit_skill_names,
+    format_project_skills_markdown,
 )
 from pbi_agent.agent.sub_agent_discovery import (
     extract_explicit_agent_names,
@@ -41,10 +213,10 @@ from pbi_agent.extensions import (
     run_extension,
     tool_catalog_with_extensions,
 )
-from pbi_agent.init_agents import format_init_bootstrap_result, init_workspace_bootstrap
 from pbi_agent.hooks.discovery import discover_hooks
 from pbi_agent.hooks.review import format_hooks_markdown
 from pbi_agent.hooks.runtime import HookRuntime
+from pbi_agent.init_agents import format_init_bootstrap_result, init_workspace_bootstrap
 from pbi_agent.mcp import format_project_mcp_servers_markdown
 from pbi_agent.models.messages import (
     AgentOutcome,
@@ -57,89 +229,9 @@ from pbi_agent.models.messages import (
 from pbi_agent.observability import RunTracer
 from pbi_agent.providers import create_provider
 from pbi_agent.session_store import MessageImageAttachment, SessionStore
-from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.availability import without_ui_only_tool_categories
+from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot
-
-from pbi_agent.agent.session.commands import (
-    build_user_turn_input as _build_user_turn_input,
-    close_store as _close_store,
-    format_extension_run_markdown as _format_extension_run_markdown,
-    mcp_workspace_key as _mcp_workspace_key,
-    normalize_user_command as _normalize_user_command,
-    parse_init_command_force as _parse_init_command_force,
-    reload_provider_initialization as _reload_provider_initialization,
-    remove_active_mcp_tool_names as _remove_active_mcp_tool_names,
-    request_user_turn as _request_user_turn,
-    reserved_slash_extension_names as _reserved_slash_extension_names,
-    session_title_for_user_turn as _session_title_for_user_turn,
-    user_turn_history_text as _user_turn_history_text,
-)
-from pbi_agent.agent.session.compaction import (
-    compact_live_session as _compact_live_session,
-    compaction_continuation_prompt as _compaction_continuation_prompt,
-    provider_has_server_side_compaction as _provider_has_server_side_compaction,
-    should_auto_compact as _should_auto_compact,
-)
-from pbi_agent.agent.session.history import (
-    add_message as _add_message,
-    create_session as _create_session,
-    discard_interrupted_turn as _discard_interrupted_turn,
-    open_store as _open_store,
-    persist_runtime_change as _persist_runtime_change,
-    publish_persisted_message as _publish_persisted_message,
-    refresh_provider_history_from_store as _refresh_provider_history_from_store,
-    resume_session as _resume_session,
-    update_session_after_turn as _update_session_after_turn,
-    update_session_title as _update_session_title,
-)
-from pbi_agent.agent.session.hooks import (
-    SessionHookCoordinator,
-    append_hook_context as _append_hook_context,
-)
-from pbi_agent.agent.session.shared import (
-    AGENTS_COMMAND,
-    COMPACT_COMMAND,
-    EXTENSIONS_COMMAND,
-    HOOKS_COMMAND,
-    INTERACTIVE_ONLY_TOOLS,
-    MCP_COMMAND,
-    NEW_COMMAND,
-    NEW_SESSION_SENTINEL,
-    RELOAD_COMMAND,
-    RESUME_SESSION_PREFIX,
-    SKILLS_COMMAND,
-    SUB_AGENT_DISABLED_TOOLS,
-    SUB_AGENT_MAX_DEPTH,
-    SUB_AGENT_MAX_ELAPSED_SECONDS,
-    SUB_AGENT_MAX_REQUESTS,
-    SessionTurnInterrupted,
-    SubAgentRunError,
-    active_mcp_tool_names_by_workspace as _ACTIVE_MCP_TOOL_NAMES_BY_WORKSPACE,
-    active_mcp_tool_names_context as _ACTIVE_MCP_TOOL_NAMES,
-    active_mcp_tool_names_lock as _ACTIVE_MCP_TOOL_NAMES_LOCK,
-    agent_definition_declares_tool_availability as _agent_definition_declares_tool_availability,
-    bind_session as _bind_session,
-    coerce_runtime as _coerce_runtime,
-    extract_active_command as _extract_active_command,
-    log as _log,
-    raise_if_interrupted as _raise_if_interrupted,
-    requires_provider_reopen as _requires_provider_reopen,
-    run_reasoning_metadata as _run_reasoning_metadata,
-    runtime_for_active_command as _runtime_for_active_command,
-    runtime_from_provider as _runtime_from_provider,
-    selected_model as _selected_model,
-    selected_sub_agent_model as _selected_sub_agent_model,
-    set_provider_runtime_settings as _set_provider_runtime_settings,
-    set_provider_tool_availability_overridden as _set_provider_tool_availability_overridden,
-    settings_with_tool_availability as _settings_with_tool_availability,
-    turn_instructions as _turn_instructions,
-)
-from pbi_agent.agent.session.subagents import (
-    apply_sub_agent_parent_context as _apply_sub_agent_parent_context,
-    build_parent_context_snapshot as _build_parent_context_snapshot,
-    build_sub_agent_initial_message as _build_sub_agent_initial_message,
-)
 
 
 def _append_hook_context_with_system_prompt(
@@ -1189,7 +1281,7 @@ def run_sub_agent_task(
     parent_session_usage: TokenUsage,
     parent_turn_usage: TokenUsage,
     sub_agent_depth: int = 0,
-    tool_catalog: "ToolCatalog | None" = None,
+    tool_catalog: ToolCatalog | None = None,
     agent_type: str | None = None,
     include_context: bool = False,
     parent_tool_availability_overridden: bool = False,
@@ -1610,7 +1702,7 @@ def _open_runtime_provider(
     *,
     system_prompt: str | None = None,
     excluded_tools: set[str] | None = None,
-    tool_catalog: "ToolCatalog | None" = None,
+    tool_catalog: ToolCatalog | None = None,
     tool_availability_overridden: bool | None = None,
     workspace_root: Path | None = None,
     workspace_directory_key: str | None = None,

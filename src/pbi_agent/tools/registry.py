@@ -1,3 +1,4 @@
+# ruff: noqa: E402  (imports follow _REGISTRY setup to avoid import cycles)
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -11,15 +12,24 @@ ToolSpecFactory = Callable[..., ToolSpec]
 _REGISTRY: dict[str, tuple[ToolSpec | ToolSpecFactory, ToolHandler]] = {}
 
 # --- built-in function tools -----------------------------------------------
-from pbi_agent.tools.shell import SPEC as _sh_spec, handle as _sh_handle  # noqa: E402
-from pbi_agent.tools.apply_patch import SPEC as _ap_spec, handle as _ap_handle  # noqa: E402
-from pbi_agent.tools.replace_in_file import SPEC as _rif_spec, handle as _rif_handle  # noqa: E402
-from pbi_agent.tools.write_file import SPEC as _wf_spec, handle as _wf_handle  # noqa: E402
-from pbi_agent.tools.explore_workspace import SPEC as _ew_spec, handle as _ew_handle  # noqa: E402
-from pbi_agent.tools.read_web_url import SPEC as _rwu_spec, handle as _rwu_handle  # noqa: E402
-from pbi_agent.tools.web_search import SPEC as _ws_spec, handle as _ws_handle  # noqa: E402
-from pbi_agent.tools.sub_agent import build_spec as _sa_build_spec, handle as _sa_handle  # noqa: E402
-from pbi_agent.tools.ask_user import SPEC as _au_spec, handle as _au_handle  # noqa: E402
+from pbi_agent.tools.apply_patch import SPEC as _ap_spec
+from pbi_agent.tools.apply_patch import handle as _ap_handle
+from pbi_agent.tools.ask_user import SPEC as _au_spec
+from pbi_agent.tools.ask_user import handle as _au_handle
+from pbi_agent.tools.explore_workspace import SPEC as _ew_spec
+from pbi_agent.tools.explore_workspace import handle as _ew_handle
+from pbi_agent.tools.read_web_url import SPEC as _rwu_spec
+from pbi_agent.tools.read_web_url import handle as _rwu_handle
+from pbi_agent.tools.replace_in_file import SPEC as _rif_spec
+from pbi_agent.tools.replace_in_file import handle as _rif_handle
+from pbi_agent.tools.shell import SPEC as _sh_spec
+from pbi_agent.tools.shell import handle as _sh_handle
+from pbi_agent.tools.sub_agent import build_spec as _sa_build_spec
+from pbi_agent.tools.sub_agent import handle as _sa_handle
+from pbi_agent.tools.web_search import SPEC as _ws_spec
+from pbi_agent.tools.web_search import handle as _ws_handle
+from pbi_agent.tools.write_file import SPEC as _wf_spec
+from pbi_agent.tools.write_file import handle as _wf_handle
 
 _REGISTRY[_sh_spec.name] = (_sh_spec, _sh_handle)
 _REGISTRY[_ap_spec.name] = (_ap_spec, _ap_handle)

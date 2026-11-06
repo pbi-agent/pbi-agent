@@ -2,15 +2,16 @@ from __future__ import annotations
 
 from typing import Any
 
+from pbi_agent.auth.browser_callback import BrowserAuthCallbackOptions
 from pbi_agent.auth.models import (
+    AUTH_FLOW_METHOD_BROWSER,
+    AUTH_FLOW_METHOD_DEVICE,
     AUTH_MODE_API_KEY,
     AUTH_MODE_CHATGPT_ACCOUNT,
     AUTH_MODE_COPILOT_ACCOUNT,
     AUTH_MODE_XAI_ACCOUNT,
-    AUTH_FLOW_METHOD_BROWSER,
-    AUTH_FLOW_METHOD_DEVICE,
-    AuthFlowPollResult,
     ApiKeyAuth,
+    AuthFlowPollResult,
     BrowserAuthChallenge,
     DeviceAuthChallenge,
     OAuthSessionAuth,
@@ -18,7 +19,6 @@ from pbi_agent.auth.models import (
     RequestAuthConfig,
     StoredAuthSession,
 )
-from pbi_agent.auth.browser_callback import BrowserAuthCallbackOptions
 from pbi_agent.auth.providers.base import AuthProviderBackend
 from pbi_agent.auth.providers.github_copilot import (
     GITHUB_COPILOT_BACKEND_ID,

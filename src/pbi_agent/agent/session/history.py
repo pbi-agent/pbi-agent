@@ -1,9 +1,17 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from typing import Any
 
+from pbi_agent.agent.session.shared import (
+    OPENAI_RESPONSES_HISTORY_FORMAT,
+    PROVIDER_INPUT_HISTORY_ITEM,
+    REDACTED_INLINE_IMAGE_MARKER,
+)
+from pbi_agent.agent.session.shared import (
+    log as _log,
+)
 from pbi_agent.config import ResolvedRuntime, Settings
 from pbi_agent.display.protocol import DisplayProtocol
 from pbi_agent.models.messages import TokenUsage
@@ -16,13 +24,6 @@ from pbi_agent.providers.protocols.openai_responses import (
 )
 from pbi_agent.session_store import MessageImageAttachment, MessageRecord, SessionStore
 from pbi_agent.workspace_context import current_workspace_context
-
-from pbi_agent.agent.session.shared import (
-    OPENAI_RESPONSES_HISTORY_FORMAT,
-    PROVIDER_INPUT_HISTORY_ITEM,
-    REDACTED_INLINE_IMAGE_MARKER,
-    log as _log,
-)
 
 
 @dataclass(frozen=True, slots=True)

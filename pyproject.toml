@@ -34,7 +34,8 @@ packages = ["src/pbi_agent"]
 entrypoint = "pbi_agent.web.serve:app"
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F"]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "RUF", "PLW1510"]
+ignore = ["B009", "B010"]  # getattr/setattr used deliberately for untyped dynamic attrs
 
 [tool.uv]
 default-groups = ["dev"]

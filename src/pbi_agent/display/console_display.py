@@ -11,15 +11,6 @@ from rich.text import Text
 from rich.tree import Tree
 
 from pbi_agent.branding import PBI_AGENT_ACCENT
-from pbi_agent.models.messages import TokenUsage, WebSearchSource
-from pbi_agent.session_store import MessageRecord
-from pbi_agent.display.protocol import (
-    DisplayProtocol,
-    PendingToolCall,
-    PendingToolGroup,
-    PendingUserQuestion,
-    UserQuestionAnswer,
-)
 from pbi_agent.display.formatting import (
     REDACTED_THINKING_NOTICE,
     TOOL_BORDER_STYLES,
@@ -37,6 +28,15 @@ from pbi_agent.display.formatting import (
     tool_group_class,
     tool_item_class,
 )
+from pbi_agent.display.protocol import (
+    DisplayProtocol,
+    PendingToolCall,
+    PendingToolGroup,
+    PendingUserQuestion,
+    UserQuestionAnswer,
+)
+from pbi_agent.models.messages import TokenUsage, WebSearchSource
+from pbi_agent.session_store import MessageRecord
 
 
 class ConsoleDisplay(DisplayProtocol):

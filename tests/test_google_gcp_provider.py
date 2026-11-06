@@ -7,9 +7,9 @@ from typing import Any
 
 import pytest
 
+import pbi_agent.providers.auth_strategies as auth_strategies
 from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.auth.models import ApiKeyAuth
-import pbi_agent.providers.auth_strategies as auth_strategies
 from pbi_agent.config import (
     DEFAULT_GOOGLE_GCP_MODEL,
     DEFAULT_GOOGLE_GCP_RESPONSES_URL,
@@ -969,7 +969,10 @@ def test_google_gcp_gemini_execute_tool_calls_serializes_function_response(
         "pbi_agent.providers.google_gcp_provider._execute_tool_calls",
         lambda calls, max_workers, context=None, on_result=None: (
             (
-                [on_result(call, result) for call, result in zip(calls, batch.results)]
+                [
+                    on_result(call, result)
+                    for call, result in zip(calls, batch.results, strict=False)
+                ]
                 if on_result is not None
                 else None
             )

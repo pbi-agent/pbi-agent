@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import sqlite3
-import time
 import threading
-from datetime import datetime, timezone
+import time
+from datetime import UTC, datetime
 
 import pytest
 
-from pbi_agent.web import uploads
 from pbi_agent.session_store import (
     KANBAN_RUN_STATUS_COMPLETED,
     KANBAN_STAGE_BACKLOG,
@@ -20,6 +19,7 @@ from pbi_agent.session_store import (
     MessageImageAttachment,
     SessionStore,
 )
+from pbi_agent.web import uploads
 
 
 def test_create_and_get_session(tmp_path) -> None:
@@ -318,7 +318,7 @@ def test_mark_web_runs_stale_closes_orphaned_started_turns_for_terminal_web_run(
             status="started",
         )
         time.sleep(0.001)
-        ended_at = datetime.now(timezone.utc).isoformat()
+        ended_at = datetime.now(UTC).isoformat()
         store.update_run_session(
             web_run_id,
             status="interrupted",
@@ -805,15 +805,15 @@ def test_run_session_records_ignore_extra_database_columns(tmp_path) -> None:
             profile_id="analysis",
             model="gpt-5",
         )
-        store._conn.execute(  # noqa: SLF001
+        store._conn.execute(
             "ALTER TABLE run_sessions "
             "ADD COLUMN tool_use_tokens INTEGER NOT NULL DEFAULT 0"
         )
-        store._conn.execute(  # noqa: SLF001
+        store._conn.execute(
             "UPDATE run_sessions SET tool_use_tokens = 12 WHERE run_session_id = ?",
             (run_id,),
         )
-        store._conn.commit()  # noqa: SLF001
+        store._conn.commit()
 
         run = store.get_run_session(run_id)
         runs = store.list_run_sessions(session_id)

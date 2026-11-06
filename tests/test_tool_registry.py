@@ -14,7 +14,7 @@ class _ProviderContextStub:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
-    def __enter__(self) -> "_ProviderContextStub":
+    def __enter__(self) -> _ProviderContextStub:
         return self
 
     def __exit__(self, *_: object) -> None:

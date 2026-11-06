@@ -99,7 +99,7 @@ class ResponsesWebSocket:
 
         try:
             raw_sock = socket.create_connection((host, port), timeout=connect_timeout)
-        except (OSError, TimeoutError, socket.timeout) as exc:
+        except (OSError, TimeoutError) as exc:
             raise ChatGPTCodexWebSocketError(
                 f"WebSocket connect failed: {exc}", retryable=True
             ) from exc
@@ -127,7 +127,7 @@ class ResponsesWebSocket:
             try:
                 sock.sendall(request.encode("utf-8"))
                 status, response_headers, body = _read_http_upgrade_response(sock)
-            except (OSError, TimeoutError, socket.timeout) as exc:
+            except (OSError, TimeoutError) as exc:
                 raise ChatGPTCodexWebSocketError(
                     f"WebSocket upgrade failed: {exc}", retryable=True
                 ) from exc
@@ -144,7 +144,7 @@ class ResponsesWebSocket:
         except ChatGPTCodexWebSocketError:
             raw_sock.close()
             raise
-        except (OSError, TimeoutError, socket.timeout) as exc:
+        except (OSError, TimeoutError) as exc:
             raw_sock.close()
             raise ChatGPTCodexWebSocketError(
                 f"WebSocket connect failed: {exc}", retryable=True
@@ -169,7 +169,7 @@ class ResponsesWebSocket:
         try:
             self._set_phase_timeout(deadline, min(idle_timeout, _WS_WRITE_TIMEOUT_SECS))
             self._send_text(json.dumps(request_payload, separators=(",", ":")))
-        except (OSError, TimeoutError, socket.timeout) as exc:
+        except (OSError, TimeoutError) as exc:
             self.close()
             raise ChatGPTCodexWebSocketError(
                 f"WebSocket send failed: {exc}", retryable=True
@@ -184,7 +184,7 @@ class ResponsesWebSocket:
                 )
                 self._set_phase_timeout(deadline, read_timeout)
                 opcode, payload = self._recv_frame()
-            except (OSError, TimeoutError, socket.timeout) as exc:
+            except (OSError, TimeoutError) as exc:
                 self.close()
                 raise ChatGPTCodexWebSocketError(
                     f"WebSocket read failed: {exc}", retryable=True
@@ -201,7 +201,7 @@ class ResponsesWebSocket:
                         deadline, min(idle_timeout, _WS_WRITE_TIMEOUT_SECS)
                     )
                     self._send_frame(_WS_OPCODE_PONG, payload)
-                except (OSError, TimeoutError, socket.timeout) as exc:
+                except (OSError, TimeoutError) as exc:
                     self.close()
                     raise ChatGPTCodexWebSocketError(
                         f"WebSocket send failed: {exc}", retryable=True

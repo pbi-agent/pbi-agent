@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import shlex
 import os
+import shlex
 import subprocess
 import sys
 import threading
@@ -29,6 +29,7 @@ def test_shell_handle_runs_command_with_workspace_defaults(
         command: str,
         *,
         cwd: str,
+        check: bool,
         capture_output: bool,
         text: bool,
         shell: bool,
@@ -39,6 +40,7 @@ def test_shell_handle_runs_command_with_workspace_defaults(
             {
                 "command": command,
                 "cwd": cwd,
+                "check": check,
                 "capture_output": capture_output,
                 "text": text,
                 "shell": shell,
@@ -66,6 +68,7 @@ def test_shell_handle_runs_command_with_workspace_defaults(
         {
             "command": "echo hi",
             "cwd": str(tmp_path.resolve()),
+            "check": False,
             "capture_output": True,
             "text": False,
             "shell": True,
@@ -90,13 +93,14 @@ def test_shell_handle_uses_requested_directory_and_clamps_timeout(
         command: str,
         *,
         cwd: str,
+        check: bool,
         capture_output: bool,
         text: bool,
         shell: bool,
         executable: str | None,
         timeout: float,
     ) -> subprocess.CompletedProcess[bytes]:
-        del capture_output, text, shell
+        del check, capture_output, text, shell
         seen["command"] = command
         seen["cwd"] = cwd
         seen["executable"] = executable
@@ -138,13 +142,14 @@ def test_shell_handle_honors_requested_timeout(
         command: str,
         *,
         cwd: str,
+        check: bool,
         capture_output: bool,
         text: bool,
         shell: bool,
         executable: str | None,
         timeout: float,
     ) -> subprocess.CompletedProcess[bytes]:
-        del cwd, capture_output, text, shell, executable
+        del cwd, check, capture_output, text, shell, executable
         seen["timeout"] = timeout
         return subprocess.CompletedProcess(
             args=command,
@@ -287,7 +292,7 @@ def test_shell_handle_stops_process_before_propagating_keyboard_interrupt(
         returncode = None
 
         @classmethod
-        def __class_getitem__(cls, _item: object) -> type["FakePopen"]:
+        def __class_getitem__(cls, _item: object) -> type[FakePopen]:
             return cls
 
         def __init__(self, *_args: object, **_kwargs: object) -> None:

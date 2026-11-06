@@ -9,7 +9,6 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
-
 from pathlib import Path
 
 import pytest

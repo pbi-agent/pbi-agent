@@ -73,7 +73,7 @@ class WorkersMixin:
         if not self._started:
             raise RuntimeError("Manager is not started.")
 
-    def _finalize_live_session_locked(self, live_session) -> None:  # noqa: ANN001
+    def _finalize_live_session_locked(self, live_session) -> None:
         if live_session.ended_at is not None:
             return
         previous_status = live_session.status
@@ -112,7 +112,7 @@ class WorkersMixin:
 
     def _mark_task_live_session_finalization_failed_locked(
         self,
-        live_session,  # noqa: ANN001
+        live_session,
         exc: Exception,
     ) -> None:
         if live_session.ended_at is not None:

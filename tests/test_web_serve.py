@@ -7,20 +7,23 @@ import logging
 import re
 import sqlite3
 import subprocess
-from datetime import datetime, timedelta, timezone
-from io import BytesIO, StringIO
-from pathlib import Path
 import threading
 import time
-from types import SimpleNamespace
-from unittest.mock import patch
 import urllib.error
 import urllib.request
+from datetime import UTC, datetime, timedelta
+from io import BytesIO, StringIO
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 from rich.console import Console
 
+import pbi_agent.web.session_manager as session_manager_module
+from pbi_agent import __version__
+from pbi_agent.agent.session import SessionTurnInterrupted
 from pbi_agent.auth.browser_callback import (
     BrowserAuthCallbackOutcome,
     BrowserAuthCallbackParams,
@@ -31,14 +34,8 @@ from pbi_agent.auth.models import (
     DeviceAuthChallenge,
 )
 from pbi_agent.auth.store import build_auth_session, save_auth_session
-from pbi_agent import __version__
-from pbi_agent.agent.session import SessionTurnInterrupted
 from pbi_agent.branding import PBI_AGENT_TAGLINE
 from pbi_agent.cli import build_parser
-from pbi_agent.providers.chatgpt_codex_backend import (
-    CHATGPT_CODEX_VERSION,
-    CHATGPT_ORIGINATOR,
-)
 from pbi_agent.config import (
     ModelProfileConfig,
     ProviderConfig,
@@ -54,28 +51,31 @@ from pbi_agent.display.protocol import (
     QueuedRuntimeChange,
     UserQuestionAnswer,
 )
+from pbi_agent.providers.chatgpt_codex_backend import (
+    CHATGPT_CODEX_VERSION,
+    CHATGPT_ORIGINATOR,
+)
 from pbi_agent.session_store import (
+    SESSION_DB_PATH_ENV,
     MessageImageAttachment,
     MessageRecord,
     RunSessionRecord,
-    SESSION_DB_PATH_ENV,
     SessionStore,
     WebManagerLeaseBusyError,
 )
-from pbi_agent.web.display import WebDisplay, _plain_text
 from pbi_agent.web.api.routes.events import _iter_sse_events, _resolve_since
-import pbi_agent.web.session_manager as session_manager_module
+from pbi_agent.web.display import WebDisplay, _plain_text
+from pbi_agent.web.serve import PBIWebServer, create_app
 from pbi_agent.web.server_runtime import (
     _ExpectedStartupFailureFilter,
     _startup_error_message_from_traceback,
 )
 from pbi_agent.web.session.serializers import _combined_timeline_snapshot
+from pbi_agent.web.session.state import _MAX_SUBSCRIBER_QUEUE_SIZE, EventStream
 from pbi_agent.web.session_manager import (
     WebManagerStartupError,
     WebSessionManager,
 )
-from pbi_agent.web.session.state import EventStream, _MAX_SUBSCRIBER_QUEUE_SIZE
-from pbi_agent.web.serve import PBIWebServer, create_app
 from pbi_agent.workspace_context import (
     SANDBOX_ENV,
     WORKSPACE_DISPLAY_PATH_ENV,
@@ -461,7 +461,7 @@ def test_list_sessions_ignores_orphaned_started_turn_for_interrupted_web_run(
         store.update_run_session(
             web_run_id,
             status="interrupted",
-            ended_at=datetime.now(timezone.utc).isoformat(),
+            ended_at=datetime.now(UTC).isoformat(),
             exit_code=130,
             fatal_error="Interrupted during app shutdown.",
         )
@@ -1156,13 +1156,13 @@ def test_wsl_unc_path_conversion_uses_current_distro(monkeypatch) -> None:
     monkeypatch.setenv("WSL_DISTRO_NAME", "Ubuntu")
 
     assert (
-        session_manager_module._wsl_unc_to_linux_path(  # noqa: SLF001
+        session_manager_module._wsl_unc_to_linux_path(
             r"\\wsl.localhost\Ubuntu\home\user\project"
         )
         == "/home/user/project"
     )
     assert (
-        session_manager_module._wsl_unc_to_linux_path(  # noqa: SLF001
+        session_manager_module._wsl_unc_to_linux_path(
             r"\\wsl$\Ubuntu\home\user\project"
         )
         == "/home/user/project"
@@ -3019,8 +3019,7 @@ def test_file_search_endpoint_returns_workspace_matches(tmp_path, monkeypatch) -
         ["git", "init"],
         cwd=tmp_path,
         check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     (tmp_path / "docs").mkdir()
     (tmp_path / "main.py").write_text("print('hi')\n", encoding="utf-8")
@@ -3661,7 +3660,7 @@ def test_event_stream_subscriber_queue_overflow_enqueues_recovery_control() -> N
         loop = asyncio.get_running_loop()
         loop_errors: list[BaseException] = []
 
-        def capture_loop_error(_loop, context) -> None:  # noqa: ANN001
+        def capture_loop_error(_loop, context) -> None:
             exception = context.get("exception")
             if isinstance(exception, BaseException):
                 loop_errors.append(exception)
@@ -4000,7 +3999,7 @@ def test_live_sse_last_event_id_takes_precedence_over_since_for_gap_detection(
 
     captured: dict[str, object] = {}
 
-    def fake_sse_response(  # noqa: ANN001
+    def fake_sse_response(
         stream,
         *,
         since,
@@ -4813,7 +4812,7 @@ def test_live_event_persistence_failure_does_not_deliver_to_subscribers(
         live_session = manager._live_sessions[live_session_id]
         original_persist = manager._persist_live_event_record
 
-        def fail_failed_event(live_session, event):  # noqa: ANN001
+        def fail_failed_event(live_session, event):
             if event["payload"].get("message") == "Failed":
                 raise RuntimeError("persist failed")
             original_persist(live_session, event)
@@ -8251,7 +8250,9 @@ def test_manager_start_reports_busy_database_after_retry_window(
     ):
         with pytest.raises(
             RuntimeError,
-            match="Session database is busy. Try starting the web app again.",
+            match=re.escape(
+                "Session database is busy. Try starting the web app again."
+            ),
         ):
             manager.start()
 
@@ -11439,7 +11440,7 @@ def test_get_run_detail_returns_live_observability_summary_for_started_run(
             profile_id="analysis",
             model="gpt-5.4",
         )
-        started_at = datetime.now(timezone.utc) - timedelta(seconds=65)
+        started_at = datetime.now(UTC) - timedelta(seconds=65)
         store._conn.execute(
             "UPDATE run_sessions SET started_at = ? WHERE run_session_id = ?",
             (started_at.isoformat(), run_session_id),
@@ -13251,7 +13252,7 @@ def test_saved_session_sse_replays_latest_web_run_when_prior_cursor_is_high(
 
     captured: dict[str, object] = {}
 
-    def fake_sse_response(  # noqa: ANN001
+    def fake_sse_response(
         stream,
         *,
         since,
@@ -13365,7 +13366,7 @@ def test_saved_session_sse_replays_latest_web_run_when_prior_cursor_is_low(
 
     captured: dict[str, object] = {}
 
-    def fake_sse_response(  # noqa: ANN001
+    def fake_sse_response(
         stream,
         *,
         since,
@@ -13396,7 +13397,7 @@ def test_saved_session_sse_replays_latest_web_run_when_prior_cursor_is_low(
     replay_events = captured["replay_events"]
     assert [event["seq"] for event in captured["snapshot"]] == [1, 2, 3, 4, 5]
     assert [event["seq"] for event in replay_events] == [1, 2, 3, 4, 5]
-    assert [event["payload"]["item_id"] for event in replay_events][0] == "new-1"
+    assert next(event["payload"]["item_id"] for event in replay_events) == "new-1"
     assert captured["since"] == 0
     assert captured["requested_since"] == 1
     assert captured["log_context"] == {
@@ -13451,7 +13452,7 @@ def test_saved_session_sse_continues_when_cursor_matches_current_run(
 
     captured: dict[str, object] = {}
 
-    def fake_sse_response(  # noqa: ANN001
+    def fake_sse_response(
         stream,
         *,
         since,
@@ -13533,7 +13534,7 @@ def test_saved_session_sse_last_event_id_overrides_stale_since_for_new_run(
 
     captured: dict[str, object] = {}
 
-    def fake_sse_response(  # noqa: ANN001
+    def fake_sse_response(
         stream,
         *,
         since,

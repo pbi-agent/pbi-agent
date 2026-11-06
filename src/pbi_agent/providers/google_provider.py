@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import execute_tool_calls as _execute_tool_calls
 from pbi_agent.config import Settings, missing_api_key_message
+from pbi_agent.display.protocol import DisplayProtocol
 from pbi_agent.models.messages import (
     CompletedResponse,
     ImageAttachment,
@@ -45,7 +46,6 @@ from pbi_agent.tools.availability import (
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot
 from pbi_agent.web.uploads import load_uploaded_image
-from pbi_agent.display.protocol import DisplayProtocol
 
 if TYPE_CHECKING:
     from pbi_agent.hooks.runtime import HookRuntime
@@ -147,7 +147,7 @@ class GoogleProvider(Provider):
         display: DisplayProtocol,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
     ) -> CompletedResponse:
         del session_id
         if user_input is None and user_message is not None:
@@ -195,8 +195,8 @@ class GoogleProvider(Provider):
         turn_usage: TokenUsage,
         sub_agent_depth: int = 0,
         parent_context: ParentContextSnapshot | None = None,
-        tracer: "RunTracer | None" = None,
-        hook_runtime: "HookRuntime | None" = None,
+        tracer: RunTracer | None = None,
+        hook_runtime: HookRuntime | None = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         if not response.function_calls:
             return [], False
@@ -233,7 +233,7 @@ class GoogleProvider(Provider):
         input_value: str | list[dict[str, Any]],
         instructions: str,
         display: DisplayProtocol,
-        tracer: "RunTracer | None" = None,
+        tracer: RunTracer | None = None,
     ) -> CompletedResponse:
         request_body = self._build_request_body(
             input_value=input_value,

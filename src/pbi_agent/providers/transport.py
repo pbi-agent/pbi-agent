@@ -7,14 +7,14 @@ shape, auth headers, endpoint selection, response parsing, and rendering.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass, field
 import http.client
 import json
 import time
-from typing import Any, TYPE_CHECKING
 import urllib.error
 import urllib.request
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 from pbi_agent.config import Settings
 from pbi_agent.display.protocol import DisplayProtocol
@@ -86,7 +86,7 @@ class JsonModelTransport:
         *,
         settings: Settings,
         display: DisplayProtocol,
-        tracer: "RunTracer | None",
+        tracer: RunTracer | None,
         parse_response: ResponseParser,
         semantic_validator: SemanticValidator | None = None,
     ) -> CompletedResponse:
@@ -313,11 +313,11 @@ class JsonModelTransport:
         self,
         *,
         spec: JsonRequestSpec,
-        tracer: "RunTracer | None",
+        tracer: RunTracer | None,
         response_payload: dict[str, Any],
         duration_ms: int,
         success: bool,
-        usage: "TokenUsage | None" = None,
+        usage: TokenUsage | None = None,
         prompt_tokens: int | None = None,
         completion_tokens: int | None = None,
         total_tokens: int | None = None,
@@ -348,7 +348,7 @@ class JsonModelTransport:
         self,
         *,
         spec: JsonRequestSpec,
-        tracer: "RunTracer | None",
+        tracer: RunTracer | None,
         status_code: int | None,
         error_message: str,
         attempt: int,

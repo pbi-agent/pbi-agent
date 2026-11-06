@@ -94,7 +94,7 @@ def _run_status_from_run(record: RunSessionRecord) -> str:
     return "started"
 
 
-def _session_status_from_live_session(live_session: "LiveSessionState") -> str:
+def _session_status_from_live_session(live_session: LiveSessionState) -> str:
     status = live_session.status
     if status == "running" and live_session.ended_at is None:
         snapshot = live_session.snapshot
@@ -108,7 +108,7 @@ def _session_status_from_live_session(live_session: "LiveSessionState") -> str:
 
 
 def _persisted_web_run_status(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
-    live_session: "LiveSessionState",
+    live_session: LiveSessionState,
 ) -> str:
     if live_session.terminal_status is not None:
         return live_session.terminal_status
@@ -124,7 +124,7 @@ def _persisted_web_run_status(  # pyright: ignore[reportUnusedFunction] - import
 def _serialize_session(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
     record: SessionRecord,
     *,
-    active_live_session: "LiveSessionState | None" = None,
+    active_live_session: LiveSessionState | None = None,
     active_run: RunSessionRecord | None = None,
     status_run: RunSessionRecord | None = None,
 ) -> dict[str, Any]:
@@ -173,7 +173,7 @@ def _serialize_session(  # pyright: ignore[reportUnusedFunction] - imported by s
 
 
 def _is_active_live_session(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
-    live_session: "LiveSessionState",
+    live_session: LiveSessionState,
 ) -> bool:
     return (
         live_session.status in _ACTIVE_LIVE_SESSION_STATUSES

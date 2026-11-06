@@ -7,6 +7,7 @@ from fastapi import APIRouter, File, Response, UploadFile
 from pbi_agent.config import ConfigError
 from pbi_agent.web.api.deps import SessionManagerDep, TaskIdPath, model_from_payload
 from pbi_agent.web.api.errors import bad_request, config_http_error, not_found
+from pbi_agent.web.api.schemas.common import ImageAttachmentModel
 from pbi_agent.web.api.schemas.tasks import (
     CreateTaskRequest,
     TaskImageUploadResponse,
@@ -15,7 +16,6 @@ from pbi_agent.web.api.schemas.tasks import (
     TasksResponse,
     UpdateTaskRequest,
 )
-from pbi_agent.web.api.schemas.common import ImageAttachmentModel
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 

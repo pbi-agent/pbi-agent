@@ -8,8 +8,8 @@ from dotenv import load_dotenv
 
 from pbi_agent.auth.models import AUTH_MODE_API_KEY
 from pbi_agent.config import (
-    ConfigError,
     PROVIDER_API_KEY_ENVS,
+    ConfigError,
     ProviderConfig,
     load_internal_config,
     provider_config_supports_stt,

@@ -6,12 +6,12 @@ from pydantic import BaseModel, Field
 
 from pbi_agent.web.api.schemas.common import ImageAttachmentModel
 from pbi_agent.web.api.schemas.system import (
+    BackgroundTaskModel,
     LiveSessionModel,
     MessagePartIdsModel,
     PendingUserQuestionsModel,
     ProcessingPhase,
     QueuedFollowUpModel,
-    BackgroundTaskModel,
     SessionRecordModel,
 )
 from pbi_agent.web.api.schemas.tasks import BoardStageModel, TaskRecordModel

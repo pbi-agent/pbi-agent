@@ -1,57 +1,58 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
 import io
 import json
 import os
+import urllib.error
+import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
-import urllib.request
-import urllib.error
 
 import pytest
 
-from pbi_agent.auth.models import AUTH_MODE_COPILOT_ACCOUNT
-from pbi_agent.auth.providers.github_copilot import GITHUB_COPILOT_RESPONSES_URL
-from pbi_agent.agent.skill_discovery import format_project_skills_markdown
 from pbi_agent.agent import session as session_module
 from pbi_agent.agent.compaction_prompt import COMPACTION_PROMPT
-from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.session import (
     AGENTS_COMMAND,
-    MCP_COMMAND,
     COMPACT_COMMAND,
     COMPACTION_MARKER,
     HOOKS_COMMAND,
     INIT_COMMAND,
     INTERACTIVE_ONLY_TOOLS,
-    _open_compaction_provider,
-    _open_runtime_provider,
+    MCP_COMMAND,
     NEW_COMMAND,
     NEW_SESSION_SENTINEL,
     RELOAD_COMMAND,
-    _resume_session,
     SKILLS_COMMAND,
+    _open_compaction_provider,
+    _open_runtime_provider,
+    _resume_session,
     run_session_loop,
-    run_sub_agent_task,
     run_single_turn,
+    run_sub_agent_task,
 )
+from pbi_agent.agent.skill_discovery import format_project_skills_markdown
+from pbi_agent.agent.system_prompt import get_system_prompt
+from pbi_agent.agents.project_installer import ProjectAgentInstallResult
+from pbi_agent.auth.models import AUTH_MODE_COPILOT_ACCOUNT
+from pbi_agent.auth.providers.github_copilot import GITHUB_COPILOT_RESPONSES_URL
+from pbi_agent.commands.project_installer import ProjectCommandInstallResult
 from pbi_agent.config import (
-    ConfigError,
     DEFAULT_GOOGLE_INTERACTIONS_URL,
     DEFAULT_GOOGLE_MODEL,
     DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL,
-    ResolvedRuntime,
-    Settings,
+    ConfigError,
     ModelProfileConfig,
     ProviderConfig,
+    ResolvedRuntime,
+    Settings,
     create_model_profile_config,
     create_provider_config,
     update_user_profile_config,
 )
-from pbi_agent.agents.project_installer import ProjectAgentInstallResult
-from pbi_agent.commands.project_installer import ProjectCommandInstallResult
+from pbi_agent.display.protocol import DisplayProtocol, QueuedInput, QueuedRuntimeChange
 from pbi_agent.init_agents import DEFAULT_INIT_AGENTS, DEFAULT_INIT_COMMANDS
 from pbi_agent.models.messages import (
     CompletedResponse,
@@ -69,7 +70,6 @@ from pbi_agent.providers.google_provider import GoogleProvider
 from pbi_agent.providers.openai_provider import OpenAIProvider
 from pbi_agent.session_store import SessionStore
 from pbi_agent.tools.catalog import ToolCatalog
-from pbi_agent.display.protocol import DisplayProtocol, QueuedInput, QueuedRuntimeChange
 from pbi_agent.workspace_context import WORKSPACE_KEY_ENV
 
 
@@ -3039,11 +3039,9 @@ def test_run_session_loop_honors_per_turn_tool_history_preference(
                 user_message = user_input.text
             if user_message is not None:
                 self.history_items_at_user_requests.append(
-                    (
-                        list(self.restored_history_items)
-                        if self.restored_history_items is not None
-                        else None
-                    )
+                    list(self.restored_history_items)
+                    if self.restored_history_items is not None
+                    else None
                 )
                 self.request_messages.append(user_message)
                 if user_message == "first":

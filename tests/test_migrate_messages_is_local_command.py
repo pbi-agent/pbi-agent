@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from contextlib import closing
 import importlib.util
 import os
-from pathlib import Path
 import sqlite3
 import subprocess
 import sys
+from contextlib import closing
+from pathlib import Path
 
 import pytest
 
-from pbi_agent.session_store import SessionStore, _SCHEMA
-
+from pbi_agent.session_store import _SCHEMA, SessionStore
 
 SCRIPT = (
     Path(__file__).resolve().parents[1]

@@ -1,8 +1,8 @@
 """pbi-agent package."""
 
+import tomllib
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-import tomllib
 
 __all__ = ["__version__"]
 

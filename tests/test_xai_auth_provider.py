@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import re
 import socket
 import urllib.error
 import urllib.parse
@@ -98,7 +99,7 @@ def test_xai_callback_listener_requires_exact_port() -> None:
             del params
             return BrowserAuthCallbackOutcome(completed=True)
 
-        with pytest.raises(OSError, match="127.0.0.1:56121/callback"):
+        with pytest.raises(OSError, match=re.escape("127.0.0.1:56121/callback")):
             create_browser_auth_callback_listener(
                 callback_handler=callback_handler,
                 options=options,
@@ -365,7 +366,7 @@ def test_rejects_non_xai_oauth_and_inference_urls(monkeypatch) -> None:
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
-    with pytest.raises(RuntimeError, match="HTTPS x.ai URL"):
+    with pytest.raises(RuntimeError, match=re.escape("HTTPS x.ai URL")):
         backend.start_browser_auth(redirect_uri="http://127.0.0.1:56121/callback")
 
     session = build_auth_session(
@@ -373,7 +374,7 @@ def test_rejects_non_xai_oauth_and_inference_urls(monkeypatch) -> None:
         backend=XAI_BACKEND_ID,
         access_token="access",
     )
-    with pytest.raises(RuntimeError, match="HTTPS x.ai URL"):
+    with pytest.raises(RuntimeError, match=re.escape("HTTPS x.ai URL")):
         backend.build_request_auth(
             request_url="https://example.com/v1/responses",
             session=session,

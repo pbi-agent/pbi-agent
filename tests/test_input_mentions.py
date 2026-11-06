@@ -182,8 +182,7 @@ def test_search_input_mentions_includes_hidden_nonignored_directories(
         ["git", "init"],
         cwd=tmp_path,
         check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     commands_dir = tmp_path / ".agents" / "commands"
     commands_dir.mkdir(parents=True)
@@ -200,8 +199,7 @@ def test_search_input_mentions_skips_gitignored_directories(tmp_path: Path) -> N
         ["git", "init"],
         cwd=tmp_path,
         check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     (tmp_path / ".gitignore").write_text("node_modules/\n", encoding="utf-8")
     (tmp_path / "node_modules").mkdir()
@@ -211,8 +209,7 @@ def test_search_input_mentions_skips_gitignored_directories(tmp_path: Path) -> N
         ["git", "add", "-f", "node_modules/main.js"],
         cwd=tmp_path,
         check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
 
     results = search_input_mentions("ma", root=tmp_path, limit=10)

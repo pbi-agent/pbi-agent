@@ -12,11 +12,11 @@ from pbi_agent.agent.session.history import (
     refresh_provider_history_from_store,
     resume_session,
 )
-from pbi_agent.agent.session.subagents import build_parent_context_snapshot
 from pbi_agent.agent.session.shared import (
     COMPACTION_MARKER,
     COMPACTION_SUMMARY_PREFIX,
 )
+from pbi_agent.agent.session.subagents import build_parent_context_snapshot
 from pbi_agent.config import ResolvedRuntime, Settings
 from pbi_agent.models.messages import TokenUsage
 from pbi_agent.providers.base import Provider

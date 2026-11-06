@@ -597,7 +597,10 @@ def test_anthropic_execute_tool_calls_returns_tool_result_blocks(
         "pbi_agent.providers.anthropic_provider._execute_tool_calls",
         lambda calls, max_workers, context=None, on_result=None: (
             (
-                [on_result(call, result) for call, result in zip(calls, batch.results)]
+                [
+                    on_result(call, result)
+                    for call, result in zip(calls, batch.results, strict=False)
+                ]
                 if on_result is not None
                 else None
             )
@@ -919,7 +922,10 @@ def test_anthropic_execute_tool_calls_serializes_image_attachments(
         "pbi_agent.providers.anthropic_provider._execute_tool_calls",
         lambda calls, max_workers, context=None, on_result=None: (
             (
-                [on_result(call, result) for call, result in zip(calls, batch.results)]
+                [
+                    on_result(call, result)
+                    for call, result in zip(calls, batch.results, strict=False)
+                ]
                 if on_result is not None
                 else None
             )

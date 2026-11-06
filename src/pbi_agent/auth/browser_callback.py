@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Callable, cast
+from typing import cast
 from urllib.parse import parse_qs, urlparse
 
 _BROWSER_CALLBACK_PATH = "/auth/callback"
@@ -73,7 +74,7 @@ class _BrowserCallbackServer(ThreadingHTTPServer):
 class _BrowserCallbackHandler(BaseHTTPRequestHandler):
     server: _BrowserCallbackServer
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path != self.server.callback_path:
             self._send_html(404, _ERROR_HTML.format(message="Unknown callback path."))
@@ -103,7 +104,7 @@ class _BrowserCallbackHandler(BaseHTTPRequestHandler):
             ),
         )
 
-    def log_message(self, format: str, *args: object) -> None:  # noqa: A003
+    def log_message(self, format: str, *args: object) -> None:
         del format, args
 
     def _send_html(self, status_code: int, body: str) -> None:

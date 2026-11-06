@@ -115,7 +115,7 @@ def encode_multipart_form_data(
                 f'Content-Disposition: form-data; name="{_escape_header(name)}"\r\n'
                 "\r\n"
                 f"{value}\r\n"
-            ).encode("utf-8")
+            ).encode()
         )
     for file_item in files:
         parts.append(
@@ -126,11 +126,11 @@ def encode_multipart_form_data(
                 f'filename="{_escape_header(file_item.filename)}"\r\n'
                 f"Content-Type: {file_item.content_type}\r\n"
                 "\r\n"
-            ).encode("utf-8")
+            ).encode()
         )
         parts.append(file_item.content)
         parts.append(b"\r\n")
-    parts.append(f"--{boundary}--\r\n".encode("utf-8"))
+    parts.append(f"--{boundary}--\r\n".encode())
     return b"".join(parts), f"multipart/form-data; boundary={boundary}"
 
 

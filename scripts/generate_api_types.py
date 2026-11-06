@@ -9,7 +9,6 @@ from pbi_agent.config import Settings
 from pbi_agent.web.api.schemas.events import API_TYPE_ALIASES, EXTRA_API_TYPE_MODELS
 from pbi_agent.web.serve import create_app
 
-
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "webapp" / "src" / "api-types.generated.ts"
 

@@ -1,1 +1,2 @@
-- [x] Release v0.43.0 (branch, changelog, validate, PR, merge, verify)
+- [x] Enable Ruff I/UP/B/RUF/PLW1510 and fix findings
+- [x] Validate

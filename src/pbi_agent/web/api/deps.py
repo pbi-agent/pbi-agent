@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Annotated, Any, cast
 
-from fastapi import Depends, Header, Path as FastAPIPath, Query, Request
+from fastapi import Depends, Header, Query, Request
+from fastapi import Path as FastAPIPath
 from pydantic import BaseModel, StringConstraints
 
 from pbi_agent.web.session_manager import WebSessionManager

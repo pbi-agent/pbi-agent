@@ -97,7 +97,7 @@ def combine_mention_suggestions(
 
 
 __all__ = [
-    "combine_mention_suggestions",
     "MentionSuggestion",
     "MentionSuggestionPayload",
+    "combine_mention_suggestions",
 ]

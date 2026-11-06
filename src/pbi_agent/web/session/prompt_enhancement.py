@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
-import re
 from typing import Any, Protocol
 
 from pbi_agent.agent.conversation_context import model_context_messages

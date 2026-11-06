@@ -65,7 +65,7 @@ def _import_mcp_client_components() -> tuple[Any, Any, Any, Any, Any]:
 
 
 class _McpToolHandler:
-    def __init__(self, pool: "McpServerPool", binding: McpToolBinding) -> None:
+    def __init__(self, pool: McpServerPool, binding: McpToolBinding) -> None:
         self._pool = pool
         self._binding = binding
 
@@ -90,7 +90,7 @@ class McpServerPool:
     def bindings(self) -> list[McpToolBinding]:
         return list(self._bindings)
 
-    def __enter__(self) -> "McpServerPool":
+    def __enter__(self) -> McpServerPool:
         if not self._configs:
             return self
         self._start_loop_thread()

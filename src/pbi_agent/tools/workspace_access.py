@@ -4,10 +4,11 @@ import codecs
 import fnmatch
 import locale
 import os
+from collections.abc import Iterator
 from contextlib import contextmanager
 from io import TextIOWrapper
 from pathlib import Path
-from typing import Any, Iterator, TextIO
+from typing import Any, TextIO
 
 DEFAULT_MAX_ENTRIES = 200
 DEFAULT_MAX_LINES = 200
@@ -54,8 +55,7 @@ def relative_workspace_path(root: Path, path: Path) -> str:
 
 def iter_directory_entries(path: Path, *, recursive: bool) -> Iterator[Path]:
     if not recursive:
-        for entry in sorted(path.iterdir(), key=lambda item: item.name.casefold()):
-            yield entry
+        yield from sorted(path.iterdir(), key=lambda item: item.name.casefold())
         return
 
     for current_root, dirnames, filenames in os.walk(

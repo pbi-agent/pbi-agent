@@ -9,7 +9,6 @@ from pbi_agent.web.api.schemas.events import (
     UsageUpdatedSseEventModel,
 )
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "generate_api_types.py"
 SPEC = importlib.util.spec_from_file_location("generate_api_types", SCRIPT_PATH)

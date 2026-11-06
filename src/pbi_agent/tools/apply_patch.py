@@ -1,4 +1,4 @@
-"""Custom ``apply_patch`` tool – applies V4A patches to files.
+"""Custom ``apply_patch`` tool - applies V4A patches to files.
 
 OpenAI-compatible Responses providers advertise this as a Codex-style
 freeform custom tool constrained by the V4A Lark grammar. The execution path

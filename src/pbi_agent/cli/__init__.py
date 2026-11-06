@@ -38,9 +38,9 @@ def __getattr__(name: str):
 
 
 __all__ = [
-    "CleanHelpFormatter",
     "DEFAULT_COMMAND",
     "DEFAULT_SANDBOX_IMAGE",
+    "CleanHelpFormatter",
     "ExplicitPortAction",
     "WebServerWaitResult",
     "_argv_with_default_command",

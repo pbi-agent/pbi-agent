@@ -5,17 +5,39 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from pbi_agent.agent.sub_agent_discovery import ProjectSubAgent
+from pbi_agent.agents.project_catalog import discover_installed_project_agents
+from pbi_agent.agents.project_installer import (
+    ProjectAgentInstallResult,
+    RemoteAgentCandidateSummary,
+    install_project_agent,
+    list_remote_project_agents,
+    resolve_default_agents_source,
+)
+from pbi_agent.agents.state import (
+    agent_enabled_map,
+    set_agent_enabled,
+    set_all_agents_enabled,
+)
 from pbi_agent.auth.models import AUTH_MODE_API_KEY, StoredAuthSession
 from pbi_agent.auth.service import get_provider_auth_status
+from pbi_agent.commands.project_catalog import discover_installed_project_commands
+from pbi_agent.commands.project_installer import (
+    ProjectCommandInstallResult,
+    RemoteCommandCandidateSummary,
+    install_project_command,
+    list_remote_project_commands,
+    resolve_default_commands_source,
+)
 from pbi_agent.config import (
+    OPENAI_REASONING_MODES,
+    OPENAI_SERVICE_TIERS,
+    PROVIDER_KINDS,
     CommandConfig,
     ConfigError,
     InternalConfig,
     MaintenanceConfig,
     ModelProfileConfig,
-    OPENAI_REASONING_MODES,
-    OPENAI_SERVICE_TIERS,
-    PROVIDER_KINDS,
     ProviderConfig,
     ResolvedRuntime,
     UserProfileConfig,
@@ -39,30 +61,12 @@ from pbi_agent.config import (
     select_prompt_enhancement_profile,
     select_stt_provider,
     slugify,
+)
+from pbi_agent.config import (
     update_maintenance_config as save_maintenance_config,
+)
+from pbi_agent.config import (
     update_user_profile_config as save_user_profile_config,
-)
-from pbi_agent.agent.sub_agent_discovery import ProjectSubAgent
-from pbi_agent.agents.project_catalog import discover_installed_project_agents
-from pbi_agent.agents.state import (
-    agent_enabled_map,
-    set_agent_enabled,
-    set_all_agents_enabled,
-)
-from pbi_agent.agents.project_installer import (
-    ProjectAgentInstallResult,
-    RemoteAgentCandidateSummary,
-    install_project_agent,
-    list_remote_project_agents,
-    resolve_default_agents_source,
-)
-from pbi_agent.commands.project_catalog import discover_installed_project_commands
-from pbi_agent.commands.project_installer import (
-    ProjectCommandInstallResult,
-    RemoteCommandCandidateSummary,
-    install_project_command,
-    list_remote_project_commands,
-    resolve_default_commands_source,
 )
 from pbi_agent.providers.model_discovery import (
     discover_provider_models,
@@ -77,17 +81,17 @@ from pbi_agent.skills.project_catalog import (
     ProjectSkillManifest,
     discover_installed_project_skills,
 )
-from pbi_agent.skills.state import (
-    set_all_skills_enabled,
-    set_skill_enabled,
-    skill_enabled_map,
-)
 from pbi_agent.skills.project_installer import (
     ProjectSkillInstallResult,
     RemoteSkillCandidateSummary,
     install_project_skill,
     list_remote_project_skills,
     resolve_default_skills_source,
+)
+from pbi_agent.skills.state import (
+    set_all_skills_enabled,
+    set_skill_enabled,
+    skill_enabled_map,
 )
 from pbi_agent.web.session.serializers import (
     _config_sort_key,

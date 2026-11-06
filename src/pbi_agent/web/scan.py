@@ -35,8 +35,7 @@ def _scan_git_workspace(root: Path) -> WorkspaceScanResult | None:
         inside = subprocess.run(
             ["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"],
             check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             timeout=10,
         )
@@ -59,8 +58,7 @@ def _scan_git_workspace(root: Path) -> WorkspaceScanResult | None:
                 ".",
             ],
             check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             timeout=30,
         )
     except (OSError, subprocess.SubprocessError) as exc:

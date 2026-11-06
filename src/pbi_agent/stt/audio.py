@@ -308,4 +308,4 @@ def clamp_i16(value: float | int) -> int:
         return -32768
     if isinstance(value, float) and not math.isfinite(value):
         return 0
-    return int(round(value))
+    return round(value)

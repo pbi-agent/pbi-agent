@@ -496,7 +496,7 @@ def format_web_search_sources_item(
         return "\n".join(lines)
     count = len(sources)
     header = f"[dim]{count} source{'s' if count != 1 else ''}[/dim]  {status}"
-    lines = query_lines + [header]
+    lines = [*query_lines, header]
     if not verbose:
         for src in sources[:5]:
             title = escape_markup_text(shorten(src.get("title", ""), 60))
@@ -739,17 +739,17 @@ __all__ = [
     "compact_json",
     "escape_markup_text",
     "format_context_tooltip",
+    "format_explore_workspace_item",
     "format_generic_function_item",
     "format_patch_tool_item",
-    "format_explore_workspace_item",
     "format_read_web_url_item",
     "format_reasoning_title",
     "format_session_subtitle",
     "format_session_subtitle_parts",
     "format_shell_tool_item",
     "format_usage_summary",
-    "format_web_search_sources_item",
     "format_wait_seconds",
+    "format_web_search_sources_item",
     "resolve_reasoning_body",
     "resolve_reasoning_panel",
     "route_function_result",

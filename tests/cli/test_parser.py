@@ -5,14 +5,12 @@ import io
 import os
 import sys
 import unittest
-
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from pbi_agent import __version__
-from pbi_agent import cli
+from pbi_agent import __version__, cli
 from pbi_agent.cli import parser as cli_parser
 
 

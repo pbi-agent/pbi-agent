@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 from urllib.parse import urlparse, urlunparse
 
-from pbi_agent.auth.providers.openai_chatgpt import OPENAI_CHATGPT_RESPONSES_URL
 from pbi_agent.agent.tool_runtime import to_function_call_output_items
+from pbi_agent.auth.providers.openai_chatgpt import OPENAI_CHATGPT_RESPONSES_URL
 from pbi_agent.models.messages import CompletedResponse
 from pbi_agent.providers.chatgpt_codex_transport import (
     CHATGPT_TURN_STATE_HEADER,

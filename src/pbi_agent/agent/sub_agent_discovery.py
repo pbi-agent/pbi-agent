@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+import re
 import sys
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
-import re
-
-from pbi_agent.agents.state import agent_enabled_map
-from pbi_agent.frontmatter import FrontmatterParseError, parse_simple_frontmatter
 
 from rich.console import Console
 from rich.table import Table
+
+from pbi_agent.agents.state import agent_enabled_map
+from pbi_agent.frontmatter import FrontmatterParseError, parse_simple_frontmatter
 
 _DISCOVERY_ROOT = Path(".agents") / "agents"
 _ACTIVE_EXPLICIT_AGENT_NAMES: ContextVar[frozenset[str]] = ContextVar(

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import json
-from typing import Any
 import urllib.error
+from collections.abc import Callable
+from typing import Any
 
 from pbi_agent.agent.tool_runtime import to_function_call_output_items
 from pbi_agent.display.protocol import DisplayProtocol

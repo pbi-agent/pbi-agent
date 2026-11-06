@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -9,8 +9,8 @@ from pbi_agent.agent.reference_resolution import (
     resolve_skill_references,
     resolve_sub_agent_references,
 )
-from pbi_agent.agent.sub_agent_discovery import discover_project_sub_agents
 from pbi_agent.agent.skill_discovery import discover_project_skills
+from pbi_agent.agent.sub_agent_discovery import discover_project_sub_agents
 from pbi_agent.tools.availability import (
     default_excluded_tool_names,
     effective_excluded_tool_names,
@@ -74,7 +74,7 @@ def _load_file(name: str, cwd: Path | None = None) -> str | None:
 
 
 def _active_tool_excluded_names(
-    settings: "Settings | None",
+    settings: Settings | None,
     excluded_tools: Iterable[str] | None,
 ) -> set[str]:
     if settings is None:
@@ -84,7 +84,7 @@ def _active_tool_excluded_names(
 
 def _tool_usage_rules(
     *,
-    settings: "Settings | None" = None,
+    settings: Settings | None = None,
     excluded_tools: Iterable[str] | None = None,
 ) -> str:
     excluded_names = _active_tool_excluded_names(settings, excluded_tools)
@@ -158,7 +158,7 @@ def load_workspace_memory(cwd: Path | None = None) -> str | None:
 
 def _resolve_base_prompt(
     *,
-    settings: "Settings | None" = None,
+    settings: Settings | None = None,
     excluded_tools: Iterable[str] | None = None,
     cwd: Path | None = None,
 ) -> str:
@@ -181,7 +181,7 @@ def _append_project_rules(base_prompt: str, cwd: Path | None = None) -> str:
     return f"{base_prompt}\n\n<project_rules>\n{rules}\n</project_rules>"
 
 
-def _format_user_profile(profile: "UserProfileConfig") -> str | None:
+def _format_user_profile(profile: UserProfileConfig) -> str | None:
     lines: list[str] = []
     if profile.preferred_name:
         lines.append(f"Preferred name: {profile.preferred_name}")
@@ -347,7 +347,7 @@ def _append_active_command(
 
 def _append_component_commands(
     base_prompt: str,
-    commands: Iterable["CommandConfig"] | None = None,
+    commands: Iterable[CommandConfig] | None = None,
 ) -> str:
     if commands is None:
         return base_prompt
@@ -377,7 +377,7 @@ def _append_component_commands(
 def get_system_prompt(
     active_command_instructions: str | None = None,
     *,
-    settings: "Settings | None" = None,
+    settings: Settings | None = None,
     excluded_tools: Iterable[str] | None = None,
     cwd: Path | None = None,
     explicit_skill_names: set[str] | None = None,
@@ -421,7 +421,7 @@ def get_system_prompt(
 def get_sub_agent_system_prompt(
     agent_prompt_override: str | None = None,
     *,
-    settings: "Settings | None" = None,
+    settings: Settings | None = None,
     excluded_tools: Iterable[str] | None = None,
     cwd: Path | None = None,
     explicit_skill_names: set[str] | None = None,
@@ -429,7 +429,7 @@ def get_sub_agent_system_prompt(
     skill_source_label: str = "Sub-agent frontmatter",
     visible_agent_names: tuple[str, ...] | None = None,
     agent_source_label: str = "Sub-agent frontmatter",
-    component_commands: Iterable["CommandConfig"] | None = None,
+    component_commands: Iterable[CommandConfig] | None = None,
     workspace_directory_key: str | None = None,
 ) -> str:
     if agent_prompt_override is not None:

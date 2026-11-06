@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import shutil
 import sys
-
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory

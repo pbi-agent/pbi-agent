@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Callable
 import re
-
+from collections.abc import Callable
+from dataclasses import dataclass
 
 TRAILING_WHITESPACE_REPLACE_WARNING = (
     "used fuzzy old_string match ignoring trailing whitespace"

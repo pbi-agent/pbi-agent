@@ -78,7 +78,7 @@ class HookRuntime:
         *,
         turn_id: str | None = None,
         tracer: RunTracer | None = None,
-    ) -> "HookRuntime":
+    ) -> HookRuntime:
         return HookRuntime(
             workspace=self.workspace,
             settings=self.settings,

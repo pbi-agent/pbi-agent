@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from pbi_agent.providers.base import Provider
-from pbi_agent.session_store import SessionStore
-from pbi_agent.tools.types import ParentContextSnapshot
-
 from pbi_agent.agent.session.compaction import (
     active_context_messages as _active_context_messages,
 )
 from pbi_agent.agent.session.shared import log as _log
+from pbi_agent.providers.base import Provider
+from pbi_agent.session_store import SessionStore
+from pbi_agent.tools.types import ParentContextSnapshot
 
 
 def _build_parent_context_snapshot(

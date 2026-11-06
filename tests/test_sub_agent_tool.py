@@ -5,12 +5,12 @@ from unittest.mock import ANY
 import pytest
 
 from pbi_agent.agent.session import run_sub_agent_task
+from pbi_agent.config import ResolvedRuntime, Settings
 from pbi_agent.models.messages import CompletedResponse, TokenUsage
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools import sub_agent as sub_agent_tool
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot, ToolContext
-from pbi_agent.config import ResolvedRuntime, Settings
 
 
 class _ChildDisplay:

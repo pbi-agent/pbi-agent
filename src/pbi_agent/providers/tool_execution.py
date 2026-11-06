@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pbi_agent.agent.tool_display import (
     build_tool_result_callback,
@@ -12,6 +12,8 @@ from pbi_agent.agent.tool_display import (
 )
 from pbi_agent.agent.tool_runtime import (
     ToolExecutionBatch,
+)
+from pbi_agent.agent.tool_runtime import (
     execute_tool_calls as _execute_tool_calls,
 )
 from pbi_agent.config import Settings
@@ -44,11 +46,11 @@ def execute_provider_tool_calls(
     serialize_result: ToolResultSerializer,
     sub_agent_depth: int = 0,
     parent_context: ParentContextSnapshot | None = None,
-    tracer: "RunTracer | None" = None,
+    tracer: RunTracer | None = None,
     tool_availability_overridden: bool = False,
-    workspace_root: "Path | None" = None,
+    workspace_root: Path | None = None,
     workspace_directory_key: str | None = None,
-    hook_runtime: "HookRuntime | None" = None,
+    hook_runtime: HookRuntime | None = None,
     session_id: str | None = None,
     turn_id: str | None = None,
     current_model: str | None = None,

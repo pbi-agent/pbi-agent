@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
+from pbi_agent.auth.browser_callback import BrowserAuthCallbackOptions
 from pbi_agent.auth.models import (
     AuthFlowPollResult,
     BrowserAuthChallenge,
@@ -11,7 +12,6 @@ from pbi_agent.auth.models import (
     RequestAuthConfig,
     StoredAuthSession,
 )
-from pbi_agent.auth.browser_callback import BrowserAuthCallbackOptions
 
 
 class AuthProviderBackend(ABC):

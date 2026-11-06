@@ -8,7 +8,7 @@ import secrets
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from pbi_agent.auth.models import (
@@ -385,7 +385,7 @@ def _organization_account_id(claims: dict[str, Any]) -> str | None:
 
 
 def _expires_at_from_duration(expires_in: int) -> int:
-    current_timestamp = int(datetime.now(timezone.utc).timestamp())
+    current_timestamp = int(datetime.now(UTC).timestamp())
     return current_timestamp + max(expires_in, 0)
 
 
@@ -408,7 +408,7 @@ def _oauth_scope() -> str:
 
 
 def utc_now_timestamp() -> int:
-    return int(datetime.now(timezone.utc).timestamp())
+    return int(datetime.now(UTC).timestamp())
 
 
 def _generate_pkce_code_verifier() -> str:

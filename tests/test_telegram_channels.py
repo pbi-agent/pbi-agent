@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import queue
+import threading
 from pathlib import Path
 from types import SimpleNamespace
-import threading
 
 from fastapi.testclient import TestClient
 
 from pbi_agent.channels.telegram import (
     TelegramBotClient,
-    TelegramInboundMessage,
     TelegramChannelRunner,
+    TelegramInboundMessage,
     parse_telegram_update,
 )
 from pbi_agent.channels.types import TelegramChannelConfig

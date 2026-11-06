@@ -45,8 +45,7 @@ def gitignored_path_set(root: Path, paths: Iterable[str]) -> set[str] | None:
                 "--stdin",
             ],
             input=stdin,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             check=False,
             timeout=30,
         )

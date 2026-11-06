@@ -7,14 +7,14 @@ import signal
 import threading
 from collections.abc import Callable
 
-from fastapi import FastAPI
-from rich.console import Console
 import uvicorn
 import uvicorn.server
+from fastapi import FastAPI
+from rich.console import Console
 
 from pbi_agent.branding import startup_panel
-from pbi_agent.maintenance import render_update_notice
 from pbi_agent.config import ConfigError, ResolvedRuntime, Settings, resolve_web_runtime
+from pbi_agent.maintenance import render_update_notice
 from pbi_agent.web.app_factory import create_app
 from pbi_agent.web.defaults import DEFAULT_WEB_PORT
 from pbi_agent.web.session_manager import WebManagerStartupError

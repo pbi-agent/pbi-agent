@@ -130,15 +130,13 @@ def spa_index_response(title: str) -> Response:
     if index_path.exists():
         return FileResponse(index_path)
     return HTMLResponse(
-        (
-            "<!doctype html><html><head><meta charset='utf-8'>"
-            f"<title>{title}</title>"
-            "<meta name='viewport' content='width=device-width, initial-scale=1'>"
-            "<style>body{font-family:system-ui,sans-serif;background:#0b1020;"
-            "color:#eef2ff;padding:40px}code{background:#111827;padding:2px 6px;"
-            "border-radius:6px}</style></head><body>"
-            "<h1>pbi-agent web assets are missing.</h1>"
-            "<p>Run <code>bun install</code> then <code>bun run web:build</code> "
-            "to build the bundled frontend.</p></body></html>"
-        )
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        f"<title>{title}</title>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        "<style>body{font-family:system-ui,sans-serif;background:#0b1020;"
+        "color:#eef2ff;padding:40px}code{background:#111827;padding:2px 6px;"
+        "border-radius:6px}</style></head><body>"
+        "<h1>pbi-agent web assets are missing.</h1>"
+        "<p>Run <code>bun install</code> then <code>bun run web:build</code> "
+        "to build the bundled frontend.</p></body></html>"
     )

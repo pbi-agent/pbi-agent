@@ -69,7 +69,7 @@ COMMANDS: tuple[SlashCommand, ...] = (
 SlashCommandTuple = tuple[str, str, str, str]
 _MIN_SLASH_FUZZY_SCORE = 30
 _MIN_DESC_SEARCH_LEN = 2
-_T = TypeVar("_T")
+T = TypeVar("T")
 
 
 def list_slash_commands() -> list[SlashCommand]:
@@ -116,16 +116,16 @@ def _score_command(search: str, cmd: str, desc: str, keywords: str = "") -> floa
     return best if best >= _MIN_SLASH_FUZZY_SCORE else 0.0
 
 
-def _rank_commands(
+def _rank_commands[T](
     search: str,
-    items: Sequence[tuple[_T, SlashCommandTuple]],
+    items: Sequence[tuple[T, SlashCommandTuple]],
     *,
     limit: int,
-) -> list[_T]:
+) -> list[T]:
     if not search:
         return [item for item, _parts in items[:limit]]
 
-    scored: list[tuple[float, int, _T]] = []
+    scored: list[tuple[float, int, T]] = []
     for index, (item, (cmd, desc, keywords, _kind)) in enumerate(items):
         score = _score_command(search, cmd, desc, keywords)
         if score > 0:
