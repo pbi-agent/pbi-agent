@@ -38,35 +38,23 @@ AGENT_INSTALL_ROOT = Path(".agents/agents")
 
 AGENTS_TEMPLATE = """# AGENTS.md
 
-Project context and instructions for coding agents. Keep it concise, accurate,
-and updated when workflows change.
+## Memory
 
-## Task Memory
+- `MEMORY.md` sections: `Metadata`, `Long-Term Memory`, `Detailed Task Events`.
+- Use preloaded `<workspace_memory>`; read the file only if absent or before editing it.
+- `Long-Term Memory`: compact durable facts, edited in place, no duplicates.
+- `Detailed Task Events`: one `## YYYY-MM-DD` heading per day; after each task append one short entry (change, validation, next context).
+- New day: promote durable outcomes/open follow-ups from prior days, then delete their dated sections.
 
-- `MEMORY.md` holds durable memory and recent task history in exactly three sections: `Metadata`, `Long-Term Memory`, `Detailed Task Events`.
-- Start substantive work from the preloaded `<workspace_memory>` section. Read `MEMORY.md` with tools only if that section is absent, before editing/compacting it, or when asked.
-- `Long-Term Memory`: compact bullets edited in place; only durable facts (conventions, decisions, validation patterns, open follow-ups, lasting artifacts). Merge instead of duplicating.
-- `Detailed Task Events`: append-only per day under one `## YYYY-MM-DD` heading. After each implementation, add one short entry: what changed, validation, next context if needed.
-- On the first substantive task of a new day, compact prior days: promote every durable outcome and unresolved follow-up to `Long-Term Memory`, then delete the dated sections.
-- Stay token-efficient: short bullets, no command noise, no obsolete troubleshooting.
+## TODO
 
-## Session TODO
-
-- `TODO.md` tracks the current session only; create or reset it before substantive work.
-- Use task-list bullets only: `- [ ]` pending, `- [>]` in progress, `- [x]` done, `- [!]` blocked, `- [-]` dropped.
-- Update `TODO.md` as work progresses and when scope changes.
-- If the existing list is complete, reset it; if unfinished, append new `- [ ]` tasks.
-
-## Command Output
-
-- Protect context: byte-cap any command with unknown or potentially large output.
+- `TODO.md` is session-only; reset if complete, append if unfinished.
+- Bullets: `- [ ]` pending, `- [>]` in progress, `- [x]` done, `- [!]` blocked, `- [-]` dropped. Keep it updated.
 
 ## Communication
 
-- Before editing, state the approach only for non-trivial tasks.
-- During complex work, keep updates very short: findings, changes, remaining risk.
-- After work, summarize briefly: what changed, files touched, validation run (or why skipped), remaining risk, next steps.
-- Keep output low-verbosity; do not explain obvious edits.
+- Be concise; state the approach before non-trivial edits.
+- After work, summarize: what changed, files touched, validation (or why skipped), remaining risk, next steps.
 """
 
 
