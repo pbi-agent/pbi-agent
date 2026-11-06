@@ -1,2 +1,1 @@
-- [x] Enable Ruff I/UP/B/RUF/PLW1510 and fix findings
-- [x] Validate
+- [x] Compress MEMORY.md and compact 2026-10-28 events
