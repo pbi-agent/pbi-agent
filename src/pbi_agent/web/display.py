@@ -1388,27 +1388,30 @@ class WebDisplay(_EventDisplayBase):
         self._bind_session_callback = bind_session
         self._accept_checkpoint_follow_up = accept_checkpoint_follow_up
         self._input_enabled_state: bool | None = None
-        self._input_state_lock = threading.Lock()
+        self._input_state_lock = threading.RLock()
         self._input_block_prior_states: list[tuple[bool | None, int]] = []
         self._input_activity_sequence = 0
         self._input_delivery_pending = False
         self.background_task_manager: Any | None = None
 
     def _publish_input_state(self, enabled: bool) -> None:
+        # Publish while holding the lock so concurrent enable/disable
+        # transitions reach the snapshot in the same order as the state change.
         with self._input_state_lock:
-            if enabled and self._input_block_prior_states:
+            if enabled and (
+                self._input_block_prior_states or not self._input_queue.empty()
+            ):
                 return
             if self._input_enabled_state is enabled:
                 return
             previous_state = self._input_enabled_state
             self._input_enabled_state = enabled
-        try:
-            self._publish("input_state", {"enabled": enabled})
-        except Exception:
-            with self._input_state_lock:
+            try:
+                self._publish("input_state", {"enabled": enabled})
+            except Exception:
                 if self._input_enabled_state is enabled:
                     self._input_enabled_state = previous_state
-            raise
+                raise
         if enabled:
             with self._input_state_lock:
                 if self._input_enabled_state is True:

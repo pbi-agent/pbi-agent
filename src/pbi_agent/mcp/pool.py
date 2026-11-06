@@ -281,7 +281,7 @@ class McpServerPool:
             http_client = await stack.enter_async_context(
                 create_mcp_http_client(headers=config.headers or None)
             )
-            read_stream, write_stream, _ = await stack.enter_async_context(
+            read_stream, write_stream = await stack.enter_async_context(
                 streamable_http_client(config.url or "", http_client=http_client)
             )
         else:

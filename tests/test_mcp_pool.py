@@ -8,7 +8,7 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-import httpx
+import httpx2 as httpx
 import pytest
 from mcp.shared._httpx_utils import create_mcp_http_client
 
@@ -119,7 +119,7 @@ async def _fake_stdio_client(_params: object):
 @asynccontextmanager
 async def _fake_streamable_http_client(_url: str, *, http_client: httpx.AsyncClient):
     assert not http_client.is_closed
-    yield object(), object(), lambda: None
+    yield object(), object()
 
 
 def _fake_mcp_imports() -> tuple[object, object, object, object, object]:
@@ -378,6 +378,11 @@ def test_mcp_http_real_sdk_requests_and_cleanup(
                 "notifications/initialized",
                 "tools/list",
                 "tools/call",
+                *(
+                    ["notifications/cancelled"]
+                    if i == 0 and failure == "timeout:tools/call"
+                    else []
+                ),
             ]
             assert server_requests[-1].method == "DELETE"
             assert server_requests[-1].headers["mcp-session-id"] == "test-session"
