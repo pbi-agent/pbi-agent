@@ -9,6 +9,8 @@ import {
 } from "../ui/collapsible";
 import { CopyShortcut } from "../shared/CopyShortcut";
 import { MarkdownContent } from "../shared/MarkdownContent";
+import { parseReplyMessage } from "../../lib/replySnippets";
+import { ReplySnippetCard } from "./ReplySnippetCard";
 import { Separator } from "../ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { isApplyPatchToolMetadata } from "./GitDiffResult";
@@ -134,6 +136,8 @@ function UserMessageContent({
   skillNames: Set<string>;
   collapsible: boolean;
 }): JSX.Element {
+  const parsedReply = parseReplyMessage(content);
+  content = parsedReply.text;
   const hasText = content.trim().length > 0;
   const canCollapse = collapsible && hasText && isLongUserContent(content);
   const [expanded, setExpanded] = useState(false);
@@ -163,6 +167,13 @@ function UserMessageContent({
               </TooltipTrigger>
               <TooltipContent>{attachment.name}</TooltipContent>
             </Tooltip>
+          ))}
+        </div>
+      ) : null}
+      {parsedReply.snippets.length > 0 ? (
+        <div className="timeline-entry__reply-snippets">
+          {parsedReply.snippets.map((snippet, index) => (
+            <ReplySnippetCard key={index} quote={snippet.quote} comment={snippet.comment} />
           ))}
         </div>
       ) : null}

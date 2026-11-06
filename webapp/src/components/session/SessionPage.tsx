@@ -70,6 +70,7 @@ import { SessionTimeline } from "./SessionTimeline";
 import { UsageBar } from "./UsageBar";
 import { UserQuestionsPanel } from "./UserQuestionsPanel";
 import { Composer, type ComposerHandle } from "./Composer";
+import { ReplySelectionPopover } from "./ReplySelectionPopover";
 import { WorkspaceFileTreePanel } from "./WorkspaceFileTreePanel";
 import {
   WORKSPACE_FILE_TREE_REFETCH_INTERVAL_MS,
@@ -1352,6 +1353,11 @@ export function SessionPage({
         />
       ) : (
         <>
+          {!isSubAgentRoute ? (
+            <ReplySelectionPopover
+              onAddReply={(quote, comment) => composerRef.current?.addReplySnippet(quote, comment)}
+            />
+          ) : null}
           <SessionTimeline
             items={displayedItems}
             itemsVersion={displayedItemsVersion}
