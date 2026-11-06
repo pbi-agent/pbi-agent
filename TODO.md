@@ -1,2 +1,1 @@
-- [x] CI Bun fix PR #365
-- [x] Release v0.42.0 incl #364
+- [x] Release v0.43.0 (branch, changelog, validate, PR, merge, verify)
