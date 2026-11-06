@@ -5,7 +5,6 @@ import type { BackgroundTask, BackgroundTaskOutput } from "../../types";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
-import { ScrollArea } from "../ui/scroll-area";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 
 type Props = {
@@ -121,7 +120,7 @@ export function BackgroundTasksPanel({ sessionId, tasks, onKill, onClose }: Prop
           </Button>
         </div>
       </header>
-      <ScrollArea className="min-h-0 flex-1">
+      <div className="background-tasks-panel__scroll">
         <div className="background-tasks-panel__list">
           {tasks.length === 0 ? (
             <Empty>
@@ -169,7 +168,9 @@ export function BackgroundTasksPanel({ sessionId, tasks, onKill, onClose }: Prop
                             {task.task_id} · {formatElapsed(elapsedFor(task))}
                           </span>
                         </span>
-                        <code className="background-tasks-panel__command">{task.command}</code>
+                        <code className="background-tasks-panel__command" title={task.command}>
+                          {task.command}
+                        </code>
                       </span>
                     </button>
                   </CollapsibleTrigger>
@@ -193,6 +194,11 @@ export function BackgroundTasksPanel({ sessionId, tasks, onKill, onClose }: Prop
                     <span className="composer__follow-up-error">{errors[task.task_id]}</span>
                   ) : output ? (
                     <>
+                      <span className="background-tasks-panel__label">Input</span>
+                      <pre className="background-tasks-panel__pre" data-stream="input">
+                        {task.command}
+                      </pre>
+                      <span className="background-tasks-panel__label">Output</span>
                       <pre className="background-tasks-panel__pre">
                         {output.stdout || "(no stdout)"}
                       </pre>
@@ -210,7 +216,7 @@ export function BackgroundTasksPanel({ sessionId, tasks, onKill, onClose }: Prop
             );
           })}
         </div>
-      </ScrollArea>
+      </div>
     </aside>
   );
 }
