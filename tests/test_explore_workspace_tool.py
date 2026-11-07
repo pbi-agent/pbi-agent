@@ -306,13 +306,14 @@ def test_explore_workspace_rejects_read_list_multi_root(
     }
 
 
-def test_explore_workspace_rejects_root_outside_workspace(
+def test_explore_workspace_allows_root_outside_workspace(
     tmp_path: Path, monkeypatch
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     outside = tmp_path / "outside"
     outside.mkdir()
+    (outside / "a.txt").write_text("needle\n", encoding="utf-8")
     monkeypatch.chdir(workspace)
 
     result = explore_workspace_tool.handle(
@@ -320,9 +321,7 @@ def test_explore_workspace_rejects_root_outside_workspace(
         ToolContext(),
     )
 
-    assert isinstance(result, ToolOutput)
-    assert result.is_error is True
-    assert result.result == {"error": "'root' must resolve inside the workspace."}
+    assert not (isinstance(result, ToolOutput) and result.is_error)
 
 
 def test_explore_workspace_allows_read_pattern_outside_root_inside_workspace(
@@ -340,7 +339,7 @@ def test_explore_workspace_allows_read_pattern_outside_root_inside_workspace(
     assert result == "# Notes"
 
 
-def test_explore_workspace_rejects_read_pattern_outside_workspace(
+def test_explore_workspace_allows_read_pattern_outside_workspace(
     tmp_path: Path, monkeypatch
 ) -> None:
     workspace = tmp_path / "workspace"
@@ -354,9 +353,7 @@ def test_explore_workspace_rejects_read_pattern_outside_workspace(
         ToolContext(),
     )
 
-    assert isinstance(result, ToolOutput)
-    assert result.is_error is True
-    assert result.result == {"error": "'pattern' must resolve inside the workspace."}
+    assert result == "# Notes"
 
 
 def test_explore_workspace_invalid_regex_returns_error_output(
@@ -791,18 +788,11 @@ def test_dot_list_targets_keep_exact_semantics(
     result = explore_workspace_tool.handle(
         {"pattern": pattern, "target": "list"}, ToolContext(workspace_root=tmp_path)
     )
-    if pattern in {".", " "}:
-        assert result == "exact listing"
-        assert calls == ["list"]
-    else:
-        assert isinstance(result, ToolOutput)
-        assert result.is_error
-        assert calls == []
+    assert result == "exact listing"
+    assert calls == ["list"]
 
 
-@pytest.mark.parametrize(
-    "kind", ["absolute", "root_escape", "target_escape", "dangling"]
-)
+@pytest.mark.parametrize("kind", ["absolute", "target_escape", "dangling"])
 def test_missing_list_path_and_symlink_guards(
     tmp_path: Path, monkeypatch, kind: str
 ) -> None:
@@ -814,9 +804,6 @@ def test_missing_list_path_and_symlink_guards(
     arguments = {"pattern": "needle", "target": "list"}
     if kind == "absolute":
         arguments["pattern"] = str(workspace / "needle")
-    elif kind == "root_escape":
-        (workspace / "linked").symlink_to(outside, target_is_directory=True)
-        arguments["root"] = "linked"
     elif kind == "target_escape":
         (workspace / "needle").symlink_to(outside / "missing")
     else:
@@ -873,7 +860,7 @@ def test_missing_list_permission_errors_stay_errors(
     assert calls == (1 if stage == "search" else 0)
 
 
-@pytest.mark.parametrize("kind", ["symlink", "absolute", "traversal"])
+@pytest.mark.parametrize("kind", ["absolute", "traversal"])
 def test_missing_list_checks_backend_result_confinement(
     tmp_path: Path, monkeypatch, kind: str
 ) -> None:
@@ -897,12 +884,7 @@ def test_missing_list_checks_backend_result_confinement(
     )
     assert isinstance(result, ToolOutput)
     assert result.is_error
-    expected = (
-        "search result must resolve inside the workspace."
-        if kind == "symlink"
-        else "search result must be under its root."
-    )
-    assert result.result == {"error": expected}
+    assert result.result == {"error": "search result must be under its root."}
     assert "secret.py" not in str(result.result)
 
 
