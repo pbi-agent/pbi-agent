@@ -50,7 +50,10 @@ _ROOT_SCHEMA: dict[str, Any] = {
 SPEC = ToolSpec(
     name="explore_workspace",
     description=(
-        "Workspace content/path search, text read, or one-level list; compact output. "
+        "Workspace content/path search, text read, image read, or one-level list; "
+        "compact output. "
+        'target="read" on an image file (png/jpg/jpeg/webp/heic/heif) attaches '
+        "the image to your context so you can see it. "
         'Partial filenames: target="path". Existing exact file/directory: target="list".'
     ),
     prompt_usage=(
@@ -58,6 +61,8 @@ SPEC = ToolSpec(
         'content `{pattern:"UserService",regex:false}`, '
         'multi-root `{pattern:"UserService",root:["tests","src/pbi_agent"]}`, '
         'read `{pattern:"src/app.py",target:"read",start_line:20,limit:80}`, '
+        "view image (attached so you can see it) "
+        '`{pattern:"docs/screenshot.png",target:"read"}`, '
         "list existing exact path "
         '`{"pattern": ".", "root": "tests", "target": "list"}` versus '
         "find partial filename "
@@ -69,7 +74,10 @@ SPEC = ToolSpec(
         "properties": {
             "pattern": {
                 "type": "string",
-                "description": "Search pattern; read/list: exact path.",
+                "description": (
+                    "Search pattern; read/list: exact path (read of an image "
+                    "path returns the image itself)."
+                ),
             },
             "root": {
                 **_ROOT_SCHEMA,

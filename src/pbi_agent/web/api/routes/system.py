@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, File, Query, Response, UploadFile
 from fastapi.responses import FileResponse
 
+from pbi_agent.media import detect_image_mime_type
 from pbi_agent.web.agent_mentions import AgentMentionItem
 from pbi_agent.web.api.deps import (
     LimitQuery,
@@ -802,6 +803,32 @@ def preview_workspace_file(
         content=content,
         size_bytes=len(raw),
     )
+
+
+@router.get("/files/image")
+def get_workspace_image(
+    manager: SessionManagerDep,
+    path: Annotated[str, Query(min_length=1, max_length=4096)],
+) -> FileResponse:
+    clean_path = path.strip().replace("\\", "/")
+    try:
+        relative = Path(clean_path)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError
+        target = (manager.workspace_root / relative).resolve()
+        target.relative_to(manager.workspace_root.resolve())
+    except (OSError, ValueError) as exc:
+        raise not_found("Image not found.") from exc
+    if not target.is_file():
+        raise not_found("Image not found.")
+    try:
+        with target.open("rb") as handle:
+            mime_type = detect_image_mime_type(handle.read(64))
+    except OSError as exc:
+        raise not_found("Image not found.") from exc
+    if mime_type is None:
+        raise not_found("Image not found.")
+    return FileResponse(target, media_type=mime_type)
 
 
 @router.get("/skills/search", response_model=SkillMentionSearchResponse)
