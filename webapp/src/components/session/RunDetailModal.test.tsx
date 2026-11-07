@@ -111,7 +111,7 @@ describe("RunDetailModal", () => {
     const status = await screen.findByText("completed");
     expect(status).toHaveAttribute("data-variant", "completed");
     expect(status).toHaveAttribute("data-size", "meta");
-    expect(status).toHaveClass("run-header__status");
+    expect(status).toHaveAttribute("data-run-status");
     expect(screen.getByText("Events (2)")).toBeInTheDocument();
     expect(screen.getAllByText("gpt-5.4")).toHaveLength(1);
   });
@@ -164,7 +164,7 @@ describe("RunDetailModal", () => {
     const okBadge = await screen.findByText("ok");
     expect(okBadge).toHaveAttribute("data-variant", "completed");
     expect(okBadge).toHaveAttribute("data-size", "meta");
-    expect(okBadge).toHaveClass("event-row__status");
+    expect(okBadge).toHaveAttribute("data-event-status");
     expect(okBadge.querySelector('[data-slot="badge-dot"]')).toBeInTheDocument();
     expect(screen.queryByText("200")).not.toBeInTheDocument();
   });
@@ -215,8 +215,8 @@ describe("RunDetailModal", () => {
     const copyInput = screen.getByRole("button", { name: "Copy Tool Input" });
     const copyOutput = screen.getByRole("button", { name: "Copy Tool Output" });
 
-    expect(copyInput).toHaveClass("payload-section__copy");
-    expect(copyOutput).toHaveClass("payload-section__copy");
+    expect(copyInput).toHaveAttribute("data-copy-status", "idle");
+    expect(copyOutput).toHaveAttribute("data-copy-status", "idle");
 
     await user.click(copyInput);
     await user.click(copyOutput);

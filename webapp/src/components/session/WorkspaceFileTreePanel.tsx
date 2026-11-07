@@ -27,7 +27,9 @@ import {
 } from "./workspaceFileTreeQueries";
 import { GitDiffResult, type GitDiffLayout } from "./GitDiffResult";
 import { MarkdownContent } from "../shared/MarkdownContent";
+import { cn } from "../../lib/utils";
 import { Alert, AlertDescription } from "../ui/alert";
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { CodeBlock } from "../ui/code-block";
 import {
@@ -165,7 +167,7 @@ export function WorkspaceFileTreePanel({
     selectedTreeScrollFrameRef.current = requestTreeScrollFrame(() => {
       selectedTreeScrollFrameRef.current = null;
       const selectedRow = treeContainerRef.current?.querySelector<HTMLElement>(
-        '.workspace-tree__row--file[data-selected="true"]',
+        '[data-tree-row="file"][data-selected="true"]',
       );
       selectedRow?.scrollIntoView?.({ block: "start", inline: "nearest" });
     });
@@ -231,27 +233,27 @@ export function WorkspaceFileTreePanel({
   return (
     <aside
       id="workspace-file-tree-panel"
-      className="workspace-file-panel"
+      className="flex size-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"
       aria-label="Workspace explorer"
     >
-      <header className="workspace-file-panel__header">
-        <div className="workspace-file-panel__heading">
-          <h2>Files</h2>
-          <p>
+      <header data-panel-header="" className="flex min-h-12 shrink-0 flex-wrap items-center gap-3 border-b border-border bg-sidebar px-3 py-2">
+        <div className="flex min-w-0 shrink-0 flex-col">
+          <h2 className="truncate text-sm font-semibold">Files</h2>
+          <p className="truncate text-xs text-muted-foreground">
             {treeQuery.data?.file_count ?? 0} files
             {treeQuery.data?.truncated ? " · truncated" : ""}
             {treeQuery.data?.is_stale ? " · refreshing" : ""}
           </p>
         </div>
         <SidebarSearchField
-          className="workspace-file-panel__header-search"
+          className="min-w-0 flex-1 basis-64"
           value={searchTerm}
           onChange={setSearchTerm}
           placeholder="Search files"
           ariaLabel="Search files"
           clearLabel="Clear file search"
         />
-        <div className="workspace-file-panel__filters">
+        <div className="flex shrink-0 items-center">
           <Toggle
             type="button"
             pressed={effectiveShowChangedOnly}
@@ -260,7 +262,8 @@ export function WorkspaceFileTreePanel({
               setCollapsedChangedPaths(new Set());
             }}
             disabled={gitStatusFilterDisabled}
-            className="workspace-file-panel__changed-toggle"
+            variant="outline"
+            size="sm"
             aria-label={`Show changed files only (${changedFileCount} changed)`}
             title={
               gitStatusFilterDisabled
@@ -269,15 +272,14 @@ export function WorkspaceFileTreePanel({
             }
           >
             <span>Changed</span>
-            <span className="workspace-file-panel__changed-count">{changedFileCount}</span>
+            <Badge variant="secondary">{changedFileCount}</Badge>
           </Toggle>
         </div>
-        <div className="workspace-file-panel__actions">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="workspace-file-panel__close app-close-icon-button"
             aria-label="Close workspace explorer panel"
             onClick={onClose}
           >
@@ -286,17 +288,19 @@ export function WorkspaceFileTreePanel({
         </div>
       </header>
       {treeQuery.error || treeQuery.data?.error ? (
-        <Alert variant="destructive" className="workspace-file-panel__alert">
-          <AlertDescription>
-            {treeQuery.data?.error
-              ?? treeQuery.error?.message
-              ?? "Unable to load file tree."}
-          </AlertDescription>
-        </Alert>
+        <div className="shrink-0 p-3">
+          <Alert variant="destructive">
+            <AlertDescription>
+              {treeQuery.data?.error
+                ?? treeQuery.error?.message
+                ?? "Unable to load file tree."}
+            </AlertDescription>
+          </Alert>
+        </div>
       ) : null}
       <ResizablePanelGroup
         direction="vertical"
-        className="workspace-file-panel__body"
+        className="min-h-0 flex-1"
       >
         <ResizablePanel
           id="workspace-file-tree-list"
@@ -306,22 +310,22 @@ export function WorkspaceFileTreePanel({
               : `${TREE_WITH_PREVIEW_DEFAULT_PERCENT}%`
           }
           minSize="10rem"
-          className="workspace-file-panel__tree-panel"
+          className="flex min-h-0 flex-col"
         >
-          <div className="workspace-file-panel__tree" ref={treeContainerRef}>
-            <ScrollArea className="workspace-file-panel__tree-scroll" type="auto">
+          <div className="flex size-full min-h-0 flex-col overflow-hidden" ref={treeContainerRef}>
+            <ScrollArea className="min-h-0 flex-1" type="auto">
               {treeQuery.isPending || showInitialScan ? (
-                <div className="workspace-file-panel__skeleton" aria-label="Loading files">
+                <div className="flex flex-col gap-2 p-3" aria-label="Loading files">
                   <Skeleton />
                   <Skeleton />
                   <Skeleton />
                 </div>
               ) : tree.length === 0 ? (
-                <p className="workspace-file-panel__empty">No files found.</p>
+                <p className="p-3 text-sm text-muted-foreground">No files found.</p>
               ) : visibleTree.length === 0 ? (
-                <p className="workspace-file-panel__empty">{visibleEmptyMessage}</p>
+                <p className="p-3 text-sm text-muted-foreground">{visibleEmptyMessage}</p>
               ) : (
-                <ul className="workspace-tree" role="tree" aria-label="Workspace files">
+                <ul className="flex flex-col p-2" role="tree" aria-label="Workspace files">
                   {visibleTree.map((node) => (
                     <TreeNodeView
                       key={node.path}
@@ -353,12 +357,12 @@ export function WorkspaceFileTreePanel({
               id="workspace-file-preview"
               defaultSize={`${PREVIEW_AUTO_MAX_PERCENT}%`}
               minSize="8rem"
-              className="workspace-file-panel__preview-panel"
+              className="flex min-h-0 flex-col"
             >
-              <section className="workspace-file-panel__preview" aria-label="File preview">
-                <div className="workspace-file-panel__preview-heading">
+              <section className="flex size-full min-h-0 min-w-0 flex-col gap-2 overflow-hidden p-3" aria-label="File preview">
+                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 font-mono text-xs break-all text-muted-foreground">
                   <span>{selectedPath}</span>
-                  <div className="workspace-file-panel__preview-actions">
+                  <div className="flex shrink-0 items-center gap-2">
                     {selectedCanDiff && selectedCanPreviewRaw ? (
                       <ToggleGroup
                         type="single"
@@ -370,18 +374,15 @@ export function WorkspaceFileTreePanel({
                         }}
                         variant="outline"
                         size="sm"
-                        className="workspace-file-panel__preview-mode-toggle"
                         aria-label="Preview mode"
                       >
                         <ToggleGroupItem
                           value="diff"
-                          className="workspace-file-panel__preview-mode-option"
                         >
                           Diff
                         </ToggleGroupItem>
                         <ToggleGroupItem
                           value="raw"
-                          className="workspace-file-panel__preview-mode-option"
                         >
                           Raw
                         </ToggleGroupItem>
@@ -398,19 +399,16 @@ export function WorkspaceFileTreePanel({
                         }}
                         variant="outline"
                         size="sm"
-                        className="workspace-file-panel__preview-mode-toggle workspace-file-panel__preview-layout-toggle"
                         aria-label="Diff layout"
                       >
                         <ToggleGroupItem
                           value="split"
-                          className="workspace-file-panel__preview-mode-option"
                         >
                           <Columns2Icon data-icon="inline-start" aria-hidden="true" />
                           Split
                         </ToggleGroupItem>
                         <ToggleGroupItem
                           value="stacked"
-                          className="workspace-file-panel__preview-mode-option"
                         >
                           <Rows2Icon data-icon="inline-start" aria-hidden="true" />
                           Stacked
@@ -421,7 +419,6 @@ export function WorkspaceFileTreePanel({
                       type="button"
                       variant="ghost"
                       size="icon-sm"
-                      className="workspace-file-panel__preview-close app-close-icon-button"
                       aria-label="Close file preview"
                       onClick={() => setSelectedPath(null)}
                     >
@@ -431,7 +428,7 @@ export function WorkspaceFileTreePanel({
                 </div>
                 {activePreviewMode === "diff" && selectedCanDiff ? (
                   diffQuery.isPending ? (
-                    <div className="workspace-file-panel__skeleton" aria-label="Loading diff">
+                    <div className="flex flex-col gap-2" aria-label="Loading diff">
                       <Skeleton />
                       <Skeleton />
                     </div>
@@ -442,6 +439,7 @@ export function WorkspaceFileTreePanel({
                   ) : diffQuery.data?.error ? (
                     <DiffErrorMessage error={diffQuery.data.error} />
                   ) : (
+                    <div className="flex min-h-0 flex-1 flex-col *:min-h-0 *:flex-1">
                     <GitDiffResult
                       metadata={{
                         tool_name: "apply_patch",
@@ -452,9 +450,10 @@ export function WorkspaceFileTreePanel({
                       }}
                       layout={diffLayout}
                     />
+                    </div>
                   )
                 ) : previewQuery.isPending ? (
-                  <div className="workspace-file-panel__skeleton" aria-label="Loading preview">
+                  <div className="flex flex-col gap-2" aria-label="Loading preview">
                     <Skeleton />
                     <Skeleton />
                   </div>
@@ -488,8 +487,8 @@ function FilePreviewContent({
 }) {
   if (isMarkdownPath(path)) {
     return (
-      <div className="workspace-file-panel__markdown timeline-entry timeline-entry--assistant">
-        <div className="timeline-entry__content workspace-file-panel__markdown-content">
+      <div className="min-h-0 w-full min-w-0 flex-1 overflow-auto">
+        <div className="min-h-full rounded-md border border-border bg-card p-4 text-sm leading-relaxed">
           <MarkdownContent content={content} copyable />
         </div>
       </div>
@@ -497,11 +496,9 @@ function FilePreviewContent({
   }
 
   return (
-    <CodeBlock
-      value={content}
-      path={path}
-      className="workspace-file-panel__code"
-    />
+    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-auto">
+      <CodeBlock value={content} path={path} />
+    </div>
   );
 }
 
@@ -534,23 +531,25 @@ function TreeNodeView({
       <li role="treeitem" aria-selected={node.path === selectedPath}>
         <button
           type="button"
-          className="workspace-tree__row workspace-tree__row--file"
+          data-tree-row="file"
+          className={TREE_ROW_CLASS_NAME}
           data-selected={node.path === selectedPath ? "true" : undefined}
           data-git-status={node.item.git_status ?? undefined}
           title={node.path}
           onClick={() => onSelect(node.path, node.item?.git_status ?? null)}
         >
-          <span className="workspace-tree__chevron" aria-hidden="true" />
+          <span className="inline-flex size-4 shrink-0" aria-hidden="true" />
           <WorkspaceIcon icon={icon} />
           <span
-            className="workspace-tree__name"
+            className={cn("min-w-0 flex-1 truncate", node.item.git_status && GIT_STATUS_CLASS_NAME[node.item.git_status])}
             data-git-status={node.item.git_status ?? undefined}
           >
             {node.name}
           </span>
           {node.item.git_status ? (
             <span
-              className="workspace-tree__git-marker workspace-tree__status"
+              data-git-marker="status"
+              className={cn("shrink-0 font-mono text-xs font-semibold", GIT_STATUS_CLASS_NAME[node.item.git_status])}
               data-status={node.item.git_status}
               aria-label={`Git status ${node.item.git_status}`}
             >
@@ -567,24 +566,26 @@ function TreeNodeView({
     <li role="treeitem" aria-expanded={expanded}>
       <button
         type="button"
-        className="workspace-tree__row workspace-tree__row--folder"
+        data-tree-row="folder"
+        className={TREE_ROW_CLASS_NAME}
         title={node.path}
         onClick={() => onToggle(node.path)}
       >
-        <span className="workspace-tree__chevron" aria-hidden="true">
+        <span className="inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground" aria-hidden="true">
           {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
         </span>
         <WorkspaceIcon icon={icon} />
-        <span className="workspace-tree__name">{node.name}</span>
+        <span className="min-w-0 flex-1 truncate">{node.name}</span>
         {node.hasGitStatus ? (
           <span
-            className="workspace-tree__git-marker workspace-tree__folder-dot"
+            data-git-marker="folder"
+            className="size-1.5 shrink-0 rounded-full bg-primary"
             aria-label="Contains git changes"
           />
         ) : null}
       </button>
       {expanded && node.children.length > 0 ? (
-        <ul className="workspace-tree__group" role="group">
+        <ul className="ml-3 flex flex-col border-l border-border pl-1" role="group">
           {node.children.map((child) => (
             <TreeNodeView
               key={child.path}
@@ -602,10 +603,19 @@ function TreeNodeView({
   );
 }
 
+const TREE_ROW_CLASS_NAME =
+  "flex w-full min-w-0 items-center gap-1.5 rounded-sm px-2 py-1 text-left text-sm text-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring data-[selected=true]:bg-primary/10 data-[selected=true]:text-primary";
+
+const GIT_STATUS_CLASS_NAME: Partial<Record<GitFileStatus, string>> = {
+  M: "text-primary",
+  D: "text-destructive",
+  U: "text-destructive",
+};
+
 function WorkspaceIcon({ icon }: { icon: WorkspaceTreeIcon }) {
   return (
     <img
-      className="workspace-tree__icon"
+      className="size-4 shrink-0"
       src={icon.url}
       alt=""
       aria-hidden="true"

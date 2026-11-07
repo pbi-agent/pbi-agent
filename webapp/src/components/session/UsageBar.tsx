@@ -154,6 +154,10 @@ export const UsageBar = forwardRef<HTMLButtonElement, UsageBarProps>(function Us
       TOOLTIP_GUTTER,
       viewportWidth - tooltipRect.width - TOOLTIP_GUTTER,
     );
+    // Positioned imperatively: the coordinates are runtime-measured values
+    // that cannot be expressed as static utility classes.
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
     setTooltipPosition({ left, placement, top });
   }, []);
 
@@ -180,35 +184,24 @@ export const UsageBar = forwardRef<HTMLButtonElement, UsageBarProps>(function Us
           role="tooltip"
           data-app-tooltip=""
           data-placement={tooltipPosition?.placement ?? "bottom"}
-          className="context-gauge__tooltip-content"
-          style={
-            tooltipPosition
-              ? {
-                  left: `${tooltipPosition.left}px`,
-                  top: `${tooltipPosition.top}px`,
-                  visibility: "visible",
-                }
-              : undefined
-          }
+          className={cn(
+            "fixed z-50 inline-flex max-w-xs min-h-8 items-center justify-center gap-2 rounded-md border border-border bg-popover px-4 py-2 text-left text-xs font-medium text-popover-foreground shadow-md",
+            tooltipPosition ? "visible" : "invisible",
+            tooltipPosition?.placement === "top" ? "origin-bottom" : "origin-top",
+          )}
         >
-          <div className="context-gauge__tooltip">
-            <div className="context-gauge__tooltip-row">
-              <span className="context-gauge__tooltip-value">{usageLabel}</span>
-              <span className="context-gauge__tooltip-sep">/</span>
-              <span className="context-gauge__tooltip-value">
-                {thresholdLabel}
-              </span>
-              <span className="context-gauge__tooltip-unit">tokens</span>
+          <div data-tooltip-body="" className="flex flex-col gap-0.5 text-left">
+            <div className="inline-flex items-baseline justify-center gap-1 self-center font-mono text-xs whitespace-nowrap">
+              <span className="tabular-nums">{usageLabel}</span>
+              <span className="opacity-60">/</span>
+              <span className="tabular-nums">{thresholdLabel}</span>
+              <span className="font-sans opacity-70">tokens</span>
             </div>
-            {percentLabel ? (
-              <div className="context-gauge__tooltip-meta">
-                {percentLabel} of compaction threshold
-              </div>
-            ) : (
-              <div className="context-gauge__tooltip-meta">
-                No response usage yet
-              </div>
-            )}
+            <div data-tooltip-meta="" className="text-xs opacity-80">
+              {percentLabel
+                ? `${percentLabel} of compaction threshold`
+                : "No response usage yet"}
+            </div>
           </div>
         </div>,
         document.body,
@@ -231,9 +224,14 @@ export const UsageBar = forwardRef<HTMLButtonElement, UsageBarProps>(function Us
       <button
         ref={setTriggerRef}
         type="button"
+        data-context-gauge=""
+        data-status={status}
+        data-interactive={interactive ? "" : undefined}
         className={cn(
-          `context-gauge context-gauge--${status}`,
-          interactive && "context-gauge--interactive",
+          "group/gauge inline-flex items-center justify-center rounded-full p-0.5 leading-none text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+          interactive
+            ? "cursor-pointer p-1.5 transition-colors hover:bg-muted hover:text-foreground data-[state=open]:bg-primary/15 data-[state=open]:text-primary"
+            : "cursor-help",
           className,
         )}
         {...semanticProps}
@@ -256,7 +254,7 @@ export const UsageBar = forwardRef<HTMLButtonElement, UsageBarProps>(function Us
           width={SIZE}
           height={SIZE}
           viewBox={`0 0 ${SIZE} ${SIZE}`}
-          className="context-gauge__svg"
+          className="block"
           aria-hidden="true"
         >
           <circle
@@ -265,7 +263,7 @@ export const UsageBar = forwardRef<HTMLButtonElement, UsageBarProps>(function Us
             r={RADIUS}
             fill="none"
             strokeWidth={STROKE}
-            className="context-gauge__track"
+            className="stroke-border"
           />
           <circle
             cx={SIZE / 2}
@@ -277,7 +275,14 @@ export const UsageBar = forwardRef<HTMLButtonElement, UsageBarProps>(function Us
             strokeDasharray={CIRCUMFERENCE}
             strokeDashoffset={progressOffset}
             transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
-            className="context-gauge__indicator"
+            className={cn(
+              "transition-all duration-200 ease-out group-data-[state=open]/gauge:stroke-primary",
+              status === "critical"
+                ? "stroke-destructive"
+                : status === "warning"
+                  ? "stroke-chart-4"
+                  : "stroke-primary",
+            )}
           />
         </svg>
       </button>

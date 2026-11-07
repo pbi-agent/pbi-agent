@@ -200,6 +200,9 @@ function useSubAgentItemMap(items: TimelineItem[]): Record<string, TimelineItem[
   }, [items]);
 }
 
+const CHANGE_DOT_CLASS =
+  "pointer-events-none absolute top-1 right-1 size-2 rounded-full bg-primary ring-2 ring-background";
+
 export function SessionPage({
   workspaceRoot,
   workspaceKey,
@@ -1081,14 +1084,15 @@ export function SessionPage({
     : sessionState?.sessionUsage ?? sessionState?.turnUsage?.usage ?? null;
 
   const sessionPanel = (
-    <div className="session-panel">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <div
+        data-session-topbar=""
         className={cn(
-          "session-topbar",
-          !isSidebarOpen && "session-topbar--with-workspace",
+          "flex h-12 min-h-12 shrink-0 items-center justify-between gap-3 border-b bg-sidebar px-4",
+          !isSidebarOpen && "md:grid md:grid-cols-3",
         )}
       >
-        <div className="session-topbar__leading">
+        <div className="flex min-w-0 items-center gap-2">
           <ConnectionBadge connection={topbarConnection} />
           <ProfileSelector
             selectedProfileId={selectedProfileId}
@@ -1101,15 +1105,20 @@ export function SessionPage({
           />
         </div>
         {!isSidebarOpen ? (
-          <div className="session-topbar__workspace" aria-label="Current workspace">
+          <div
+            data-session-topbar-workspace=""
+            className="hidden max-w-md min-w-0 items-center justify-center justify-self-center overflow-hidden md:flex"
+            aria-label="Current workspace"
+          >
             <WorkspaceBadge tooltipSide="bottom" />
           </div>
         ) : null}
-        <div className="session-topbar__actions">
+        <div className="flex shrink-0 items-center justify-end gap-2">
           {!isSubAgentRoute ? (
             <>
               <div
-                className="session-topbar__group"
+                data-topbar-group=""
+                className="flex items-center gap-1"
                 role="group"
                 aria-label="Agent behavior"
               >
@@ -1117,9 +1126,9 @@ export function SessionPage({
                   <TooltipTrigger asChild>
                     <Toggle
                       type="button"
-                      variant="outline"
-                      size="sm"
-                      className="session-topbar-control session-interactive-toggle"
+                      variant="default"
+                      size="default"
+                      data-topbar-control="interactive"
                       pressed={interactiveMode}
                       aria-label={
                         interactiveMode ? "Disable interactive mode" : "Enable interactive mode"
@@ -1140,9 +1149,9 @@ export function SessionPage({
                   <TooltipTrigger asChild>
                     <Toggle
                       type="button"
-                      variant="outline"
-                      size="sm"
-                      className="session-topbar-control session-tool-history-toggle"
+                      variant="default"
+                      size="default"
+                      data-topbar-control="tool-history"
                       pressed={includeToolHistory}
                       aria-label={
                         includeToolHistory
@@ -1165,12 +1174,12 @@ export function SessionPage({
               <Separator
                 orientation="vertical"
                 decorative
-                className="session-topbar__divider"
               />
             </>
           ) : null}
           <div
-            className="session-topbar__group"
+            data-topbar-group=""
+                className="flex items-center gap-1"
             role="group"
             aria-label="Workspace views"
           >
@@ -1178,9 +1187,10 @@ export function SessionPage({
               <TooltipTrigger asChild>
                 <Toggle
                   type="button"
-                  variant="outline"
-                  size="sm"
-                  className="session-topbar-control session-file-tree-toggle"
+                  variant="default"
+                  size="default"
+                  data-topbar-control="file-tree"
+                  className="relative"
                   pressed={fileTreeOpen}
                   aria-label={
                     fileTreeOpen
@@ -1196,7 +1206,8 @@ export function SessionPage({
                   {showWorkspaceFileTreeChangeDot ? (
                     <span
                       aria-hidden="true"
-                      className="session-file-tree-toggle__change-dot"
+                      data-change-dot=""
+                      className={CHANGE_DOT_CLASS}
                     />
                   ) : null}
                 </Toggle>
@@ -1210,9 +1221,10 @@ export function SessionPage({
                 <TooltipTrigger asChild>
                   <Toggle
                     type="button"
-                    variant="outline"
-                    size="sm"
-                    className="session-topbar-control session-file-tree-toggle"
+                    variant="default"
+                    size="default"
+                    data-topbar-control="background-tasks"
+                    className="relative"
                     pressed={backgroundPanelOpen}
                     aria-label={
                       backgroundPanelOpen
@@ -1228,7 +1240,8 @@ export function SessionPage({
                     {runningBackgroundTaskCount > 0 && !backgroundPanelOpen ? (
                       <span
                         aria-hidden="true"
-                        className="session-file-tree-toggle__change-dot"
+                        data-change-dot=""
+                        className={CHANGE_DOT_CLASS}
                       />
                     ) : null}
                   </Toggle>
@@ -1256,86 +1269,88 @@ export function SessionPage({
         </div>
       </div>
 
-      {inputWarnings.length > 0 ? (
-        <Alert className="banner banner--notice">
-          <AlertTriangleIcon />
-          <AlertDescription>{inputWarnings.join(" ")}</AlertDescription>
-        </Alert>
-      ) : null}
-      {recoveryNotice ? (
-        <Alert className="banner banner--notice">
-          <AlertTriangleIcon />
-          <AlertDescription>{recoveryNotice}</AlertDescription>
-        </Alert>
-      ) : null}
-      {recoveryFailed ? (
-        <Alert variant="destructive" className="banner banner--error">
-          <AlertTriangleIcon />
-          <AlertDescription>{recoveryFailed}</AlertDescription>
-        </Alert>
-      ) : null}
-      {sessionState?.fatalError ? (
-        <Alert variant="destructive" className="banner banner--error">
-          <AlertTriangleIcon />
-          <AlertDescription>{sessionState.fatalError}</AlertDescription>
-        </Alert>
-      ) : null}
-      {createSessionMutation.error ? (
-        <Alert variant="destructive" className="banner banner--error">
-          <AlertTriangleIcon />
-          <AlertDescription>{createSessionMutation.error.message}</AlertDescription>
-        </Alert>
-      ) : null}
-      {setSessionProfileMutation.error ? (
-        <Alert variant="destructive" className="banner banner--error">
-          <AlertTriangleIcon />
-          <AlertDescription>{setSessionProfileMutation.error.message}</AlertDescription>
-        </Alert>
-      ) : null}
-      {forkSessionMutation.error ? (
-        <Alert variant="destructive" className="banner banner--error">
-          <AlertTriangleIcon />
-          <AlertDescription>{forkSessionMutation.error.message}</AlertDescription>
-        </Alert>
-      ) : null}
-      {setActiveProfileMutation.error ? (
-        <Alert variant="destructive" className="banner banner--error">
-          <AlertTriangleIcon />
-          <AlertDescription>{setActiveProfileMutation.error.message}</AlertDescription>
-        </Alert>
-      ) : null}
-      {!isSubAgentRoute && interruptMutation.error ? (
-        <Alert variant="destructive" className="banner banner--error">
-          <AlertTriangleIcon />
-          <AlertDescription>{interruptMutation.error.message}</AlertDescription>
-        </Alert>
-      ) : null}
-      {interruptShellToolMutation.error ? (
-        <Alert variant="destructive" className="banner banner--error">
-          <AlertTriangleIcon />
-          <AlertDescription>
-            {interruptShellToolMutation.error.message}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {!isSubAgentRoute && sendQueuedFollowUpMutation.error ? (
-        <Alert variant="destructive" className="banner banner--error">
-          <AlertTriangleIcon />
-          <AlertDescription>{sendQueuedFollowUpMutation.error.message}</AlertDescription>
-        </Alert>
-      ) : null}
-      {!isSubAgentRoute && cancelQueuedFollowUpMutation.error ? (
-        <Alert variant="destructive" className="banner banner--error">
-          <AlertTriangleIcon />
-          <AlertDescription>{cancelQueuedFollowUpMutation.error.message}</AlertDescription>
-        </Alert>
-      ) : null}
-      {sessionDetailLoadError ? (
-        <Alert variant="destructive" className="banner banner--error">
-          <AlertTriangleIcon />
-          <AlertDescription>{sessionDetailLoadError}</AlertDescription>
-        </Alert>
-      ) : null}
+      <div className="flex shrink-0 flex-col gap-2 px-5 empty:hidden">
+        {inputWarnings.length > 0 ? (
+          <Alert>
+            <AlertTriangleIcon />
+            <AlertDescription>{inputWarnings.join(" ")}</AlertDescription>
+          </Alert>
+        ) : null}
+        {recoveryNotice ? (
+          <Alert>
+            <AlertTriangleIcon />
+            <AlertDescription>{recoveryNotice}</AlertDescription>
+          </Alert>
+        ) : null}
+        {recoveryFailed ? (
+          <Alert variant="destructive">
+            <AlertTriangleIcon />
+            <AlertDescription>{recoveryFailed}</AlertDescription>
+          </Alert>
+        ) : null}
+        {sessionState?.fatalError ? (
+          <Alert variant="destructive">
+            <AlertTriangleIcon />
+            <AlertDescription>{sessionState.fatalError}</AlertDescription>
+          </Alert>
+        ) : null}
+        {createSessionMutation.error ? (
+          <Alert variant="destructive">
+            <AlertTriangleIcon />
+            <AlertDescription>{createSessionMutation.error.message}</AlertDescription>
+          </Alert>
+        ) : null}
+        {setSessionProfileMutation.error ? (
+          <Alert variant="destructive">
+            <AlertTriangleIcon />
+            <AlertDescription>{setSessionProfileMutation.error.message}</AlertDescription>
+          </Alert>
+        ) : null}
+        {forkSessionMutation.error ? (
+          <Alert variant="destructive">
+            <AlertTriangleIcon />
+            <AlertDescription>{forkSessionMutation.error.message}</AlertDescription>
+          </Alert>
+        ) : null}
+        {setActiveProfileMutation.error ? (
+          <Alert variant="destructive">
+            <AlertTriangleIcon />
+            <AlertDescription>{setActiveProfileMutation.error.message}</AlertDescription>
+          </Alert>
+        ) : null}
+        {!isSubAgentRoute && interruptMutation.error ? (
+          <Alert variant="destructive">
+            <AlertTriangleIcon />
+            <AlertDescription>{interruptMutation.error.message}</AlertDescription>
+          </Alert>
+        ) : null}
+        {interruptShellToolMutation.error ? (
+          <Alert variant="destructive">
+            <AlertTriangleIcon />
+            <AlertDescription>
+              {interruptShellToolMutation.error.message}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {!isSubAgentRoute && sendQueuedFollowUpMutation.error ? (
+          <Alert variant="destructive">
+            <AlertTriangleIcon />
+            <AlertDescription>{sendQueuedFollowUpMutation.error.message}</AlertDescription>
+          </Alert>
+        ) : null}
+        {!isSubAgentRoute && cancelQueuedFollowUpMutation.error ? (
+          <Alert variant="destructive">
+            <AlertTriangleIcon />
+            <AlertDescription>{cancelQueuedFollowUpMutation.error.message}</AlertDescription>
+          </Alert>
+        ) : null}
+        {sessionDetailLoadError ? (
+          <Alert variant="destructive">
+            <AlertTriangleIcon />
+            <AlertDescription>{sessionDetailLoadError}</AlertDescription>
+          </Alert>
+        ) : null}
+      </div>
 
       {sessionNotFound ? (
         <EmptyState
@@ -1391,11 +1406,10 @@ export function SessionPage({
             />
           ) : null}
           {isSubAgentRoute && routeSessionId ? (
-            <div className="session-readonly-footer">
+            <div className="mt-4 flex justify-center px-3 pt-4 pb-5">
               <Button
                 type="button"
                 variant="outline"
-                className="session-readonly-footer__button"
                 asChild
               >
                 <Link to={`/sessions/${encodeURIComponent(routeSessionId)}`}>
@@ -1468,7 +1482,8 @@ export function SessionPage({
   return (
     <AppSidebarLayout>
       <section
-        className="session-panel-wrapper"
+        data-session-panel-wrapper=""
+        className="flex h-full min-h-0 flex-col overflow-hidden"
         data-debug-session-key={selectedRouteSessionKey ?? undefined}
         data-debug-session-id={sessionState?.sessionId ?? undefined}
         data-debug-live-session-id={sessionState?.liveSessionId ?? undefined}
@@ -1478,13 +1493,13 @@ export function SessionPage({
         {sidePanel !== null && (fileTreeOpen || !isSubAgentRoute) ? (
           <ResizablePanelGroup
             direction="horizontal"
-            className="session-file-split"
+            className="min-h-0 flex-1 overflow-hidden"
           >
             <ResizablePanel
               id="session-main"
               defaultSize="50%"
               minSize="30%"
-              className="session-file-split__main"
+
             >
               {sessionPanel}
             </ResizablePanel>
@@ -1493,7 +1508,7 @@ export function SessionPage({
               id="session-files"
               defaultSize="50%"
               minSize="25%"
-              className="session-file-split__files"
+
             >
               {fileTreeOpen ? (
                 <WorkspaceFileTreePanel
@@ -1967,48 +1982,55 @@ function ProfileSelector({
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="sm"
-          className="session-topbar-control profile-selector__trigger"
+          data-topbar-control="profile"
+          className="max-w-xs min-w-0 shrink justify-start"
           disabled={disabled}
           aria-label={`Model profile: ${label}`}
         >
           <CpuIcon data-icon="inline-start" />
-          <span className="profile-selector__name">{label}</span>
+          <span className="min-w-0 truncate text-left">{label}</span>
           <ChevronDownIcon data-icon="inline-end" />
         </Button>
       </DropdownMenuTrigger>
 
       {modelProfiles.length > 0 ? (
-        <DropdownMenuContent className="profile-selector__content" align="start">
+        <DropdownMenuContent
+          data-profile-selector-content=""
+          className="max-h-96 w-max max-w-lg min-w-72 overflow-x-hidden overflow-y-auto"
+          align="start"
+        >
           <DropdownMenuGroup>
             {modelProfiles.map((profile) => {
               const isSelected = profile.id === selectedProfileId;
               return (
                 <DropdownMenuItem
                   key={profile.id}
-                  className={cn("profile-selector__option", isSelected && "is-selected")}
+                  data-profile-option=""
+                  data-selected={isSelected ? "true" : undefined}
+                  className="group/profile w-full min-w-0 items-start"
                   onClick={() => {
                     onChange(profile.id);
                     setIsOpen(false);
                   }}
                 >
-                  <span className="profile-selector__option-check">
+                  <span className="flex min-h-5 w-4 shrink-0 items-center justify-center">
                     {isSelected ? <CheckIcon aria-hidden="true" /> : null}
                   </span>
-                  <span className="profile-selector__option-body">
-                    <span className="profile-selector__option-name">{profile.name}</span>
-                    <span className="profile-selector__option-meta">
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-xs whitespace-normal">
+                    <span className="block font-semibold wrap-anywhere text-foreground">{profile.name}</span>
+                    <span className="flex min-w-0 flex-wrap items-center gap-1 text-xs wrap-anywhere text-muted-foreground group-data-[selected=true]/profile:text-primary">
                       <span>{profile.provider.name}</span>
                       {profile.model ? (
                         <>
-                          <span className="profile-selector__dot" aria-hidden="true">·</span>
+                          <span className="text-border select-none" aria-hidden="true">·</span>
                           <span>{profile.model}</span>
                         </>
                       ) : null}
                       {profile.reasoning_effort ? (
                         <>
-                          <span className="profile-selector__dot" aria-hidden="true">·</span>
+                          <span className="text-border select-none" aria-hidden="true">·</span>
                           <span>{profile.reasoning_effort}</span>
                         </>
                       ) : null}

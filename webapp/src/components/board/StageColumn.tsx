@@ -4,8 +4,11 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVerticalIcon } from "lucide-react";
 import type { BoardStage, TaskRecord } from "../../types";
 import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { Separator } from "../ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { EmptyState } from "../shared/EmptyState";
+import { cn } from "@/lib/utils";
 import { TaskCard } from "./TaskCard";
 
 const TERMINAL_STAGE_ID = "done";
@@ -43,31 +46,46 @@ export function StageColumn({
     data: { stage: stage.id },
   });
 
+  // dnd-kit sortable transform/transition are dynamic per frame; no class-based equivalent.
+  /* eslint-disable shadcn/no-inline-styles */
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
+  /* eslint-enable shadcn/no-inline-styles */
 
   return (
-    <Card
+    <div
       ref={setSortableRef}
       style={style}
-      className={`board-column${isOver ? " board-column--drop-over" : ""}${isDragging ? " board-column--dragging" : ""}`}
+      data-stage-column={stage.id}
+      data-drop-over={isOver ? "true" : undefined}
+      data-dragging={isDragging ? "true" : undefined}
+      className={cn("flex max-h-full min-w-80 flex-1 basis-80 flex-col", isDragging && "opacity-40")}
     >
-      <CardHeader className="board-column__header">
-        <div
-          className="board-column__drag-handle"
+    <Card className="min-h-48 flex-1">
+      <CardHeader>
+        <div className="flex min-w-0 items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="cursor-grab"
+          aria-label={`Reorder ${stage.name} stage`}
           {...listeners}
           {...attributes}
         >
-          <GripVerticalIcon className="board-column__grip-icon" aria-hidden="true" />
+          <GripVerticalIcon aria-hidden="true" />
+        </Button>
+        <div className="min-w-0 flex-1 truncate">
+          <CardTitle>{stage.name}</CardTitle>
         </div>
-        <div className="board-column__heading">
-          <CardTitle className="board-column__name">{stage.name}</CardTitle>
+        <Badge variant={isOver ? "default" : "outline"}>{tasks.length}</Badge>
         </div>
-        <Badge variant="outline" className="board-column__count">{tasks.length}</Badge>
       </CardHeader>
-      <CardContent ref={setDropRef} className="board-column__body">
+      <Separator />
+      <CardContent ref={setDropRef} className="min-h-0 flex-1 overflow-y-auto">
+        <div className="flex flex-col gap-3">
         {tasks.length === 0 ? (
           <EmptyState title="No tasks" />
         ) : (
@@ -88,7 +106,9 @@ export function StageColumn({
             );
           })
         )}
+        </div>
       </CardContent>
     </Card>
+    </div>
   );
 }

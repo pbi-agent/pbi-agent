@@ -70,10 +70,10 @@ describe("ToolResult", () => {
         );
 
         expect(
-          Array.from(container.querySelectorAll(".tool-result__section-label"))
+          Array.from(container.querySelectorAll("[data-tool-section-label]"))
             .map((label) => label.textContent),
         ).toEqual(["Input", "Stdout", "Stderr"]);
-        const inputBlock = screen.getByText("Input").closest(".tool-result__section");
+        const inputBlock = screen.getByText("Input").closest("[data-tool-section]");
         expect(inputBlock?.querySelector("pre")?.textContent).toBe(command);
       },
     );
@@ -298,7 +298,7 @@ describe("ToolResult", () => {
 
         expect(highlightCodeMock).not.toHaveBeenCalled();
         const stdoutPre = screen.getByText("Stdout")
-          .closest(".tool-result__section")?.querySelector("pre.tool-result__pre");
+          .closest("[data-tool-section]")?.querySelector("pre[data-code-block]");
         expect(stdoutPre?.textContent).toBe("README.md\nsrc\n");
         expect(stdoutPre?.getAttribute("data-highlighted")).toBe("false");
       });
@@ -350,10 +350,10 @@ describe("ToolResult", () => {
           />,
         );
 
-        expect(container.querySelector(".git-diff-result")).not.toBeNull();
-        expect(container.querySelector(".tool-result-card")).toBeNull();
+        expect(container.querySelector("[data-git-diff-result]")).not.toBeNull();
+        expect(container.querySelector("[data-tool-result-card]")).toBeNull();
         expect(
-          container.querySelector(".git-diff-result__title")?.textContent,
+          container.querySelector("[data-git-diff-title]")?.textContent,
         ).toBe("TODO.md");
       },
     );
@@ -375,8 +375,8 @@ describe("ToolResult", () => {
         />,
       );
 
-      expect(container.querySelector(".git-diff-result")).toBeNull();
-      expect(container.querySelector(".tool-result-card")).not.toBeNull();
+      expect(container.querySelector("[data-git-diff-result]")).toBeNull();
+      expect(container.querySelector("[data-tool-result-card]")).not.toBeNull();
       expect(screen.getByText("TODO.md")).toBeInTheDocument();
       expect(screen.getByText("Updating")).toBeInTheDocument();
       expect(screen.getByText("Running")).toBeInTheDocument();
@@ -411,7 +411,7 @@ describe("ToolResult", () => {
         />,
       );
 
-      expect(container.querySelector(".tool-result-card--explore-workspace")).not.toBeNull();
+      expect(container.querySelector('[data-tool-result-card="explore-workspace"]')).not.toBeNull();
       expect(screen.getByText("UserService")).toBeInTheDocument();
       expect(screen.getByText("Path search · regex · root src")).toBeInTheDocument();
       expect(screen.getByText("mode snippets")).toBeInTheDocument();
@@ -457,7 +457,7 @@ describe("ToolResult", () => {
       });
 
       const codeWrapper = container.querySelector(
-        '.tool-result__section [data-language="python"]',
+        '[data-tool-section] [data-language="python"]',
       );
       expect(codeWrapper).not.toBeNull();
       expect(screen.getByText("src/main.py")).toBeInTheDocument();
@@ -480,7 +480,7 @@ describe("ToolResult", () => {
 
       expect(highlightCodeMock).not.toHaveBeenCalled();
       const pre = container.querySelector(
-        ".tool-result__section pre.tool-result__pre",
+        "[data-tool-section] pre[data-code-block]",
       );
       expect(pre?.textContent).toBe("hello");
       expect(pre?.getAttribute("data-highlighted")).toBe("false");

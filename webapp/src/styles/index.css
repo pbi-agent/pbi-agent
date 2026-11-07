@@ -1,15 +1,7 @@
 /* ── Mission Control — Stylesheet Entry ────────────────────────────── */
 @import 'tailwindcss';
 @import './tokens.css';
-@import './reset.css';
-@import './layout.css';
-@import './session.css';
-@import './board.css';
-@import './dashboard.css';
-@import './modal.css';
-@import './utilities.css';
-@import './settings.css';
-@import './overlays.css';
+@import './primitives.css';
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
@@ -114,8 +106,15 @@
     @apply bg-background text-foreground leading-normal;
     }
   html {
-    @apply font-sans;
-    }
+    @apply font-sans antialiased;
+    color-scheme: dark;
+  }
+  html:not(.dark) {
+    color-scheme: light;
+  }
+  #root {
+    @apply h-screen overflow-hidden;
+  }
 }
 
 /* Shared Badge metadata size.

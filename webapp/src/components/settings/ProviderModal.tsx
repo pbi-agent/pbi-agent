@@ -123,13 +123,12 @@ function ProviderKindOptionLabel({
   options: ConfigOptions;
 }) {
   return (
-    <span className="provider-kind-select__value">
-      <span className="provider-kind-select__label">
+    <span className="flex min-w-0 items-center gap-2">
+      <span className="truncate">
         {options.provider_metadata[providerKind]?.label ?? providerKind}
       </span>
       {isSttOnlyProviderKind(providerKind, options) ? (
         <Badge
-          className="provider-kind-select__badge"
           size="meta"
           variant="info"
         >
@@ -287,7 +286,7 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
                 <FieldLabel>Name</FieldLabel>
                 <Input
                   name="provider-name"
-                  className="task-form__input"
+                  data-settings-input=""
                   value={form.name}
                   onChange={(e) => set({ name: e.target.value })}
                   required
@@ -301,7 +300,7 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
                   <FieldLabel>ID (optional)</FieldLabel>
                   <Input
                     name="provider-id"
-                    className="task-form__input"
+                    data-settings-input=""
                     value={form.id}
                     onChange={(e) => set({ id: e.target.value })}
                     placeholder="Auto-generated from name"
@@ -319,12 +318,13 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
                   onValueChange={(value) => set({ kind: value })}
                 >
                   <SelectTrigger
-                    className="task-form__select provider-kind-select__trigger"
+                    data-settings-select=""
+                    className="w-full"
                     aria-label="Kind"
                   >
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="provider-kind-select__content">
+                  <SelectContent>
                     {options.provider_kinds.map((k) => (
                       <SelectItem key={k} value={k}>
                         <ProviderKindOptionLabel
@@ -349,7 +349,7 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
                     onValueChange={(value) => {
                       if (value) set({ auth_mode: value });
                     }}
-                    className="secret-mode-tabs provider-auth-mode-tabs"
+                    data-settings-auth-mode-tabs=""
                     spacing={1}
                     variant="outline"
                   >
@@ -371,7 +371,7 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
                     onValueChange={(value) => {
                       if (value) set({ secretMode: value as SecretMode });
                     }}
-                    className="secret-mode-tabs"
+                    data-settings-secret-mode-tabs=""
                     spacing={1}
                     variant="outline"
                   >
@@ -383,7 +383,7 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
                   </ToggleGroup>
                 </Field>
               ) : (
-                <Alert className="settings-inline-note provider-auth-inline-note">
+                <Alert>
                   <AlertDescription>
                     Save this provider to continue directly into sign-in for
                     your {accountAuthLabel ?? "account"}.
@@ -396,7 +396,7 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
                   <FieldLabel>Environment variable name</FieldLabel>
                   <Input
                     name="api-key-env"
-                    className="task-form__input"
+                    data-settings-input=""
                     value={form.api_key_env}
                     onChange={(e) => set({ api_key_env: e.target.value })}
                     placeholder="e.g. OPENAI_API_KEY"
@@ -412,7 +412,7 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
                   </FieldLabel>
                   <Input
                     name="api-key"
-                    className="task-form__input"
+                    data-settings-input=""
                     type="password"
                     value={form.api_key}
                     onChange={(e) => set({ api_key: e.target.value })}
@@ -427,7 +427,7 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
                   <FieldLabel>{responsesUrlLabel(form.kind)}</FieldLabel>
                   <Input
                     name="responses-url"
-                    className="task-form__input"
+                    data-settings-input=""
                     type="text"
                     value={form.responses_url}
                     onChange={(e) => set({ responses_url: e.target.value })}
@@ -448,7 +448,7 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
                   <FieldLabel>API base URL</FieldLabel>
                   <Input
                     name="generic-api-url"
-                    className="task-form__input"
+                    data-settings-input=""
                     type="text"
                     value={form.generic_api_url}
                     onChange={(e) => set({ generic_api_url: e.target.value })}
@@ -469,7 +469,7 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
                     <FieldLabel>Google Cloud project</FieldLabel>
                     <Input
                       name="google-cloud-project"
-                      className="task-form__input"
+                      data-settings-input=""
                       type="text"
                       value={form.google_cloud_project}
                       onChange={(e) =>
@@ -487,7 +487,7 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
                     <FieldLabel>Google Cloud location</FieldLabel>
                     <Input
                       name="google-cloud-location"
-                      className="task-form__input"
+                      data-settings-input=""
                       type="text"
                       value={form.google_cloud_location}
                       onChange={(e) =>

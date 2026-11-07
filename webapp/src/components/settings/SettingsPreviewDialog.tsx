@@ -31,12 +31,9 @@ export function SettingsPreviewDialog({
       headerContent={headerContent}
       icon={<Icon />}
       size="wide"
-      contentClassName="settings-preview-dialog"
     >
-      <div className="command-preview-dialog__scroll timeline-entry timeline-entry--assistant">
-        <div className="timeline-entry__content command-preview-dialog__markdown">
-          <MarkdownContent content={content} />
-        </div>
+      <div className="min-w-0 overflow-auto" data-settings-preview-content>
+        <MarkdownContent content={content} />
       </div>
     </FormDialog>
   );

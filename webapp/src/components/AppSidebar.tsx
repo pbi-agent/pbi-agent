@@ -14,14 +14,23 @@ import { useSidebarStore } from "../hooks/useSidebar";
 import { AppSessionsContextPanel } from "./AppSessionsContextPanel";
 import { WorkspaceBadge } from "./WorkspaceBadge";
 import { Button } from "./ui/button";
+import { Kbd } from "./ui/kbd";
 import { Separator } from "./ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { cn } from "../lib/utils";
 
+function navItemClassName(collapsed: boolean, isActive: boolean) {
+  return cn(
+    "group/nav flex items-center gap-2 rounded-md text-sm font-medium text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
+    collapsed ? "size-10 shrink-0 justify-center" : "min-h-9 w-full justify-start px-3 py-2",
+    isActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
+  );
+}
+
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 
 function sidebarIconClassName(className?: string) {
-  return cn("app-sidebar__icon", className);
+  return cn("size-5 shrink-0 opacity-80 transition-opacity group-hover/nav:opacity-100 group-data-[active=true]/nav:opacity-100", className);
 }
 
 function SidebarSessionsIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
@@ -92,14 +101,11 @@ export function AppSidebarLayout({ children, contextPanel }: AppSidebarLayoutPro
 
   return (
     <div
-      className={cn(
-        "app-shell-layout",
-        isOpen ? "app-shell-layout--open" : "app-shell-layout--collapsed",
-      )}
+      className="flex min-h-0 flex-1 overflow-hidden"
       data-sidebar-state={isOpen ? "open" : "collapsed"}
     >
       <AppSidebar contextPanel={contextPanel} />
-      <div className="app-shell-layout__main" onClick={handleMainClick}>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" onClick={handleMainClick}>
         {children}
       </div>
     </div>
@@ -112,18 +118,22 @@ function AppSidebar({ contextPanel }: { contextPanel?: ReactNode }) {
   return (
     <aside
       id="app-sidebar"
-      className={cn("app-sidebar", !isOpen && "app-sidebar--collapsed")}
+      data-state={isOpen ? "open" : "collapsed"}
+      className={cn(
+        "flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-r border-border bg-sidebar text-sidebar-foreground transition-all",
+        isOpen ? "w-70 max-md:w-4/5" : "w-12",
+      )}
       aria-label="Application sidebar"
     >
       <AppSidebarHead />
       <AppSidebarNav collapsed={!isOpen} />
       {isOpen ? (
         <>
-          <Separator className="app-sidebar__divider" />
-          <div className="app-sidebar__context">{resolvedContext}</div>
+          <Separator className="mx-3 w-auto shrink-0" />
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{resolvedContext}</div>
         </>
       ) : (
-        <div className="app-sidebar__context-spacer" aria-hidden="true" />
+        <div className="flex-1" aria-hidden="true" />
       )}
       <AppSidebarFooter collapsed={!isOpen} />
     </aside>
@@ -135,18 +145,32 @@ function AppSidebarHead() {
   const toggle = useSidebarStore((state) => state.toggle);
   const toggleLabel = isOpen ? "Collapse sidebar" : "Expand sidebar";
   return (
-    <div className="app-sidebar__head">
+    <div
+      data-sidebar-part="head"
+      className={cn(
+        "flex h-12 shrink-0 items-center gap-2 border-b border-border",
+        isOpen ? "px-3" : "justify-center",
+      )}
+    >
       {isOpen ? (
         <>
-          <div className="app-sidebar__brand" aria-hidden="true">
+          <div
+            data-sidebar-part="brand"
+            className="flex w-10 shrink-0 items-center"
+            aria-hidden="true"
+          >
             <img
-              className="app-sidebar__brand-logo"
+              data-sidebar-part="brand-logo"
+              className="block size-7 shrink-0 rounded-lg object-cover"
               src="/logo.jpg"
               alt=""
               draggable={false}
             />
           </div>
-          <div className="app-sidebar__workspace-slot">
+          <div
+            data-sidebar-part="workspace-slot"
+            className="flex min-w-0 flex-1 items-center justify-center overflow-hidden"
+          >
             <WorkspaceBadge tooltipSide="right" />
           </div>
         </>
@@ -157,7 +181,7 @@ function AppSidebarHead() {
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="app-sidebar__toggle"
+            className="group/nav size-10 shrink-0"
             onClick={toggle}
             aria-label={toggleLabel}
             aria-expanded={isOpen}
@@ -172,7 +196,7 @@ function AppSidebarHead() {
         </TooltipTrigger>
         <TooltipContent side="right">
           <span>{toggleLabel}</span>
-          <kbd className="app-sidebar__toggle-shortcut">{TOGGLE_SHORTCUT_HINT}</kbd>
+          <Kbd>{TOGGLE_SHORTCUT_HINT}</Kbd>
         </TooltipContent>
       </Tooltip>
     </div>
@@ -183,7 +207,10 @@ function AppSidebarNav({ collapsed }: { collapsed: boolean }) {
   const lastOpenedSessionPath = useLastOpenedSessionPath();
   return (
     <nav
-      className={cn("app-sidebar__nav", collapsed && "app-sidebar__nav--collapsed")}
+      className={cn(
+        "flex shrink-0 flex-col gap-px",
+        collapsed ? "items-center py-2" : "px-3 pt-3 pb-2",
+      )}
       aria-label="Primary navigation"
     >
       {appNavItems.map((item) => (
@@ -213,11 +240,9 @@ function SidebarNavLink({
   const link = (
     <NavLink
       to={targetPath}
-      className={cn(
-        "app-sidebar__nav-item",
-        collapsed && "app-sidebar__nav-item--collapsed",
-        isActive && "app-sidebar__nav-item--active",
-      )}
+      data-collapsed={collapsed || undefined}
+      data-active={isActive || undefined}
+      className={navItemClassName(collapsed, isActive)}
       aria-label={collapsed ? item.label : undefined}
     >
       <Icon aria-hidden="true" />
@@ -239,8 +264,8 @@ function AppSidebarFooter({ collapsed }: { collapsed: boolean }) {
   return (
     <div
       className={cn(
-        "app-sidebar__footer",
-        collapsed && "app-sidebar__footer--collapsed",
+        "flex shrink-0 items-center gap-2",
+        collapsed ? "flex-col py-3" : "p-3",
       )}
     >
       <SettingsButton collapsed={collapsed} />
@@ -253,10 +278,8 @@ function SettingsButton({ collapsed }: { collapsed: boolean }) {
   const button = (
     <button
       type="button"
-      className={cn(
-        "app-sidebar__nav-item app-sidebar__footer-button",
-        collapsed && "app-sidebar__nav-item--collapsed",
-      )}
+      data-collapsed={collapsed || undefined}
+      className={navItemClassName(collapsed, false)}
       onClick={openSettings}
       aria-label="Settings"
     >

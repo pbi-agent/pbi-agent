@@ -20,11 +20,11 @@ describe("reply to selection", () => {
     const onAddReply = vi.fn();
     renderWithProviders(
       <>
-        <div className="timeline-entry timeline-entry--assistant">
-          <div className="timeline-entry__content"><p>Assistant answer</p></div>
+        <div data-timeline-entry="assistant">
+          <div data-timeline-content><p>Assistant answer</p></div>
         </div>
-        <div className="timeline-entry timeline-entry--user">
-          <div className="timeline-entry__content"><p>User text</p></div>
+        <div data-timeline-entry="user">
+          <div data-timeline-content><p>User text</p></div>
         </div>
         <ReplySelectionPopover onAddReply={onAddReply} />
       </>,

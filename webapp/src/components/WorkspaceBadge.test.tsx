@@ -106,7 +106,7 @@ describe("WorkspaceBadge", () => {
 
     expect(await screen.findByText("No recent workspaces yet.")).toBeInTheDocument();
     const warning = screen.getByRole("alert");
-    expect(warning).toHaveClass("workspace-switcher-dialog__warning");
+    expect(warning).toHaveAttribute("data-workspace-picker-warning");
     expect(warning).toHaveTextContent(
       "Folder picking is not available in this environment.",
     );

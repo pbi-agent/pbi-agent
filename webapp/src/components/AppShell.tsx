@@ -73,7 +73,7 @@ export function AppShell() {
   );
 
   return (
-    <div className="app-shell bg-background text-foreground">
+    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       <AskUserNotificationEffects />
       <SessionFinishedNotificationEffects />
       <SessionEndedNotificationEffects
@@ -82,15 +82,15 @@ export function AppShell() {
         tasks={bootstrap?.tasks ?? []}
       />
       {(bootstrap?.hook_warnings ?? []).map((warning) => (
-        <div key={warning} className="app-hook-warning">
-          <Alert className="banner banner--notice app-hook-warning__alert">
+        <div key={warning} className="shrink-0 border-b border-border bg-background px-5 py-3">
+          <Alert>
             <AlertTriangleIcon />
             <AlertDescription>{warning}</AlertDescription>
           </Alert>
         </div>
       ))}
 
-      <Suspense fallback={<div className="center-spinner"><LoadingSpinner size="lg" /></div>}>
+      <Suspense fallback={<div className="flex justify-center p-16"><LoadingSpinner size="lg" /></div>}>
         <Routes>
           <Route path="/" element={<Navigate to="/sessions" replace />} />
           <Route

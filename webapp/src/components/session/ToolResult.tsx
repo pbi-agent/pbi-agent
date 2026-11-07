@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import type { ToolCallMetadata } from "../../types";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import { Spinner } from "../ui/spinner";
 import {
   Card,
   CardAction,
@@ -31,6 +32,12 @@ import {
   GitDiffResult,
   isApplyPatchToolMetadata,
 } from "./GitDiffResult";
+
+const SECTION_CLASSES = "overflow-hidden rounded-md border border-border bg-background";
+const SECTION_LABEL_CLASSES =
+  "block border-b border-border px-3 py-2 font-mono text-xs text-muted-foreground";
+const KV_CLASSES =
+  "flex items-center justify-between gap-3 rounded-md border border-border p-3 text-sm text-muted-foreground *:[strong]:font-semibold *:[strong]:text-foreground";
 
 type ToolResultProps = {
   metadata?: ToolCallMetadata;
@@ -143,7 +150,6 @@ function ShellToolResult({
             type="button"
             variant="destructive"
             size="sm"
-            className="tool-result-card__interrupt-button"
             disabled={interrupting}
             aria-label="Stop running shell command"
             onClick={() => onInterrupt(callId)}
@@ -185,7 +191,7 @@ function ReadImageToolResult({ metadata, text, running }: ToolResultProps) {
   return (
     <ToolCard metadata={metadata} running={running} icon={<FileImageIcon />} title={path} description={description || "Attached image to model context"}>
       {metadata?.error || result?.error ? <ToolNotice tone="error" label="Error" value={errorText(metadata?.error ?? result?.error)} /> : null}
-      <div className="tool-result__kv">
+      <div className={KV_CLASSES}>
         <span>Attachment</span>
         <strong>{metadata?.success === false ? "Failed" : "Ready for model context"}</strong>
       </div>
@@ -248,11 +254,11 @@ function ExploreWorkspaceToolResult({ metadata, text, running }: ToolResultProps
       icon={isImageRead ? <FileImageIcon /> : target === "read" ? <FileTextIcon /> : <SearchIcon />}
       title={title}
       description={description}
-      className="tool-result-card--explore-workspace"
+      variant="explore-workspace"
     >
       {error ? <ToolNotice tone="error" label="Error" value={error} /> : null}
       {isImageRead ? (
-        <div className="tool-result__kv">
+        <div className={KV_CLASSES}>
           <span>Attachment</span>
           <strong>{metadata?.success === false ? "Failed" : "Ready for model context"}</strong>
           {stringValue(result?.mime_type) ? <span>{stringValue(result?.mime_type)}</span> : null}
@@ -260,7 +266,7 @@ function ExploreWorkspaceToolResult({ metadata, text, running }: ToolResultProps
         </div>
       ) : null}
       {options.length > 0 ? (
-        <div className="explore-workspace-result__filters" aria-label="Explore options">
+        <div className="flex flex-wrap items-center gap-2" aria-label="Explore options">
           {options.map((option) => (
             <Badge key={option} variant="outline" size="meta">{option}</Badge>
           ))}
@@ -288,14 +294,14 @@ function WebSearchToolResult({ metadata, text, running }: ToolResultProps) {
   return (
     <ToolCard metadata={metadata} running={running} icon={<SearchIcon />} title="Web search" description={queries.join(" · ") || "Search results"}>
       {sources.length > 0 ? (
-        <div className="tool-result__list">
+        <div className="flex flex-col gap-2">
           {sources.slice(0, 8).map((source, index) => {
             const record = objectValue(source);
             const title = stringValue(record?.title) ?? stringValue(record?.url) ?? `Source ${index + 1}`;
             const url = stringValue(record?.url);
             return (
-              <div key={`${url ?? title}-${index}`} className="tool-result__list-item">
-                {url ? <a href={url} target="_blank" rel="noreferrer">{title}</a> : <strong>{title}</strong>}
+              <div key={`${url ?? title}-${index}`} className="flex min-w-0 flex-col gap-0.5 rounded-md border border-border bg-background p-3 text-sm text-muted-foreground">
+                {url ? <a href={url} target="_blank" rel="noreferrer" className="truncate font-semibold text-foreground hover:text-primary">{title}</a> : <strong className="truncate font-semibold text-foreground">{title}</strong>}
                 {stringValue(record?.snippet) ? <span>{stringValue(record?.snippet)}</span> : null}
               </div>
             );
@@ -331,7 +337,7 @@ function GenericToolResult({ metadata, text, running }: ToolResultProps) {
   );
 }
 
-function ToolCard({ metadata, running, icon, title, description, statusLabel, headerAction, className, children }: {
+function ToolCard({ metadata, running, icon, title, description, statusLabel, headerAction, variant, children }: {
   metadata?: ToolCallMetadata;
   running?: boolean;
   icon: ReactNode;
@@ -339,27 +345,46 @@ function ToolCard({ metadata, running, icon, title, description, statusLabel, he
   description?: string;
   statusLabel?: string;
   headerAction?: ReactNode;
-  className?: string;
+  variant?: "explore-workspace";
   children: ReactNode;
 }) {
   const failed = metadata?.success === false || metadata?.status === "failed";
   const label = statusLabel ?? (running ? "Running" : failed ? "Failed" : "Done");
   return (
-    <Card size="sm" className={cn("tool-result-card", className)} data-status={failed ? "failed" : running ? "running" : "done"}>
-      <CardHeader className="tool-result-card__header">
-        <div className="tool-result-card__title-row">
-          <span className="tool-result-card__icon" aria-hidden="true">{icon}</span>
-          <div className="tool-result-card__title-copy">
-            <CardTitle className="tool-result-card__title">{title}</CardTitle>
-            {description ? <CardDescription className="tool-result-card__description">{description}</CardDescription> : null}
+    <Card
+      size="sm"
+      data-tool-result-card={variant ?? "default"}
+      data-status={failed ? "failed" : running ? "running" : "done"}
+    >
+      <CardHeader className="items-center">
+        <div className="flex min-w-0 items-center gap-3">
+          <span
+            className={cn(
+              "inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary *:size-4",
+              failed && "bg-destructive/10 text-destructive",
+            )}
+            aria-hidden="true"
+          >
+            {icon}
+          </span>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <div className="truncate font-mono">
+              <CardTitle>{title}</CardTitle>
+            </div>
+            {description ? (
+              <div className="truncate text-xs">
+                <CardDescription>{description}</CardDescription>
+              </div>
+            ) : null}
           </div>
         </div>
-        <CardAction className="tool-result-card__actions">
+        <CardAction>
+          <div className="flex flex-wrap items-center justify-end gap-2">
           <Badge variant={failed ? "destructive" : "secondary"} size="meta">
             {failed ? (
               <XCircleIcon data-icon="inline-start" />
             ) : running ? (
-              <span className="tool-result-card__status-spinner" data-icon="inline-start" aria-hidden="true" />
+              <Spinner data-icon="inline-start" aria-hidden="true" />
             ) : (
               <CheckCircle2Icon data-icon="inline-start" />
             )}
@@ -368,17 +393,20 @@ function ToolCard({ metadata, running, icon, title, description, statusLabel, he
           {metadata?.tool_name && !FILE_EDIT_TOOL_NAMES.has(metadata.tool_name) ? (
             <Badge variant="outline" size="meta">{metadata.tool_name}</Badge>
           ) : null}
+          </div>
         </CardAction>
       </CardHeader>
       {headerAction ? (
-        <div className="tool-result-card__action-bar">
-          <span className="tool-result-card__action-hint">Shell command is still running</span>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-y border-destructive/20 bg-destructive/5 px-3 py-2">
+          <span className="text-xs text-muted-foreground">Shell command is still running</span>
           {headerAction}
         </div>
       ) : null}
-      <CardContent className="tool-result-card__content">
-        {children}
-        {metadata?.call_id ? <Badge variant="ghost" size="meta">{metadata.call_id}</Badge> : null}
+      <CardContent>
+        <div className="flex flex-col gap-2">
+          {children}
+          {metadata?.call_id ? <Badge variant="ghost" size="meta">{metadata.call_id}</Badge> : null}
+        </div>
       </CardContent>
     </Card>
   );
@@ -388,9 +416,9 @@ function OutputBlock({ label, value, empty, truncated, tone }: { label: string; 
   const displayValue = value && value.length > 0 ? value : empty;
   if (!displayValue) return null;
   return (
-    <div className="tool-result__section" data-tone={tone}>
-      <span className="tool-result__section-label">{label}{truncated ? " · truncated" : ""}</span>
-      <pre className="tool-result__pre">{displayValue}</pre>
+    <div className={cn(SECTION_CLASSES, tone === "stderr" && "border-destructive/30")} data-tool-section data-tone={tone}>
+      <span className={SECTION_LABEL_CLASSES} data-tool-section-label>{label}{truncated ? " · truncated" : ""}</span>
+      <CodeBlock value={displayValue} />
     </div>
   );
 }
@@ -419,8 +447,8 @@ function CodeOutputBlock({
   const effectiveLanguage = value && value.length > 0 ? language : undefined;
   const effectivePath = value && value.length > 0 ? path : undefined;
   return (
-    <div className="tool-result__section" data-tone={tone}>
-      <span className="tool-result__section-label">{label}{truncated ? " · truncated" : ""}</span>
+    <div className={cn(SECTION_CLASSES, tone === "stderr" && "border-destructive/30")} data-tool-section data-tone={tone}>
+      <span className={SECTION_LABEL_CLASSES} data-tool-section-label>{label}{truncated ? " · truncated" : ""}</span>
       <CodeBlock value={displayValue} language={effectiveLanguage} path={effectivePath} />
     </div>
   );
@@ -429,8 +457,16 @@ function CodeOutputBlock({
 function ToolNotice({ label, value, tone }: { label: string; value: string; tone?: "error" }) {
   if (!value) return null;
   return (
-    <div className="tool-result__notice" data-tone={tone}>
-      <strong>{label}</strong>
+    <div
+      className={cn(
+        "flex flex-col gap-1 rounded-md border p-3 text-sm",
+        tone === "error"
+          ? "border-destructive/30 bg-destructive/5 text-destructive"
+          : "border-primary/20 bg-primary/5 text-muted-foreground",
+      )}
+      data-tone={tone}
+    >
+      <strong className="font-semibold">{label}</strong>
       <span>{value}</span>
     </div>
   );

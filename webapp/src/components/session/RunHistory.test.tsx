@@ -63,7 +63,8 @@ describe("RunHistory", () => {
     );
 
     const trigger = await screen.findByRole("button", { name: /run history/i });
-    expect(trigger).toHaveClass("context-gauge", "context-gauge--interactive");
+    expect(trigger).toHaveAttribute("data-context-gauge");
+    expect(trigger).toHaveAttribute("data-interactive");
     expect(
       screen.queryByRole("progressbar", { name: "Context window usage" }),
     ).not.toBeInTheDocument();

@@ -4,7 +4,15 @@ import { EMPTY_SELECT_VALUE, fromSelectValueNullable, toSelectValue } from "../.
 import { EmptyState } from "../shared/EmptyState";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "../ui/card";
+import { SettingsList, SettingsPanel, SettingsSection } from "./settings-layout";
 import {
   Select,
   SelectContent,
@@ -56,28 +64,32 @@ function ProfileCard({
   }
 
   return (
-    <Card className="settings-item settings-item--provider provider-card">
-      <div className="provider-card__info">
-        <span className="settings-item__name">{profile.name}</span>
-        <div className="provider-card__subtitle">
+    <Card size="sm" data-model-profile-card>
+      <CardHeader>
+        <CardTitle>{profile.name}</CardTitle>
+        <CardDescription>
           {profile.provider.name} · {runtimeParts.join(" · ")}
-        </div>
-        <div className="settings-item__meta">
+        </CardDescription>
+        <CardAction>
+          <div className="flex flex-wrap items-center gap-1">
+            <Button type="button" variant="ghost" size="sm" onClick={onEdit}>
+              <EditIcon data-icon="inline-start" />
+              Edit
+            </Button>
+            <Button type="button" variant="destructive" size="sm" onClick={onDelete}>
+              <Trash2Icon data-icon="inline-start" />
+              Delete
+            </Button>
+          </div>
+        </CardAction>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap gap-1">
           <Badge size="meta" variant="secondary">
             Tools: {toolVisibilityLabel(profile.allowed_tools)}
           </Badge>
         </div>
-      </div>
-      <div className="provider-card__actions">
-        <Button type="button" variant="ghost" size="sm" className="settings-action-button" onClick={onEdit}>
-          <EditIcon data-icon="inline-start" />
-          Edit
-        </Button>
-        <Button type="button" variant="ghost" size="sm" className="settings-action-button settings-action-button--danger" onClick={onDelete}>
-          <Trash2Icon data-icon="inline-start" />
-          Delete
-        </Button>
-      </div>
+      </CardContent>
     </Card>
   );
 }
@@ -104,7 +116,6 @@ export function ModelProfilesSettingsSection({
       type="button"
       variant="ghost"
       size="sm"
-      className="settings-action-button"
       onClick={onCreate}
       disabled={providers.length === 0}
     >
@@ -114,64 +125,60 @@ export function ModelProfilesSettingsSection({
   );
 
   return (
-    <section className="settings-section settings-section--active">
-      <Card className="settings-panel">
-        <CardHeader className="settings-panel__header">
-          <div>
-            <CardTitle className="settings-panel__title">Model Profiles</CardTitle>
-            <div className="settings-panel__subtitle">
-              Runtime configuration combining a provider with model settings
-            </div>
-          </div>
-          {providers.length === 0 ? (
+    <SettingsSection>
+      <SettingsPanel
+        title="Model Profiles"
+        description="Runtime configuration combining a provider with model settings"
+        actions={
+          providers.length === 0 ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="inline-flex">{addProfileButton}</span>
               </TooltipTrigger>
               <TooltipContent>Add an LLM provider first</TooltipContent>
             </Tooltip>
-          ) : addProfileButton}
-        </CardHeader>
-        <CardContent className="settings-panel__body">
-          <div className="active-profile-control">
-            <span className="active-profile-control__label">Active default</span>
-            <Select
-              value={toSelectValue(activeProfileId)}
-              onValueChange={(value) =>
-                onSetActiveProfile(fromSelectValueNullable(value))
-              }
-            >
-              <SelectTrigger
-                aria-label="Active default profile"
-                className="active-profile-control__select"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={EMPTY_SELECT_VALUE}>No default</SelectItem>
+          ) : (
+            addProfileButton
+          )
+        }
+      >
+        <div className="flex flex-col gap-2" data-settings-active-control>
+          <span className="text-sm font-medium">Active default</span>
+          <Select
+            value={toSelectValue(activeProfileId)}
+            onValueChange={(value) =>
+              onSetActiveProfile(fromSelectValueNullable(value))
+            }
+          >
+            <SelectTrigger aria-label="Active default profile" className="w-full max-w-md">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={EMPTY_SELECT_VALUE}>No default</SelectItem>
               {profiles.map((profile) => (
                 <SelectItem key={profile.id} value={profile.id}>
                   {profile.name}
                 </SelectItem>
               ))}
-              </SelectContent>
-            </Select>
-          </div>
+            </SelectContent>
+          </Select>
+        </div>
 
-          {profiles.length === 0 ? (
-            <EmptyState title="No profiles configured" description="Add an LLM provider, then create a model profile to configure runtime settings." />
-          ) : (
-            profiles.map((profile) => (
+        {profiles.length === 0 ? (
+          <EmptyState title="No profiles configured" description="Add an LLM provider, then create a model profile to configure runtime settings." />
+        ) : (
+          <SettingsList>
+            {profiles.map((profile) => (
               <ProfileCard
                 key={profile.id}
                 profile={profile}
                 onEdit={() => onEdit(profile)}
                 onDelete={() => onDelete(profile)}
               />
-            ))
-          )}
-        </CardContent>
-      </Card>
-    </section>
+            ))}
+          </SettingsList>
+        )}
+      </SettingsPanel>
+    </SettingsSection>
   );
 }

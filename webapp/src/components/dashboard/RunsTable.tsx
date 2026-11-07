@@ -9,7 +9,8 @@ import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { Empty, EmptyDescription, EmptyHeader } from "../ui/empty";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "../ui/card";
 import {
   Select,
   SelectContent,
@@ -82,7 +83,7 @@ function RunSessionTitle({ title }: { title: string | null }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="runs-row__session-label">{title}</span>
+        <span className="block truncate">{title}</span>
       </TooltipTrigger>
       <TooltipContent>{title}</TooltipContent>
     </Tooltip>
@@ -167,7 +168,7 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
 
   function sortIndicator(key: SortKey) {
     if (sortBy !== key) return null;
-    return <span className="sort-arrow">{sortDir === "asc" ? "\u25B2" : "\u25BC"}</span>;
+    return <span className="text-xs">{sortDir === "asc" ? "\u25B2" : "\u25BC"}</span>;
   }
 
   function handleRowClick(run: AllRunsRun) {
@@ -179,10 +180,12 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
   }
 
   return (
-    <Card className="dashboard-panel">
-      <CardHeader className="dashboard-panel__header">
-        <CardTitle className="dashboard-panel__title">All Runs</CardTitle>
-        <div className="runs-filters" aria-label="Run filters">
+    <Card>
+      <CardHeader>
+        <CardTitle>All Runs</CardTitle>
+        <CardAction>
+        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Run filters">
           <Select
             value={toSelectValue(statusFilter)}
             onValueChange={(value) => {
@@ -192,12 +195,11 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
           >
             <SelectTrigger
               size="sm"
-              className="runs-filter-select"
               aria-label="Status filter"
             >
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="runs-filter-select__content">
+            <SelectContent>
               <SelectItem value={EMPTY_SELECT_VALUE}>All statuses</SelectItem>
               {statusOptions.map((status) => (
                 <SelectItem key={status} value={status}>
@@ -215,12 +217,11 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
           >
             <SelectTrigger
               size="sm"
-              className="runs-filter-select"
               aria-label="Provider filter"
             >
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="runs-filter-select__content">
+            <SelectContent>
               <SelectItem value={EMPTY_SELECT_VALUE}>All providers</SelectItem>
               {providerOptions.map((provider) => (
                 <SelectItem key={provider} value={provider}>
@@ -238,12 +239,12 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
           >
             <SelectTrigger
               size="sm"
-              className="runs-filter-select runs-filter-select--model"
+              className="max-w-64"
               aria-label="Model filter"
             >
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="runs-filter-select__content">
+            <SelectContent>
               <SelectItem value={EMPTY_SELECT_VALUE}>All models</SelectItem>
               {modelOptions.map((model) => (
                 <SelectItem key={model} value={model}>
@@ -253,34 +254,38 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
             </SelectContent>
           </Select>
         </div>
-        <Badge variant="outline" className="dashboard-panel__count">{totalCount} total</Badge>
+        <Badge variant="outline">{totalCount} total</Badge>
+        </div>
+        </CardAction>
       </CardHeader>
 
-      <CardContent className="dashboard-panel__body">
+      <CardContent>
         {runsQuery.isLoading ? (
-          <div className="dashboard-panel__loading">
+          <div className="flex justify-center py-8">
             <LoadingSpinner size="md" />
           </div>
         ) : runsQuery.isError ? (
-          <Alert variant="destructive" className="dashboard-panel__error">
+          <Alert variant="destructive">
             <AlertTriangleIcon />
             <AlertDescription>Failed to load runs.</AlertDescription>
           </Alert>
         ) : runs.length === 0 ? (
-          <div className="dashboard-panel__empty">
-            No runs match the current filters.
-          </div>
+          <Empty>
+            <EmptyHeader>
+              <EmptyDescription>No runs match the current filters.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : (
           <>
-            <div className="dashboard-table-wrap">
-              <Table className="dashboard-table dashboard-table--clickable">
+            <div className="@container min-w-0">
+              <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Status</TableHead>
                     <TableHead>Session</TableHead>
-                    <TableHead>Agent</TableHead>
+                    <TableHead className="hidden @5xl:table-cell">Agent</TableHead>
                     <TableHead>Model</TableHead>
-                    <TableHead>Provider</TableHead>
+                    <TableHead className="hidden @5xl:table-cell">Provider</TableHead>
                     <TableHead>
                       <Button variant="ghost" size="sm" onClick={() => toggleSort("total_duration_ms")}>
                       Duration {sortIndicator("total_duration_ms")}
@@ -317,31 +322,35 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
                   {runs.map((run) => (
                     <TableRow
                       key={run.run_session_id}
-                      className="runs-row"
+                      className="cursor-pointer"
+                      data-run-id={run.run_session_id}
                       onClick={() => handleRowClick(run)}
                     >
                       <TableCell>
                         <StatusPill
                           status={run.status}
                           size="meta"
-                          className="runs-row__status"
                         />
                       </TableCell>
-                      <TableCell className="runs-row__session">
-                        <RunSessionTitle title={run.session_title} />
+                      <TableCell>
+                        <div className="max-w-28 truncate">
+                          <RunSessionTitle title={run.session_title} />
+                        </div>
                       </TableCell>
-                      <TableCell>{run.agent_name ?? "--"}</TableCell>
-                      <TableCell className="mono">{run.model ?? "--"}</TableCell>
-                      <TableCell>{run.provider ?? "--"}</TableCell>
+                      <TableCell className="hidden @5xl:table-cell">{run.agent_name ?? "--"}</TableCell>
+                      <TableCell><span className="font-mono">{run.model ?? "--"}</span></TableCell>
+                      <TableCell className="hidden @5xl:table-cell">{run.provider ?? "--"}</TableCell>
                       <TableCell>{formatDuration(run.total_duration_ms)}</TableCell>
                       <TableCell>{formatNumber(run.input_tokens)}</TableCell>
                       <TableCell>{formatNumber(run.output_tokens)}</TableCell>
                       <TableCell>{formatCost(run.estimated_cost_usd)}</TableCell>
-                      <TableCell className={run.error_count > 0 ? "text-error" : ""}>
-                        {run.error_count}
+                      <TableCell>
+                        <span className={run.error_count > 0 ? "text-destructive" : undefined}>
+                          {run.error_count}
+                        </span>
                       </TableCell>
-                      <TableCell className="runs-row__time">
-                        {formatTimestamp(run.started_at)}
+                      <TableCell>
+                        <span className="whitespace-normal text-muted-foreground">{formatTimestamp(run.started_at)}</span>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -350,7 +359,7 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
             </div>
 
             {/* Pagination */}
-            <div className="runs-pagination">
+            <div className="flex items-center justify-end gap-3 pt-3">
               <Button
                 variant="outline"
                 size="sm"
@@ -359,7 +368,7 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
               >
                 Previous
               </Button>
-              <span className="runs-pagination__info">
+              <span className="text-sm text-muted-foreground">
                 Page {page + 1} of {totalPages}
               </span>
               <Button

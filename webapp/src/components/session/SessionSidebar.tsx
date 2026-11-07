@@ -123,14 +123,13 @@ export function SessionSidebar({
   };
 
   return (
-    <div className="session-sidebar" aria-label="Session list">
-      <div className="session-sidebar__header">
-        <h2 className="session-sidebar__title">Sessions</h2>
+    <div className="flex h-full min-h-0 flex-col gap-2 px-3 pt-3" aria-label="Session list">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Sessions</h2>
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          className="session-sidebar__new-button"
           onClick={onNewSession}
         >
           <PlusIcon data-icon="inline-start" />
@@ -146,12 +145,12 @@ export function SessionSidebar({
         clearLabel="Clear session search"
       />
 
-      <div className="session-sidebar__list">
+      <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto pt-1 pb-3">
         {isLoading ? (
           <>
-            <Skeleton className="skeleton skeleton--card" />
-            <Skeleton className="skeleton skeleton--card" />
-            <Skeleton className="skeleton skeleton--card" />
+            <Skeleton className="h-13 w-full" />
+            <Skeleton className="h-13 w-full" />
+            <Skeleton className="h-13 w-full" />
           </>
         ) : sessions.length === 0 ? (
           <EmptyState
@@ -173,30 +172,32 @@ export function SessionSidebar({
             return (
               <div
                 key={session.session_id}
-                className={`session-card ${activeSessionId === session.session_id ? "session-card--active" : ""}${menuOpen ? " session-card--menu-open" : ""}${isEditing ? " session-card--editing" : ""}`}
+                data-active={activeSessionId === session.session_id || undefined}
+                data-menu-open={menuOpen || undefined}
+                data-editing={isEditing || undefined}
+                className="group/session relative w-full rounded-md transition-colors hover:bg-muted data-active:bg-primary/10 data-active:hover:bg-primary/15"
               >
                 {isEditing ? (
                   <form
-                    className="session-card__edit-form"
+                    className="flex flex-col gap-2 p-2"
                     onSubmit={(event) => {
                       void saveEdit(event, session);
                     }}
                   >
-                    <label className="session-card__edit-label" htmlFor={`session-title-${session.session_id}`}>
+                    <label className="sr-only" htmlFor={`session-title-${session.session_id}`}>
                       Session title
                     </label>
                     <Input
                       id={`session-title-${session.session_id}`}
-                      className="session-card__edit-input"
                       value={draftTitle}
                       onChange={(event) => setDraftTitle(event.target.value)}
                       autoFocus
                       aria-invalid={Boolean(editError)}
                     />
                     {editError ? (
-                      <p className="session-card__edit-error">{editError}</p>
+                      <p role="alert" className="text-xs text-destructive">{editError}</p>
                     ) : null}
-                    <div className="session-card__edit-actions">
+                    <div className="flex items-center gap-2">
                       <Button type="submit" size="sm" disabled={saveDisabled}>
                         {isSaving ? "Saving…" : "Save"}
                       </Button>
@@ -213,12 +214,8 @@ export function SessionSidebar({
                   </form>
                 ) : (
                   <>
-                    <Button
-                      asChild
-                      variant="ghost"
-                      className="session-card__main"
-                    >
                       <Link
+                        className="flex min-h-13 w-full min-w-0 flex-col items-stretch justify-center gap-0.5 rounded-md px-3 py-2 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                         to={sessionHref(session.session_id)}
                         onClick={(event) => {
                           setOpenMenuSessionId(null);
@@ -229,27 +226,27 @@ export function SessionSidebar({
                           onResumeSession(session.session_id);
                         }}
                       >
-                        <span className="session-card__title">
+                        <span className="block w-full min-w-0 truncate text-sm font-medium text-foreground group-hover/session:pr-7 group-data-active/session:text-primary group-data-menu-open/session:pr-7">
                           {session.title || "Untitled session"}
                         </span>
-                        <div className="session-card__meta">
-                          <time className="session-card__time">{formatDate(session.updated_at)}</time>
+                        <div className="flex min-w-0 items-center justify-start gap-2 text-xs text-muted-foreground">
+                          <time className="inline-flex min-h-6 items-center whitespace-nowrap">{formatDate(session.updated_at)}</time>
                           {isProcessing ? (
                             <span
-                              className="session-card__processing"
+                              className="inline-flex shrink-0 items-center justify-center text-primary"
                               role="status"
                               aria-label="Session processing"
                             >
                               <LoadingSpinner size="sm" />
                             </span>
                           ) : null}
-                          <MetaBadge className="session-card__model">
+                          <MetaBadge>
                             {session.model}
                           </MetaBadge>
                         </div>
                       </Link>
-                    </Button>
 
+                    <div className="pointer-events-none absolute top-2 right-2 opacity-0 transition-opacity group-hover/session:pointer-events-auto group-hover/session:opacity-100 group-data-menu-open/session:pointer-events-auto group-data-menu-open/session:opacity-100 has-focus-visible:pointer-events-auto has-focus-visible:opacity-100">
                     <DropdownMenu
                       open={menuOpen}
                       onOpenChange={(open) => {
@@ -260,8 +257,7 @@ export function SessionSidebar({
                         <Button
                           type="button"
                           variant="ghost"
-                          size="icon-sm"
-                          className="session-card__menu-trigger"
+                          size="icon-xs"
                           aria-label={`Open actions for ${session.title || "Untitled session"}`}
                           onClick={(event) => event.stopPropagation()}
                         >
@@ -271,7 +267,6 @@ export function SessionSidebar({
                       <DropdownMenuContent align="end">
                         <DropdownMenuGroup>
                           <DropdownMenuItem
-                            className="session-card__menu-item"
                             onClick={() => beginEdit(session)}
                           >
                             <PencilIcon />
@@ -279,7 +274,6 @@ export function SessionSidebar({
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             variant="destructive"
-                            className="session-card__menu-item"
                             onClick={() => {
                               setOpenMenuSessionId(null);
                               onDeleteSession(session);
@@ -291,6 +285,7 @@ export function SessionSidebar({
                         </DropdownMenuGroup>
                       </DropdownMenuContent>
                     </DropdownMenu>
+                    </div>
                   </>
                 )}
               </div>

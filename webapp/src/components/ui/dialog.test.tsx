@@ -15,7 +15,7 @@ function ActionDialog() {
         <DialogHeader>
           <DialogTitle>Save changes?</DialogTitle>
         </DialogHeader>
-        <DialogFooter className="app-action-row app-action-row--end">
+        <DialogFooter>
           <Button variant="outline">Cancel</Button>
           <Button>Save</Button>
         </DialogFooter>
@@ -31,7 +31,7 @@ describe("Dialog", () => {
     const dialog = screen.getByRole("dialog", { name: "Save changes?" });
     const footer = dialog.querySelector('[data-slot="dialog-footer"]');
 
-    expect(footer).toHaveClass("app-action-row", "app-action-row--end");
+    expect(footer).toHaveAttribute("data-slot", "dialog-footer");
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute(
       "data-variant",
       "outline",

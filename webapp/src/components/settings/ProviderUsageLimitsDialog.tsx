@@ -19,6 +19,7 @@ import type {
   UsageLimitWindow,
 } from "../../types";
 import { Badge } from "../ui/badge";
+import { Progress } from "../ui/progress";
 import { Button } from "../ui/button";
 import { FormDialog } from "../ui/form-dialog";
 import { Skeleton } from "../ui/skeleton";
@@ -59,22 +60,22 @@ function getProgressTone(percent: number | null): {
   }
   if (percent >= 90) {
     return {
-      bar: "bg-rose-500",
-      track: "bg-rose-500/15",
-      text: "text-rose-600 dark:text-rose-400",
+      bar: "bg-destructive",
+      track: "bg-destructive/10",
+      text: "text-destructive",
     };
   }
   if (percent >= 70) {
     return {
-      bar: "bg-amber-500",
-      track: "bg-amber-500/15",
-      text: "text-amber-600 dark:text-amber-400",
+      bar: "bg-chart-4",
+      track: "bg-muted",
+      text: "text-foreground",
     };
   }
   return {
-    bar: "bg-emerald-500",
-    track: "bg-emerald-500/15",
-    text: "text-emerald-600 dark:text-emerald-400",
+    bar: "bg-primary",
+    track: "bg-muted",
+    text: "text-muted-foreground",
   };
 }
 
@@ -183,7 +184,7 @@ export function ProviderUsageLimitsDialog({ provider, onClose }: Props) {
       icon={<GaugeIcon className="size-5" />}
       size="lg"
     >
-      <div className="provider-usage-dialog">
+      <div className="flex min-h-0 min-w-0 flex-col gap-4">
         <UsageDialogHeader
           provider={provider}
           usage={usageQuery.data}
@@ -192,7 +193,7 @@ export function ProviderUsageLimitsDialog({ provider, onClose }: Props) {
           }}
           isFetching={usageQuery.isFetching}
         />
-        <div className="provider-usage-dialog__scroll">
+        <div className="min-h-0 overflow-y-auto">
           {usageQuery.isLoading ? (
             <UsageLoadingState />
           ) : usageQuery.isError ? (
@@ -205,7 +206,7 @@ export function ProviderUsageLimitsDialog({ provider, onClose }: Props) {
           ) : !usageQuery.data || usageQuery.data.buckets.length === 0 ? (
             <UsageEmptyState />
           ) : (
-            <div className="provider-usage-dialog__buckets">
+            <div className="flex flex-col gap-4">
               {usageQuery.data.buckets.map((bucket) => (
                 <BucketCard key={bucket.id} bucket={bucket} />
               ))}
@@ -232,8 +233,8 @@ function UsageDialogHeader({
   const fetchedAtText = formatFetchedAt(usage?.fetched_at);
 
   return (
-    <div className="provider-usage-dialog__header">
-      <div className="provider-usage-dialog__meta flex items-center justify-between gap-3 text-xs text-muted-foreground">
+    <div>
+      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
         <span className="inline-flex min-w-0 items-center gap-2">
           {fetchedAtText ? (
             <>
@@ -244,7 +245,7 @@ function UsageDialogHeader({
             <span aria-hidden="true" />
           )}
           {planType ? (
-            <Badge size="meta" variant="info" className="provider-usage-dialog__plan-badge capitalize">
+            <Badge size="meta" variant="info">
               <SparklesIcon className="size-3" />
               {planType}
             </Badge>
@@ -256,7 +257,7 @@ function UsageDialogHeader({
           size="sm"
           onClick={onRefresh}
           disabled={isFetching}
-          className="provider-usage-dialog__refresh shrink-0"
+          className="shrink-0"
           aria-label="Refresh usage limits"
         >
           <RefreshCcwIcon
@@ -279,12 +280,12 @@ function BucketCard({ bucket }: { bucket: UsageLimitBucket }) {
     <section
       aria-label={`Usage limit: ${bucket.label}`}
       className={cn(
-        "provider-usage-bucket rounded-xl border border-border bg-card/60 shadow-xs transition-colors",
-        bucket.status === "exhausted" && "border-rose-500/30 bg-rose-500/5",
-        bucket.status === "warning" && "border-amber-500/30 bg-amber-500/5",
+        "rounded-xl border border-border bg-card shadow-xs transition-colors",
+        bucket.status === "exhausted" && "border-destructive/30 bg-destructive/5",
+        bucket.status === "warning" && "border-chart-4/40",
       )}
     >
-      <header className="provider-usage-bucket__header flex flex-wrap items-center justify-between gap-2 border-b border-border/40">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <span
             className={cn(
@@ -306,17 +307,16 @@ function BucketCard({ bucket }: { bucket: UsageLimitBucket }) {
         <Badge
           size="meta"
           variant={STATUS_BADGE_VARIANTS[bucket.status]}
-          className="provider-usage-bucket__status-badge uppercase tracking-wide"
         >
           {STATUS_LABEL[bucket.status]}
         </Badge>
       </header>
 
-      <div className="provider-usage-bucket__body">
+      <div className="flex flex-col gap-3 p-4">
         {bucket.unlimited ? (
           <UnlimitedBlock />
         ) : hasWindows ? (
-          <div className="provider-usage-window-list">
+          <div className="flex flex-col gap-3">
             {bucket.windows.map((window, index) => (
               <UsageWindowRow
                 key={`${bucket.id}-${window.name}-${index}`}
@@ -331,7 +331,7 @@ function BucketCard({ bucket }: { bucket: UsageLimitBucket }) {
         )}
 
         {noteEntries.length > 0 && (
-          <ul className="provider-usage-bucket__notes flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border/40 text-xs text-muted-foreground">
+          <ul className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border/40 pt-3 text-xs text-muted-foreground">
             {noteEntries.map((entry) => (
               <li
                 key={entry.label}
@@ -382,7 +382,7 @@ function UsageWindowRow({ window }: { window: UsageLimitWindow }) {
   else if (usedRequestText) summaryParts.push(usedRequestText);
 
   return (
-    <div className="provider-usage-window rounded-lg border border-border/60 bg-background/40">
+    <div className="rounded-lg border border-border/60 bg-background/40 p-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="text-sm font-medium text-foreground">
           {formatWindowLabel(window)}
@@ -398,23 +398,14 @@ function UsageWindowRow({ window }: { window: UsageLimitWindow }) {
         ) : null}
       </div>
 
-      <div
-        className={cn(
-          "mt-2.5 h-2 w-full overflow-hidden rounded-full",
-          tone.track,
-        )}
-        role="progressbar"
-        aria-valuenow={progressValue ?? undefined}
-        aria-valuemin={0}
-        aria-valuemax={100}
-      >
-        {progressValue != null ? (
-          <div
-            className={cn("h-full rounded-full transition-all", tone.bar)}
-            style={{ width: `${Math.max(0, Math.min(100, progressValue))}%` }}
-          />
-        ) : null}
-      </div>
+      <Progress
+        className="mt-2.5 h-2"
+        value={
+          progressValue != null
+            ? Math.max(0, Math.min(100, progressValue))
+            : null
+        }
+      />
 
       {summaryParts.length > 0 && (
         <p className="mt-2.5 text-xs text-muted-foreground">
@@ -461,8 +452,8 @@ function bucketNoteEntries(bucket: UsageLimitBucket): NoteEntry[] {
 function UsageLoadingState() {
   return (
     <div className="grid gap-4">
-      <Skeleton className="h-32 w-full rounded-xl" />
-      <Skeleton className="h-32 w-full rounded-xl" />
+      <Skeleton className="h-32 w-full" />
+      <Skeleton className="h-32 w-full" />
     </div>
   );
 }
@@ -489,8 +480,8 @@ function UsageErrorState({
   onRetry: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-rose-500/30 bg-rose-500/5 px-6 py-10 text-center">
-      <AlertTriangleIcon className="size-7 text-rose-500" />
+    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-6 py-10 text-center">
+      <AlertTriangleIcon className="size-7 text-destructive" />
       <div>
         <p className="text-sm font-medium text-foreground">
           Couldn't load usage limits

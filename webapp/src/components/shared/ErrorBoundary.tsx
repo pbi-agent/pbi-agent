@@ -18,9 +18,9 @@ export class ErrorBoundary extends Component<Props, State> {
   render(): ReactNode {
     if (this.state.error) {
       return (
-        <div className="error-boundary">
-          <h2>Something went wrong</h2>
-          <pre>{this.state.error.message}</pre>
+        <div role="alert" className="flex flex-col items-start gap-3 p-6">
+          <h2 className="text-lg font-semibold">Something went wrong</h2>
+          <pre className="max-w-full overflow-auto rounded-md bg-muted p-3 font-mono text-sm text-muted-foreground">{this.state.error.message}</pre>
           <Button
             type="button"
             onClick={() => this.setState({ error: null })}

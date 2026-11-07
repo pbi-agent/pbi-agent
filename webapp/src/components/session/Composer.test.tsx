@@ -201,12 +201,12 @@ describe("Composer", () => {
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Use @src/main.py with $compress");
 
     await waitFor(() => {
-      expect(container.querySelector(".composer__textarea-highlight--skill")).toHaveTextContent(
+      expect(container.querySelector('[data-highlight="skill"]')).toHaveTextContent(
         "$compress",
       );
     });
     await waitFor(() => {
-      expect(container.querySelector(".composer__textarea-highlight--mention")).toHaveTextContent(
+      expect(container.querySelector('[data-highlight="mention"]')).toHaveTextContent(
         "@src/main.py",
       );
     });
@@ -230,8 +230,8 @@ describe("Composer", () => {
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Use @made/up/path.py with $notaskill");
 
     await waitFor(() => expect(searchFileMentions).toHaveBeenCalled());
-    expect(container.querySelector(".composer__textarea-highlight--mention")).not.toBeInTheDocument();
-    expect(container.querySelector(".composer__textarea-highlight--skill")).not.toBeInTheDocument();
+    expect(container.querySelector('[data-highlight="mention"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-highlight="skill"]')).not.toBeInTheDocument();
   });
 
   it("renders no highlight chips in shell mode", async () => {
@@ -251,7 +251,7 @@ describe("Composer", () => {
 
     await user.type(screen.getByRole("textbox", { name: "Message" }), "!ls $HOME @src/x.py");
 
-    expect(container.querySelector(".composer__textarea-highlight")).not.toBeInTheDocument();
+    expect(container.querySelector("[data-highlight]")).not.toBeInTheDocument();
     expect(searchFileMentions).not.toHaveBeenCalledWith("src/x.py", expect.anything(), expect.anything());
   });
 
@@ -418,8 +418,8 @@ describe("Composer", () => {
     await user.click(screen.getByRole("button", { name: "Enhance prompt" }));
 
     expect(textbox).toBeDisabled();
-    expect(textbox.closest(".composer__input-row")).toHaveClass(
-      "composer__input-row--processing",
+    expect(textbox.closest("[data-composer-input-row]")).toHaveAttribute(
+      "data-processing",
     );
     expect(screen.getByText("Enhancing prompt")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Actions" })).toBeDisabled();
@@ -504,7 +504,7 @@ describe("Composer", () => {
     const mic = screen.getByRole("button", { name: "Start dictation" });
     expect(mic).toBeDisabled();
 
-    const tooltipTrigger = mic.closest(".composer__input-tooltip-trigger");
+    const tooltipTrigger = mic.closest("[data-input-tooltip-trigger]");
     expect(tooltipTrigger).not.toBeNull();
     await user.hover(tooltipTrigger!);
 
@@ -548,8 +548,8 @@ describe("Composer", () => {
   it("marks the input row while interactive mode is enabled", () => {
     renderComposer({ interactiveMode: true });
 
-    const inputRow = screen.getByRole("textbox", { name: "Message" }).closest(".composer__input-row");
-    expect(inputRow).toHaveClass("composer__input-row--interactive");
+    const inputRow = screen.getByRole("textbox", { name: "Message" }).closest("[data-composer-input-row]");
+    expect(inputRow).toHaveAttribute("data-interactive");
   });
 
   it("recalls the latest input history item with ArrowUp in an empty focused textbox", () => {
@@ -804,7 +804,7 @@ describe("Composer", () => {
     const actionsButton = screen.getByRole("button", { name: "Actions" });
     expect(actionsButton).toBeDisabled();
     expect(actionsButton).not.toHaveAttribute("title");
-    const actionsTooltipTrigger = actionsButton.closest(".composer__action-tooltip-trigger");
+    const actionsTooltipTrigger = actionsButton.closest("[data-action-tooltip-trigger]");
     expect(actionsTooltipTrigger).not.toBeNull();
     await user.hover(actionsTooltipTrigger!);
     await waitFor(() => {
@@ -856,8 +856,8 @@ describe("Composer", () => {
     });
 
     expect(screen.getByRole("textbox", { name: "Message" })).toBeDisabled();
-    expect(container.querySelector(".composer__input-row--processing")).toBeInTheDocument();
-    expect(container.querySelector(".composer__input-row--follow-up-ready")).not.toBeInTheDocument();
+    expect(container.querySelector("[data-composer-input-row][data-processing]")).toBeInTheDocument();
+    expect(container.querySelector("[data-composer-input-row][data-follow-up-ready]")).not.toBeInTheDocument();
     expect(container.querySelector(".composer__processing-indicator")).not.toBeInTheDocument();
     expect(container.querySelector(".composer__processing-bar")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Assistant is processing");
@@ -872,8 +872,8 @@ describe("Composer", () => {
 
     expect(screen.getByRole("textbox", { name: "Message" })).toBeEnabled();
     expect(screen.getByPlaceholderText("Send a follow-up...")).toBeInTheDocument();
-    expect(container.querySelector(".composer__input-row--follow-up-ready")).toBeInTheDocument();
-    expect(container.querySelector(".composer__input-row--processing")).not.toBeInTheDocument();
+    expect(container.querySelector("[data-composer-input-row][data-follow-up-ready]")).toBeInTheDocument();
+    expect(container.querySelector("[data-composer-input-row][data-processing]")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(
       "Assistant is working. You can draft a follow-up.",
     );
@@ -889,8 +889,8 @@ describe("Composer", () => {
 
     await user.type(screen.getByRole("textbox", { name: "Message" }), "!pwd");
 
-    expect(container.querySelector(".composer__input-row--shell")).toBeInTheDocument();
-    expect(container.querySelector(".composer__input-row--follow-up-ready")).not.toBeInTheDocument();
+    expect(container.querySelector("[data-composer-input-row][data-shell]")).toBeInTheDocument();
+    expect(container.querySelector("[data-composer-input-row][data-follow-up-ready]")).not.toBeInTheDocument();
   });
 
   it("keeps recording visual precedence over the follow-up-ready ambient state", async () => {
@@ -904,8 +904,8 @@ describe("Composer", () => {
     await user.click(screen.getByRole("button", { name: "Start dictation" }));
 
     expect(await screen.findByRole("button", { name: "Stop dictation recording" })).toBeInTheDocument();
-    expect(container.querySelector(".composer__input-row--recording")).toBeInTheDocument();
-    expect(container.querySelector(".composer__input-row--follow-up-ready")).not.toBeInTheDocument();
+    expect(container.querySelector("[data-composer-input-row][data-recording]")).toBeInTheDocument();
+    expect(container.querySelector("[data-composer-input-row][data-follow-up-ready]")).not.toBeInTheDocument();
   });
 
   it("keeps idle submit behavior unchanged", async () => {
@@ -933,11 +933,11 @@ describe("Composer", () => {
 
     expect(onSubmit).not.toHaveBeenCalled();
     expect(screen.getByRole("menu", { name: "Choose follow-up delivery" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /After next safe checkpoint/ })).toHaveClass(
-      "composer__completion-item--active",
+    expect(screen.getByRole("menuitem", { name: /After next safe checkpoint/ })).toHaveAttribute(
+      "data-active",
     );
-    expect(screen.getByRole("menuitem", { name: /After assistant finishes/ })).not.toHaveClass(
-      "composer__completion-item--active",
+    expect(screen.getByRole("menuitem", { name: /After assistant finishes/ })).not.toHaveAttribute(
+      "data-active",
     );
   });
 
@@ -971,8 +971,8 @@ describe("Composer", () => {
 
     await user.type(textbox, "send later{enter}");
     fireEvent.keyDown(textbox, { key: "ArrowDown" });
-    expect(screen.getByRole("menuitem", { name: /After assistant finishes/ })).toHaveClass(
-      "composer__completion-item--active",
+    expect(screen.getByRole("menuitem", { name: /After assistant finishes/ })).toHaveAttribute(
+      "data-active",
     );
     fireEvent.keyDown(textbox, { key: "Enter" });
 
@@ -994,8 +994,8 @@ describe("Composer", () => {
 
     await user.type(textbox, "wrapped later{enter}");
     fireEvent.keyDown(textbox, { key: "ArrowUp" });
-    expect(screen.getByRole("menuitem", { name: /After assistant finishes/ })).toHaveClass(
-      "composer__completion-item--active",
+    expect(screen.getByRole("menuitem", { name: /After assistant finishes/ })).toHaveAttribute(
+      "data-active",
     );
     fireEvent.keyDown(textbox, { key: "Escape" });
 
@@ -1240,8 +1240,8 @@ describe("Composer", () => {
     );
 
     const dock = screen.getByLabelText("Queued follow-up");
-    expect(dock).toHaveClass("composer__follow-up-dock");
-    const actions = dock.querySelector(".composer__follow-up-actions");
+    expect(dock).toHaveAttribute("data-follow-up-dock");
+    const actions = dock.querySelector("[data-follow-up-actions]");
     expect(actions).not.toBeNull();
 
     const edit = screen.getByRole("button", { name: "Edit" });
@@ -1872,8 +1872,8 @@ describe("Composer", () => {
     await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(2));
     const builtInBadge = await screen.findByText("built-in");
     const projectBadge = await screen.findByText("project");
-    expect(builtInBadge.closest(".composer__completion-kind--built-in")).not.toBeNull();
-    expect(projectBadge.closest(".composer__completion-kind--project")).not.toBeNull();
+    expect(builtInBadge.closest('[data-kind="built-in"]')).not.toBeNull();
+    expect(projectBadge.closest('[data-kind="project"]')).not.toBeNull();
   });
 
   it("loads slash commands beyond the old eight-item cap into the anchored popup", async () => {
@@ -1894,7 +1894,7 @@ describe("Composer", () => {
     await waitFor(() =>
       expect(searchSlashCommands).toHaveBeenCalledWith("", 200),
     );
-    expect(listbox.closest(".composer")).not.toBeNull();
+    expect(listbox.closest("[data-composer]")).not.toBeNull();
     await waitFor(() =>
       expect(screen.getAllByRole("option")).toHaveLength(commands.length),
     );

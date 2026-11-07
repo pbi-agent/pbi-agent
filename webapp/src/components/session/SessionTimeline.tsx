@@ -14,15 +14,13 @@ import type {
   TimelineToolGroupEntry,
 } from "../../types";
 import { Button } from "../ui/button";
+import { cn } from "@/lib/utils";
+import { Spinner } from "../ui/spinner";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "../ui/collapsible";
-import {
-  Accordion,
-  AccordionItem,
-} from "../ui/accordion";
 import { Badge } from "../ui/badge";
 import { MarkdownContent } from "../shared/MarkdownContent";
 import { ToolResult } from "./ToolResult";
@@ -80,6 +78,29 @@ type TurnSummary = {
 const liveTickListeners = new Set<() => void>();
 let liveTickInterval: ReturnType<typeof setInterval> | null = null;
 let liveTickNowMs = Date.now();
+
+
+const SCROLL_AREA_CLASSES = "relative min-h-0 flex-1 overflow-y-auto";
+const TIMELINE_CLASSES = "mx-auto flex min-h-full w-full max-w-6xl flex-col gap-4 px-3 py-5 md:px-8";
+const SUMMARY_CLASSES = "min-w-0 truncate text-muted-foreground";
+const TOOL_TITLE_CLASSES = "flex-none font-medium text-foreground";
+const TOOL_SUBTITLE_CLASSES = "min-w-0 flex-auto truncate text-left font-normal text-muted-foreground";
+const CHEVRON_CLASSES = "transition-transform group-data-[state=open]/trigger:rotate-90";
+const COLLAPSIBLE_CHEVRON_CLASSES = CHEVRON_CLASSES;
+const ACCORDION_CONTENT_CLASSES =
+  "overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down";
+const WORK_RUN_BODY_CLASSES = "flex flex-col gap-3 pt-2 pb-2";
+const TURN_SUMMARY_RULE_CLASSES = "h-px flex-1 bg-linear-to-r from-transparent via-border to-transparent";
+const WORK_RUN_PHASE_CLASSES: Record<string, string> = {
+  "": "text-muted-foreground",
+  starting: "text-primary",
+  model_wait: "text-primary",
+  active: "text-primary",
+  tool_execution: "text-primary",
+  finalizing: "text-primary",
+  interrupting: "text-destructive",
+  retry_wait: "text-destructive",
+};
 
 function ensureLiveTickInterval() {
   if (liveTickInterval !== null) return;
@@ -1068,12 +1089,24 @@ function lastWorkIntent(items: WorkItem[]): LastWorkIntent | null {
 function WorkingIntentTicker({ intent, faded }: { intent: LastWorkIntent; faded: boolean }) {
   const Icon = intent.isShell ? TerminalIcon : WrenchIcon;
   return (
-    <span className="working-intent" data-faded={faded ? "true" : "false"} title={intent.text}>
-      <span className="working-intent__divider" aria-hidden="true" />
-      <span className="working-intent__viewport" aria-live="polite">
-        <span key={intent.text} className="working-intent__text" data-testid="working-intent">
-          <Icon aria-hidden="true" className="working-intent__icon" />
-          <span className="working-intent__label">{intent.text}</span>
+    <span
+      className={cn(
+        "inline-flex min-w-0 flex-auto items-center gap-2 font-normal text-muted-foreground transition-opacity",
+        faded && "opacity-60",
+      )}
+      data-working-intent
+      data-faded={faded ? "true" : "false"}
+      title={intent.text}
+    >
+      <span className="h-3.5 w-px flex-none bg-border" aria-hidden="true" />
+      <span className="inline-flex min-w-0 overflow-hidden" aria-live="polite">
+        <span
+          key={intent.text}
+          className="inline-flex min-w-0 animate-in items-center gap-1 duration-200 fade-in slide-in-from-bottom-1"
+          data-testid="working-intent"
+        >
+          <Icon aria-hidden="true" className="size-3.5 flex-none" />
+          <span className="min-w-0 truncate" data-working-intent-label>{intent.text}</span>
         </span>
       </span>
     </span>
@@ -1158,7 +1191,8 @@ function SubAgentCard({
   return (
     <button
       type="button"
-      className="working-items__sub-agent-card"
+      className="flex min-h-8 w-full cursor-pointer items-center justify-start gap-2 rounded-sm border border-border bg-card px-3 py-2 text-left text-xs text-muted-foreground hover:bg-muted disabled:cursor-default disabled:opacity-70 *:[svg]:size-3.5 *:[svg]:flex-none"
+      data-sub-agent-card
       aria-label={`Open ${name} agent session${ariaDetail ? `, ${ariaDetail}` : ""}`}
       onClick={() => {
         if (parentSessionId) {
@@ -1168,18 +1202,18 @@ function SubAgentCard({
       disabled={!parentSessionId}
     >
       <BotIcon aria-hidden="true" />
-      <span className="working-items__sub-agent-content">
-        <span className="working-items__sub-agent-main">{name}</span>
+      <span className="flex min-w-0 flex-auto items-baseline gap-2">
+        <span className="min-w-0 flex-initial truncate font-medium text-foreground">{name}</span>
         <WorkingSummary
           items={summaryItems}
           durationSeconds={summaryDurationSeconds}
-          className="working-items__summary working-items__sub-agent-summary"
+          className={cn(SUMMARY_CLASSES, "max-w-full flex-auto")}
         />
       </span>
       <Badge
         variant={statusModifier === "idle" ? "secondary" : statusModifier}
         size="meta"
-        className="working-items__sub-agent-status"
+        className="ml-auto"
       >
         {status}
       </Badge>
@@ -1342,9 +1376,12 @@ function WorkingItemsPanel({
     });
   }, [scrollGroupToCenter, syncDynamicMaxHeight]);
 
-  const panelStyle = needsScroll && !fullExpanded && hasOpenItem && dynamicMaxHeight !== null
-    ? { "--working-items-max-height": `${dynamicMaxHeight}px` } as CSSProperties
-    : undefined;
+  const panelStyle = {
+    "--working-items-max-height":
+      needsScroll && !fullExpanded && hasOpenItem && dynamicMaxHeight !== null
+        ? `${dynamicMaxHeight}px`
+        : "12rem",
+  } as CSSProperties;
 
   const handleAccordionValueChange = useCallback((nextValue: string) => {
     setOpenValueState({ closeSignal, value: nextValue });
@@ -1353,21 +1390,29 @@ function WorkingItemsPanel({
 
   return (
     <div
-      className={`working-items${needsScroll ? " working-items--scrollable" : ""}${fullExpanded ? " working-items--fully-expanded" : ""}`}
+      className={cn(
+        "flex flex-col gap-2 border-l border-dashed border-border pl-3",
+        needsScroll && !fullExpanded
+          && "max-h-(--working-items-max-height) scroll-smooth overflow-y-auto pr-1",
+      )}
+      data-working-items
+      data-scrollable={needsScroll ? "true" : undefined}
+      data-fully-expanded={fullExpanded ? "true" : undefined}
       ref={setScrollRef}
       style={panelStyle}
     >
-      <Accordion
+      <AccordionPrimitive.Root
+        data-slot="accordion"
         type="single"
         collapsible
         value={openValue}
         onValueChange={handleAccordionValueChange}
-        className="working-items__accordion"
+        className="flex w-full flex-col gap-2"
       >
         {groups.map((group) => {
           if (group.kind === "sub_agent") {
             return (
-              <div key={group.key} ref={setGroupRef(group.key)} className="working-items__item">
+              <div key={group.key} ref={setGroupRef(group.key)} className="min-w-0" data-working-item>
                 <SubAgentCard
                   group={group}
                   subAgents={subAgents}
@@ -1380,18 +1425,20 @@ function WorkingItemsPanel({
           if (group.kind === "background") {
             const { info } = group;
             return (
-              <AccordionItem
+              <AccordionPrimitive.Item
+                data-slot="accordion-item"
                 key={group.key}
                 value={group.key}
                 ref={setGroupRef(group.key)}
-                className="working-items__item working-items__accordion-item"
+                className="min-w-0"
+                data-working-item
               >
-                <AccordionPrimitive.Header className="working-items__accordion-header">
+                <AccordionPrimitive.Header className="flex w-full">
                   <AccordionPrimitive.Trigger asChild>
-                    <Button type="button" variant="ghost" size="sm" className="working-items__tool-trigger" data-timeline-item-id={group.itemId}>
-                      <ChevronRightIcon className="timeline-entry__chevron" />
-                      <span className="working-items__tool-title">Background task</span>
-                      <span className="working-items__tool-subtitle">
+                    <Button type="button" variant="outline" size="sm" className="group/trigger w-full justify-start" data-working-trigger="tool" data-timeline-item-id={group.itemId}>
+                      <ChevronRightIcon data-icon="inline-start" className={CHEVRON_CLASSES} />
+                      <span className={TOOL_TITLE_CLASSES}>Background task</span>
+                      <span className={TOOL_SUBTITLE_CLASSES}>
                         {`${info.intent ?? info.taskId} · ${info.status}${info.exitCode !== null ? ` · exit ${info.exitCode}` : ""}`}
                       </span>
                     </Button>
@@ -1399,42 +1446,44 @@ function WorkingItemsPanel({
                 </AccordionPrimitive.Header>
                 <AccordionPrimitive.Content
                   data-slot="accordion-content"
-                  className="working-items__accordion-content"
+                  className={ACCORDION_CONTENT_CLASSES}
                 >
-                  <div className="working-items__tool-detail">
+                  <div className="pt-2 pl-4">
                     <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">
                       {info.body || "(no output)"}
                     </pre>
                   </div>
                 </AccordionPrimitive.Content>
-              </AccordionItem>
+              </AccordionPrimitive.Item>
             );
           }
           if (group.kind === "tool") {
             const entry = group.entry;
             const subtitle = toolSubtitle(entry);
             return (
-              <AccordionItem
+              <AccordionPrimitive.Item
+                data-slot="accordion-item"
                 key={group.key}
                 value={group.key}
                 ref={setGroupRef(group.key)}
-                className="working-items__item working-items__accordion-item"
+                className="min-w-0"
+                data-working-item
               >
-                <AccordionPrimitive.Header className="working-items__accordion-header">
+                <AccordionPrimitive.Header className="flex w-full">
                   <AccordionPrimitive.Trigger asChild>
-                    <Button type="button" variant="ghost" size="sm" className="working-items__tool-trigger" data-timeline-item-id={entry.itemId}>
-                      <ChevronRightIcon className="timeline-entry__chevron" />
-                      <span className="working-items__tool-title">{entry.displayLabel}</span>
-                      {subtitle ? <span className="working-items__tool-subtitle">{subtitle}</span> : null}
-                      {entry.status === "running" ? <span className="timeline-entry__running" aria-label="running" /> : null}
+                    <Button type="button" variant="outline" size="sm" className="group/trigger w-full justify-start" data-working-trigger="tool" data-timeline-item-id={entry.itemId}>
+                      <ChevronRightIcon data-icon="inline-start" className={CHEVRON_CLASSES} />
+                      <span className={TOOL_TITLE_CLASSES}>{entry.displayLabel}</span>
+                      {subtitle ? <span className={TOOL_SUBTITLE_CLASSES}>{subtitle}</span> : null}
+                      {entry.status === "running" ? <Spinner className="ml-auto" aria-label="running" /> : null}
                     </Button>
                   </AccordionPrimitive.Trigger>
                 </AccordionPrimitive.Header>
                 <AccordionPrimitive.Content
                   data-slot="accordion-content"
-                  className="working-items__accordion-content"
+                  className={ACCORDION_CONTENT_CLASSES}
                 >
-                  <div className="working-items__tool-detail">
+                  <div className="pt-2 pl-4">
                     <ToolResult
                       metadata={entry.entry.metadata}
                       text={entry.entry.text}
@@ -1446,45 +1495,48 @@ function WorkingItemsPanel({
                     />
                   </div>
                 </AccordionPrimitive.Content>
-              </AccordionItem>
+              </AccordionPrimitive.Item>
             );
           }
           const groupLabel = "Thinking";
           return (
-            <AccordionItem
+            <AccordionPrimitive.Item
+              data-slot="accordion-item"
               key={group.key}
               value={group.key}
               ref={setGroupRef(group.key)}
-              className="working-items__item working-items__accordion-item"
+              className="min-w-0"
+              data-working-item
             >
-              <AccordionPrimitive.Header className="working-items__accordion-header">
+              <AccordionPrimitive.Header className="flex w-full">
                 <AccordionPrimitive.Trigger asChild>
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="working-items__group-trigger"
+                    className="group/trigger w-full justify-start"
+                    data-working-trigger="group"
                     aria-label={groupLabel}
                   >
-                    <ChevronRightIcon className="timeline-entry__chevron" />
+                    <ChevronRightIcon data-icon="inline-start" className={CHEVRON_CLASSES} />
                     <span>{groupLabel}</span>
                   </Button>
                 </AccordionPrimitive.Trigger>
               </AccordionPrimitive.Header>
               <AccordionPrimitive.Content
                 data-slot="accordion-content"
-                className="working-items__accordion-content"
+                className={ACCORDION_CONTENT_CLASSES}
               >
                 {group.items.map((item) => (
-                  <div key={item.itemId} className="working-items__thinking-detail" data-timeline-item-id={item.itemId}>
+                  <div key={item.itemId} className="pt-2 pl-4 text-sm leading-relaxed text-muted-foreground" data-timeline-item-id={item.itemId}>
                     <MarkdownContent content={item.content} />
                   </div>
                 ))}
               </AccordionPrimitive.Content>
-            </AccordionItem>
+            </AccordionPrimitive.Item>
           );
         })}
-      </Accordion>
+      </AccordionPrimitive.Root>
     </div>
   );
 }
@@ -1516,7 +1568,7 @@ function waitForNextAnimationFrame(): Promise<void> {
 }
 
 function isWorkRunTimelineTarget(target: HTMLElement): boolean {
-  return target.classList.contains("timeline-entry--work-run");
+  return target.dataset.timelineEntry === "work-run";
 }
 
 type WorkRunPhase = ProcessingPhase | "active";
@@ -1742,20 +1794,24 @@ function WorkRun({
 
   return (
     <div
-      className="timeline-entry timeline-entry--work-run"
+      className="my-1 animate-in fade-in"
+      data-timeline-entry="work-run"
       data-timeline-item-id={lastItemId}
     >
       <Collapsible
         open={open}
         onOpenChange={setOpenFromUser}
       >
-        <div className="timeline-entry__work-run-header-row">
+        <div
+          className={cn("inline-flex max-w-full items-center gap-1", WORK_RUN_PHASE_CLASSES[phase ?? ""])}
+        >
           <CollapsibleTrigger asChild>
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="timeline-entry__header timeline-entry__header--work-run"
+              className="group/trigger max-w-full min-w-0 justify-start"
+              data-work-run-header
               data-phase={phase ?? undefined}
               aria-label={workRunSummary ? `Working ${workRunSummary}` : "Working"}
               aria-keyshortcuts={canFullExpand ? "Alt+Enter" : undefined}
@@ -1763,17 +1819,13 @@ function WorkRun({
               onClickCapture={handleWorkRunHeaderClickCapture}
               onKeyDown={handleWorkRunHeaderKeyDown}
             >
-              <ChevronRightIcon className="timeline-entry__chevron" />
-              <TextShimmer text="Working" active={isVisiblyActive} className="timeline-entry__working-label" />
+              <ChevronRightIcon data-icon="inline-start" className={COLLAPSIBLE_CHEVRON_CLASSES} />
+              <TextShimmer text="Working" active={isVisiblyActive} className="flex-none" />
               <WorkingSummary
                 items={workRunSummaryItems}
                 durationSeconds={durationSeconds}
                 placeholder={showPlaceholderSummary ? "Preparing…" : null}
-                className={
-                  showPlaceholderSummary
-                    ? "working-items__summary working-items__summary--placeholder"
-                    : "working-items__summary"
-                }
+                className={cn(SUMMARY_CLASSES, showPlaceholderSummary && "opacity-80")}
               />
               {workIntent && !open ? (
                 <WorkingIntentTicker intent={workIntent} faded={!active} />
@@ -1783,7 +1835,7 @@ function WorkRun({
         </div>
         {hasItems ? (
           <CollapsibleContent>
-            <div className="timeline-entry__work-run-body" ref={contentRef}>
+            <div className={WORK_RUN_BODY_CLASSES} data-work-run-body ref={contentRef}>
               <WorkingItemsPanel
                 items={unit.items}
                 subAgents={subAgents}
@@ -1798,7 +1850,7 @@ function WorkRun({
               {canFullExpand ? (
                 <button
                   type="button"
-                  className="working-items__more-toggle"
+                  className="ml-3.5 inline-flex items-center gap-1 self-center rounded-full border border-dashed border-border bg-muted/60 px-3 py-1 text-xs font-medium text-muted-foreground transition-colors outline-none hover:border-primary/35 hover:bg-primary/10 hover:text-foreground focus-visible:border-primary/35 focus-visible:bg-primary/10 focus-visible:text-foreground aria-pressed:border-solid"
                   aria-label={fullExpanded ? "Limit Working tool list to five rows" : "Fully expand Working tool list"}
                   aria-pressed={fullExpanded}
                   aria-keyshortcuts="Alt+Enter"
@@ -1806,15 +1858,15 @@ function WorkRun({
                 >
                   {fullExpanded ? (
                     <>
-                      <ChevronUpIcon className="working-items__more-toggle-icon" />
-                      <span className="working-items__more-toggle-label">
+                      <ChevronUpIcon className="size-3.5 shrink-0" />
+                      <span>
                         Show recent {WORKING_ITEMS_MAX_VISIBLE}
                       </span>
                     </>
                   ) : (
                     <>
-                      <ChevronDownIcon className="working-items__more-toggle-icon" />
-                      <span className="working-items__more-toggle-label">
+                      <ChevronDownIcon className="size-3.5 shrink-0" />
+                      <span>
                         +{Math.max(0, workRunGroupCount - WORKING_ITEMS_MAX_VISIBLE)} more
                       </span>
                     </>
@@ -1875,25 +1927,26 @@ function IntermediateResults({
   ].filter(Boolean).join(" · ");
 
   return (
-    <div className="timeline-entry timeline-entry--intermediate-results">
+    <div className="animate-in fade-in" data-timeline-entry="intermediate-results">
       <Collapsible open={open} onOpenChange={setOpen}>
         <CollapsibleTrigger asChild>
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="timeline-entry__header timeline-entry__header--work-run"
+            className="group/trigger max-w-full min-w-0 justify-start"
+            data-work-run-header
             aria-label={countText ? `Intermediate results ${countText}` : "Intermediate results"}
           >
-            <ChevronRightIcon className="timeline-entry__chevron" />
-            <span className="timeline-entry__working-label">Intermediate results</span>
+            <ChevronRightIcon data-icon="inline-start" className={COLLAPSIBLE_CHEVRON_CLASSES} />
+            <span className="flex-none">Intermediate results</span>
             {countText ? (
-              <span className="working-items__summary">{countText}</span>
+              <span className={SUMMARY_CLASSES}>{countText}</span>
             ) : null}
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="timeline-entry__work-run-body">
+          <div className={WORK_RUN_BODY_CLASSES} data-work-run-body>
             {unit.units.map((innerUnit) => {
               const innerKey = renderUnitKey(innerUnit);
               if (innerUnit.kind === "message") {
@@ -1955,25 +2008,26 @@ function TurnSummaryBlock({
 
   return (
     <div
-      className="timeline-entry timeline-entry--turn-summary"
+      className="block animate-in py-1 fade-in"
+      data-timeline-entry="turn-summary"
       role="note"
       aria-label={`Turn summary ${summaryText}`}
     >
-      <div className="timeline-entry__turn-summary-divider">
-        <span className="timeline-entry__turn-summary-rule" aria-hidden="true" />
-        <span className="timeline-entry__turn-summary-card">
+      <div className="flex w-full items-center gap-3 text-muted-foreground">
+        <span className={TURN_SUMMARY_RULE_CLASSES} aria-hidden="true" />
+        <span className="inline-flex max-w-full flex-none items-center gap-2 text-xs tracking-wide tabular-nums">
           <CheckIcon
-            className="timeline-entry__turn-summary-icon"
+            className="size-3 flex-none text-primary/75"
             aria-hidden="true"
           />
           <WorkingSummary
             items={items}
             durationSeconds={durationSeconds}
             costUsd={costUsd}
-            className="working-items__summary timeline-entry__turn-summary-summary"
+            className={cn(SUMMARY_CLASSES, "flex-initial")}
           />
         </span>
-        <span className="timeline-entry__turn-summary-rule" aria-hidden="true" />
+        <span className={TURN_SUMMARY_RULE_CLASSES} aria-hidden="true" />
       </div>
     </div>
   );
@@ -2407,8 +2461,8 @@ export const SessionTimeline = memo(function SessionTimeline({
 
   if (visibleItems.length === 0 && connection === "connected" && !sessionIsActive) {
     return (
-      <div className="session-scroll-area" ref={containerRef}>
-        <div className="timeline">
+      <div className={SCROLL_AREA_CLASSES} data-session-scroll-area ref={containerRef}>
+        <div className={TIMELINE_CLASSES}>
           <SessionWelcome />
         </div>
       </div>
@@ -2416,8 +2470,8 @@ export const SessionTimeline = memo(function SessionTimeline({
   }
 
   return (
-    <div className="session-scroll-area" ref={containerRef}>
-      <div className="timeline">
+    <div className={SCROLL_AREA_CLASSES} data-session-scroll-area ref={containerRef}>
+      <div className={TIMELINE_CLASSES}>
         {displayRenderUnits.map((unit) => {
           const unitKey = unit.kind === "intermediate_results" ? unit.key : renderUnitKey(unit);
           const turnSummary = turnSummaries.get(unitKey);
@@ -2504,7 +2558,8 @@ export const SessionTimeline = memo(function SessionTimeline({
             type="button"
             variant="secondary"
             size="sm"
-            className="timeline__new-messages"
+            className="sticky bottom-0 z-10 self-center"
+            data-new-messages
             onClick={scrollToBottom}
           >
             New messages below

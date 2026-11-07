@@ -217,7 +217,7 @@ describe("AppShell", () => {
 
     const sidebar = await screen.findByRole("complementary", { name: "Application sidebar" });
     const collapseButton = await screen.findByRole("button", { name: "Collapse sidebar" });
-    const headerElement = collapseButton.closest(".app-sidebar__head");
+    const headerElement = collapseButton.closest('[data-sidebar-part="head"]');
     if (!(headerElement instanceof HTMLElement)) {
       throw new Error("Expected sidebar header to contain the collapse button.");
     }
@@ -227,12 +227,12 @@ describe("AppShell", () => {
     expect(headerElement).toContainElement(workspaceLabel);
 
     const headerChildren = Array.from(headerElement.children);
-    expect(headerChildren[0]).toHaveClass("app-sidebar__brand");
-    expect(headerChildren[0].querySelector(".app-sidebar__brand-logo")).toHaveAttribute(
+    expect(headerChildren[0]).toHaveAttribute("data-sidebar-part", "brand");
+    expect(headerChildren[0].querySelector('[data-sidebar-part="brand-logo"]')).toHaveAttribute(
       "src",
       "/logo.jpg",
     );
-    expect(headerChildren[1]).toHaveClass("app-sidebar__workspace-slot");
+    expect(headerChildren[1]).toHaveAttribute("data-sidebar-part", "workspace-slot");
     expect(headerChildren[2]).toBe(collapseButton);
 
     const workspaceBadge = workspaceLabel.closest('[data-size="meta"]');
@@ -253,7 +253,7 @@ describe("AppShell", () => {
     const sidebar = await screen.findByRole("complementary", { name: "Application sidebar" });
     expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
     expect(screen.queryByText("workspace/demo")).not.toBeInTheDocument();
-    expect(sidebar.querySelector(".app-sidebar__workspace-slot")).toBeNull();
+    expect(sidebar.querySelector('[data-sidebar-part="workspace-slot"]')).toBeNull();
   });
 
   it("does not render the theme menu button in the sidebar footer", async () => {
@@ -272,7 +272,7 @@ describe("AppShell", () => {
     renderWithProviders(<AppShell />, { route: "/board" });
 
     const kanbanLink = await screen.findByRole("link", { name: "Kanban" });
-    expect(kanbanLink).toHaveClass("app-sidebar__nav-item--collapsed");
+    expect(kanbanLink).toHaveAttribute("data-collapsed", "true");
 
     await user.hover(kanbanLink);
     const tooltip = await screen.findByRole("tooltip");
@@ -304,7 +304,7 @@ describe("AppShell", () => {
 
     const workspaceLabel = await screen.findByText("Sandbox · ada/project");
     const collapseButton = screen.getByRole("button", { name: "Collapse sidebar" });
-    const header = collapseButton.closest(".app-sidebar__head") as HTMLElement;
+    const header = collapseButton.closest('[data-sidebar-part="head"]') as HTMLElement;
     expect(header).toContainElement(workspaceLabel);
     expect(screen.queryByText("workspace/d0918d973e2e241d")).not.toBeInTheDocument();
 

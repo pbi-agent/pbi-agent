@@ -3,7 +3,7 @@ import type { ModelProfileView } from "../../types";
 import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue } from "../../lib/selectValues";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Badge } from "../ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { SettingsPanel, SettingsSection } from "./settings-layout";
 import {
   Select,
   SelectContent,
@@ -45,56 +45,49 @@ export function PromptEnhancementSettingsSection({
   }
 
   return (
-    <section className="settings-section settings-section--active">
-      <Card className="settings-panel">
-        <CardHeader className="settings-panel__header">
-          <div>
-            <CardTitle className="settings-panel__title">
-              Prompt enhancement
-            </CardTitle>
-            <div className="settings-panel__subtitle">
-              Choose the model profile used to improve composer drafts.
-            </div>
-          </div>
+    <SettingsSection>
+      <SettingsPanel
+        title="Prompt enhancement"
+        description="Choose the model profile used to improve composer drafts."
+        actions={
           <Badge variant="info" size="meta">
             AI
           </Badge>
-        </CardHeader>
-        <CardContent className="settings-panel__body">
-          <div className="active-profile-control">
-            <span className="active-profile-control__label">Model profile</span>
-            <Select
-              value={toSelectValue(selectedProfileId)}
-              disabled={isSaving}
-              onValueChange={(value) =>
-                void handleProfileChange(fromSelectValue(value))
-              }
+        }
+      >
+        <div className="flex flex-col gap-2" data-settings-active-control>
+          <span className="text-sm font-medium">Model profile</span>
+          <Select
+            value={toSelectValue(selectedProfileId)}
+            disabled={isSaving}
+            onValueChange={(value) =>
+              void handleProfileChange(fromSelectValue(value))
+            }
+          >
+            <SelectTrigger
+              id="prompt-enhancement-profile"
+              aria-label="Prompt enhancement model profile"
+              className="w-full max-w-md"
             >
-              <SelectTrigger
-                id="prompt-enhancement-profile"
-                aria-label="Prompt enhancement model profile"
-                className="active-profile-control__select"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={EMPTY_SELECT_VALUE}>Current model</SelectItem>
-                {profiles.map((profile) => (
-                  <SelectItem key={profile.id} value={profile.id}>
-                    {profile.name} ({profile.provider.name})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={EMPTY_SELECT_VALUE}>Current model</SelectItem>
+              {profiles.map((profile) => (
+                <SelectItem key={profile.id} value={profile.id}>
+                  {profile.name} ({profile.provider.name})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-          {error && (
-            <Alert variant="destructive" className="settings-error-banner">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
-    </section>
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+      </SettingsPanel>
+    </SettingsSection>
   );
 }

@@ -12,16 +12,16 @@ export function ReplySnippetCard({
   onRemove?: () => void;
 }): JSX.Element {
   return (
-    <div className="reply-snippet-card" data-testid="reply-snippet-card">
-      <div className="reply-snippet-card__header">
-        <MessageSquareQuoteIcon aria-hidden="true" className="reply-snippet-card__icon" />
-        <span className="reply-snippet-card__label">Reply</span>
+    <div className="flex min-w-0 flex-col gap-1 rounded-md border border-border bg-card p-2 text-left text-card-foreground" data-testid="reply-snippet-card">
+      <div className="flex min-h-5 items-center gap-1 text-xs text-muted-foreground">
+        <MessageSquareQuoteIcon aria-hidden="true" className="size-3.5" />
+        <span className="font-medium">Reply</span>
         {onRemove ? (
           <Button
             type="button"
             variant="ghost"
             size="icon-xs"
-            className="reply-snippet-card__remove"
+            className="ml-auto"
             onClick={onRemove}
             aria-label="Remove reply snippet"
           >
@@ -29,8 +29,8 @@ export function ReplySnippetCard({
           </Button>
         ) : null}
       </div>
-      <blockquote className="reply-snippet-card__quote">{quote}</blockquote>
-      <p className="reply-snippet-card__comment">{comment}</p>
+      <blockquote className="m-0 line-clamp-4 border-l-2 border-border pl-2 text-xs wrap-anywhere whitespace-pre-wrap text-muted-foreground">{quote}</blockquote>
+      <p className="m-0 text-sm wrap-anywhere whitespace-pre-wrap">{comment}</p>
     </div>
   );
 }

@@ -67,14 +67,16 @@ describe("WorkspaceFileTreePanel", () => {
     );
 
     const srcRow = await screen.findByRole("button", { name: /src/i });
-    expect(within(srcRow).getByLabelText("Contains git changes")).toHaveClass(
-      "workspace-tree__git-marker",
+    expect(within(srcRow).getByLabelText("Contains git changes")).toHaveAttribute(
+      "data-git-marker",
+      "folder",
     );
     await user.click(srcRow);
 
     const fileRow = await screen.findByRole("button", { name: /app.py/i });
-    expect(within(fileRow).getByLabelText("Git status M")).toHaveClass(
-      "workspace-tree__git-marker",
+    expect(within(fileRow).getByLabelText("Git status M")).toHaveAttribute(
+      "data-git-marker",
+      "status",
     );
     expect(within(fileRow).getByLabelText("Git status M")).toHaveTextContent("M");
     expect(within(fileRow).getByText("app.py")).toHaveAttribute("data-git-status", "M");
@@ -92,9 +94,9 @@ describe("WorkspaceFileTreePanel", () => {
     expect(screen.getByRole("radio", { name: "Raw" })).toHaveAttribute("data-state", "off");
     expect(screen.getByRole("radio", { name: "Split" })).toHaveAttribute("data-state", "on");
     expect(screen.getByRole("radio", { name: "Stacked" })).toHaveAttribute("data-state", "off");
-    expect(document.querySelector(".git-diff-result")).toHaveAttribute("data-layout", "split");
+    expect(document.querySelector("[data-git-diff-result]")).toHaveAttribute("data-layout", "split");
     const renderedDiffCode = Array.from(
-      document.querySelectorAll(".git-diff-result__code code"),
+      document.querySelectorAll("[data-diff-code] code"),
       (node) => node.textContent,
     );
     expect(renderedDiffCode).not.toContain("diff --git a/src/app.py b/src/app.py");
@@ -103,10 +105,10 @@ describe("WorkspaceFileTreePanel", () => {
       expect.arrayContaining(["print('old')", "print('new')"]),
     );
     const oldSplitPane = document.querySelector<HTMLDivElement>(
-      ".git-diff-result__split-pane--old",
+      "[data-split-pane=\"old\"]",
     );
     const newSplitPane = document.querySelector<HTMLDivElement>(
-      ".git-diff-result__split-pane--new",
+      "[data-split-pane=\"new\"]",
     );
     expect(oldSplitPane).not.toBeNull();
     expect(newSplitPane).not.toBeNull();
@@ -119,7 +121,7 @@ describe("WorkspaceFileTreePanel", () => {
     await user.click(screen.getByRole("radio", { name: "Stacked" }));
     expect(screen.getByRole("radio", { name: "Split" })).toHaveAttribute("data-state", "off");
     expect(screen.getByRole("radio", { name: "Stacked" })).toHaveAttribute("data-state", "on");
-    expect(document.querySelector(".git-diff-result")).toHaveAttribute(
+    expect(document.querySelector("[data-git-diff-result]")).toHaveAttribute(
       "data-layout",
       "stacked",
     );

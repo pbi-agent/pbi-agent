@@ -25,7 +25,7 @@ function openWorking(index = 0, expandInner = true) {
       fireEvent.click(groupButton);
     }
     for (const toolButton of screen.queryAllByRole("button").filter((button) =>
-      button.classList.contains("working-items__tool-trigger"),
+      button.getAttribute("data-working-trigger") === "tool",
     )) {
       fireEvent.click(toolButton);
     }
@@ -1090,7 +1090,7 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    const scrollArea = container.querySelector<HTMLElement>(".session-scroll-area");
+    const scrollArea = container.querySelector<HTMLElement>("[data-session-scroll-area]");
     expect(scrollArea).not.toBeNull();
     Object.defineProperty(scrollArea!, "scrollHeight", { configurable: true, value: 2000 });
     scrollTo.mockClear();
@@ -1194,7 +1194,7 @@ describe("SessionTimeline", () => {
     );
 
     expect(screen.getByRole("button", { name: /Working.*1 thought, 1 read, 1 shell/i })).toBeInTheDocument();
-    const workingSummary = container.querySelector(".timeline-entry__header--work-run .working-items__summary");
+    const workingSummary = container.querySelector('[data-work-run-header] [data-component="working-summary"]');
     expect(workingSummary).toHaveTextContent("1 thought, 1 read, 1 shell");
     expect(workingSummary?.querySelectorAll('[data-component="animated-number"]')).toHaveLength(3);
     expect(workingSummary?.querySelector('[data-slot="animated-number-strip"]')).toBeInTheDocument();
@@ -1288,11 +1288,11 @@ describe("SessionTimeline", () => {
     );
 
     openWorking(0, false);
-    const scrollArea = container.querySelector<HTMLElement>(".working-items--scrollable");
+    const scrollArea = container.querySelector<HTMLElement>('[data-working-items][data-scrollable="true"]');
     expect(scrollArea).toBeInTheDocument();
     if (!scrollArea) throw new Error("Expected scrollable Working items area");
     expect(screen.getAllByRole("button").filter((button) =>
-      button.classList.contains("working-items__tool-trigger"),
+      button.getAttribute("data-working-trigger") === "tool",
     )).toHaveLength(7);
 
     Object.defineProperty(scrollArea, "clientHeight", { configurable: true, value: 200 });
@@ -1311,7 +1311,7 @@ describe("SessionTimeline", () => {
     });
 
     const sixthToolButton = screen.getByRole("button", { name: /Read.*file-6\.txt/i });
-    const sixthToolItem = sixthToolButton.closest<HTMLElement>(".working-items__item");
+    const sixthToolItem = sixthToolButton.closest<HTMLElement>("[data-working-item]");
     expect(sixthToolItem).not.toBeNull();
     sixthToolItem!.getBoundingClientRect = () => ({
       x: 0,
@@ -1368,14 +1368,14 @@ describe("SessionTimeline", () => {
     );
 
     openWorking(0, false);
-    const scrollArea = container.querySelector<HTMLElement>(".working-items--scrollable");
+    const scrollArea = container.querySelector<HTMLElement>('[data-working-items][data-scrollable="true"]');
     expect(scrollArea).toBeInTheDocument();
     if (!scrollArea) throw new Error("Expected scrollable Working items area");
     Object.defineProperty(scrollArea, "clientHeight", { configurable: true, value: 160 });
     Object.defineProperty(scrollArea, "scrollHeight", { configurable: true, value: 700 });
 
     const sixthToolButton = screen.getByRole("button", { name: /Read.*file-6\.txt/i });
-    const sixthToolItem = sixthToolButton.closest<HTMLElement>(".working-items__item");
+    const sixthToolItem = sixthToolButton.closest<HTMLElement>("[data-working-item]");
     expect(sixthToolItem).not.toBeNull();
     Object.defineProperty(sixthToolItem!, "scrollHeight", { configurable: true, value: 320 });
 
@@ -1422,7 +1422,7 @@ describe("SessionTimeline", () => {
     fireEvent.click(expandButton);
 
     await waitFor(() => {
-      expect(container.querySelector(".working-items--fully-expanded")).toBeInTheDocument();
+      expect(container.querySelector('[data-working-items][data-fully-expanded="true"]')).toBeInTheDocument();
     });
     const limitButton = screen.getByRole("button", { name: "Limit Working tool list to five rows" });
     expect(limitButton).toHaveAttribute("aria-pressed", "true");
@@ -1469,7 +1469,7 @@ describe("SessionTimeline", () => {
     openWorking(0, false);
     const toolButtons = () =>
       screen.getAllByRole("button").filter((button) =>
-        button.classList.contains("working-items__tool-trigger"),
+        button.getAttribute("data-working-trigger") === "tool",
       );
 
     fireEvent.click(toolButtons()[0]);
@@ -2640,9 +2640,9 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    const userText = document.querySelector(".timeline-entry__user-text");
+    const userText = document.querySelector("[data-user-text]");
     expect(userText).not.toBeNull();
-    expect(userText).toHaveClass("timeline-entry__user-text");
+    expect(userText).toHaveAttribute("data-user-text");
     expect(userText?.textContent).toBe(content);
     expect(userText?.textContent).toContain("/plan\n# Task\nadd shell command from UI");
   });
@@ -2668,11 +2668,12 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    expect(screen.getByText("webapp/src/App.tsx")).toHaveClass(
-      "timeline-entry__file-tag",
+    expect(screen.getByText("webapp/src/App.tsx")).toHaveAttribute(
+      "data-special-tag",
+      "file",
     );
-    expect(screen.getByText(/Please inspect/)).toHaveClass(
-      "timeline-entry__user-text",
+    expect(screen.getByText(/Please inspect/)).toHaveAttribute(
+      "data-user-text",
     );
   });
 
@@ -2813,7 +2814,7 @@ describe("SessionTimeline", () => {
 
     openWorking();
 
-    const rows = Array.from(document.querySelectorAll(".git-diff-result__line"));
+    const rows = Array.from(document.querySelectorAll("[data-diff-line]"));
     expect(rows.map((row) => row.textContent)).toEqual([
       "4141before",
       "42-old value",
@@ -2857,14 +2858,14 @@ describe("SessionTimeline", () => {
     openWorking();
 
     const title = screen.getAllByText("TODO.md").find((element) =>
-      element.classList.contains("git-diff-result__title--deleted"),
+      element.hasAttribute("data-deleted-title"),
     );
     expect(title).toBeDefined();
-    const card = title?.closest(".git-diff-result");
+    const card = title?.closest("[data-git-diff-result]");
 
-    expect(title).toHaveClass("git-diff-result__title--deleted");
+    expect(title).toHaveAttribute("data-deleted-title");
     expect(card).toHaveAttribute("data-operation", "delete_file");
-    expect(card).toHaveClass("git-diff-result--delete");
+    expect(card).toHaveAttribute("data-git-diff-result", "delete");
     expect(screen.getByText("Done")).toBeInTheDocument();
     expect(screen.queryByText("Deleted")).not.toBeInTheDocument();
     expect(screen.queryByText(EMPTY_DIFF_TEXT)).not.toBeInTheDocument();
@@ -2907,10 +2908,10 @@ describe("SessionTimeline", () => {
     openWorking();
 
     expect(screen.getByText("1 focused change")).toBeInTheDocument();
-    expect(screen.getByText("old")).toHaveClass("git-diff-result__token--removed");
-    expect(screen.getByText("new")).toHaveClass("git-diff-result__token--added");
-    expect(screen.getByText(/const timeout/)).not.toHaveClass(
-      "git-diff-result__token--added",
+    expect(screen.getByText("old")).toHaveAttribute("data-diff-token", "removed");
+    expect(screen.getByText("new")).toHaveAttribute("data-diff-token", "added");
+    expect(screen.getByText(/const timeout/)).not.toHaveAttribute(
+      "data-diff-token",
     );
   });
 
@@ -3066,7 +3067,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
     openWorking(0, false);
     const toolButtons = () =>
       screen.getAllByRole("button").filter((button) =>
-        button.classList.contains("working-items__tool-trigger"),
+        button.getAttribute("data-working-trigger") === "tool",
       );
 
     fireEvent.click(toolButtons()[0]);
@@ -3124,10 +3125,10 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
     openWorking();
 
     expect(screen.getByText("1 focused change")).toBeInTheDocument();
-    expect(screen.getByText("48")).toHaveClass("git-diff-result__token--removed");
-    expect(screen.getByText("32")).toHaveClass("git-diff-result__token--added");
-    expect(screen.getByText("5")).toHaveClass("git-diff-result__token--removed");
-    expect(screen.getByText("4")).toHaveClass("git-diff-result__token--added");
+    expect(screen.getByText("48")).toHaveAttribute("data-diff-token", "removed");
+    expect(screen.getByText("32")).toHaveAttribute("data-diff-token", "added");
+    expect(screen.getByText("5")).toHaveAttribute("data-diff-token", "removed");
+    expect(screen.getByText("4")).toHaveAttribute("data-diff-token", "added");
     expect(screen.getByText("48").closest("tr")?.nextElementSibling).toBe(
       screen.getByText("32").closest("tr"),
     );
@@ -3439,7 +3440,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
       />,
     );
 
-    const scrollArea = container.querySelector<HTMLElement>(".session-scroll-area");
+    const scrollArea = container.querySelector<HTMLElement>("[data-session-scroll-area]");
     expect(scrollArea).not.toBeNull();
     Object.defineProperties(scrollArea, {
       clientHeight: { configurable: true, value: 400 },
@@ -3507,7 +3508,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
       />,
     );
 
-    const scrollArea = container.querySelector<HTMLElement>(".session-scroll-area");
+    const scrollArea = container.querySelector<HTMLElement>("[data-session-scroll-area]");
     expect(scrollArea).not.toBeNull();
     Object.defineProperties(scrollArea!, {
       clientHeight: { configurable: true, value: 400 },
@@ -3589,7 +3590,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
       { wrapper: TooltipProvider },
     );
 
-    const scrollArea = container.querySelector<HTMLElement>(".session-scroll-area");
+    const scrollArea = container.querySelector<HTMLElement>("[data-session-scroll-area]");
     expect(scrollArea).not.toBeNull();
     Object.defineProperties(scrollArea!, {
       clientHeight: { configurable: true, value: 400 },
@@ -3743,7 +3744,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
       { wrapper: TooltipProvider },
     );
 
-    const scrollArea = container.querySelector<HTMLElement>(".session-scroll-area");
+    const scrollArea = container.querySelector<HTMLElement>("[data-session-scroll-area]");
     expect(scrollArea).not.toBeNull();
     Object.defineProperties(scrollArea!, {
       clientHeight: { configurable: true, value: 400 },
@@ -4264,7 +4265,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
     expect(workingButton).toHaveAttribute("aria-expanded", "false");
     // The inner shell command text should not be in the DOM yet because the
     // collapsible defaults to closed for running tools.
-    expect(screen.queryByText("ls -la", { selector: ":not(.working-intent__label)" })).not.toBeInTheDocument();
+    expect(screen.queryByText("ls -la", { selector: ":not([data-working-intent-label])" })).not.toBeInTheDocument();
   });
 
   it("scrolls the timeline to the end of the expanded content on the first open of a running Working block", async () => {
@@ -4305,7 +4306,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
       />,
     );
 
-    const scrollArea = container.querySelector<HTMLElement>(".session-scroll-area");
+    const scrollArea = container.querySelector<HTMLElement>("[data-session-scroll-area]");
     expect(scrollArea).not.toBeNull();
     let scrollHeight = 700;
     Object.defineProperties(scrollArea!, {
@@ -4341,7 +4342,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
           toJSON: () => ({}),
         };
       }
-      if (this.classList.contains("timeline-entry__work-run-body")) {
+      if (this.hasAttribute("data-work-run-body")) {
         return {
           x: 0,
           y: 0,
@@ -4442,7 +4443,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
       />,
     );
 
-    const scrollArea = container.querySelector<HTMLElement>(".session-scroll-area");
+    const scrollArea = container.querySelector<HTMLElement>("[data-session-scroll-area]");
     expect(scrollArea).not.toBeNull();
     Object.defineProperties(scrollArea!, {
       clientHeight: { configurable: true, value: 400 },
@@ -4466,7 +4467,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
           toJSON: () => ({}),
         };
       }
-      if (this.classList.contains("timeline-entry__work-run-body")) {
+      if (this.hasAttribute("data-work-run-body")) {
         return {
           x: 0,
           y: 0,
@@ -4558,7 +4559,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
       />,
     );
 
-    const scrollArea = container.querySelector<HTMLElement>(".session-scroll-area");
+    const scrollArea = container.querySelector<HTMLElement>("[data-session-scroll-area]");
     expect(scrollArea).not.toBeNull();
     Object.defineProperties(scrollArea!, {
       clientHeight: { configurable: true, value: 400 },
@@ -4594,7 +4595,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
     // And the inner Collapsible content has actually mounted (i.e. the
     // expand worked even though we didn't run the user-open scroll path).
     expect(
-      container.querySelector(".timeline-entry__work-run-body"),
+      container.querySelector("[data-work-run-body]"),
     ).not.toBeNull();
   });
 
@@ -4992,7 +4993,7 @@ describe("SessionTimeline background task results", () => {
 
     rerender(view([shell("ls", "List repo files"), shell("pytest", "Run unit tests")], "completed", 3));
     expect(screen.getByTestId("working-intent")).toHaveTextContent("Run unit tests");
-    expect(document.querySelector(".working-intent")).toHaveAttribute("data-faded", "true");
+    expect(document.querySelector("[data-working-intent]")).toHaveAttribute("data-faded", "true");
 
     fireEvent.click(screen.getByRole("button", { name: /Working/ }));
     expect(screen.queryByTestId("working-intent")).not.toBeInTheDocument();

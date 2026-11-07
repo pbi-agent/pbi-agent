@@ -5,20 +5,21 @@
  */
 
 import { useId } from "react";
+import { cn } from "@/lib/utils";
 
 type SparklineProps = {
   values: number[];
   width?: number;
   height?: number;
-  /** CSS colour for the line. Defaults to the accent token. */
-  color?: string;
+  /** Text-colour utility driving the stroke via currentColor. */
+  className?: string;
 };
 
 export function Sparkline({
   values,
   width = 120,
   height = 32,
-  color = "var(--color-accent)",
+  className,
 }: SparklineProps) {
   const gradientId = useId();
 
@@ -28,7 +29,7 @@ export function Sparkline({
         width={width}
         height={height}
         viewBox={`0 0 ${width} ${height}`}
-        className="sparkline sparkline--empty"
+        className={cn("shrink-0 opacity-30", className)}
       />
     );
   }
@@ -65,19 +66,19 @@ export function Sparkline({
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
-      className="sparkline"
+      className={cn("block shrink-0 text-chart-1", className)}
     >
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity={0.25} />
-          <stop offset="100%" stopColor={color} stopOpacity={0} />
+          <stop offset="0%" stopColor="currentColor" stopOpacity={0.25} />
+          <stop offset="100%" stopColor="currentColor" stopOpacity={0} />
         </linearGradient>
       </defs>
       <path d={areaPath} fill={`url(#${gradientId})`} />
       <polyline
         points={polyline}
         fill="none"
-        stroke={color}
+        stroke="currentColor"
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"

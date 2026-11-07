@@ -1,3 +1,4 @@
+import { cn } from "../../lib/utils";
 import type { ConnectionState } from "../../store";
 
 type BadgeConnectionState = ConnectionState | "ready";
@@ -18,8 +19,23 @@ export function ConnectionBadge({
     : "Disconnected";
 
   return (
-    <div className="connection-badge" aria-label={label}>
-      <span className={`indicator-dot indicator-dot--${connection}`} />
+    <div
+      className="inline-flex items-center justify-center"
+      aria-label={label}
+      data-connection={connection}
+    >
+      <span
+        className={cn(
+          "size-2 shrink-0 rounded-full",
+          connection === "connected" || connection === "ready" || connection === "recovered"
+            ? "bg-primary"
+            : connection === "recovery_failed"
+              ? "bg-destructive"
+              : connection === "disconnected"
+                ? "bg-muted-foreground"
+                : "animate-pulse bg-chart-4",
+        )}
+      />
     </div>
   );
 }

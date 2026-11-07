@@ -1,8 +1,12 @@
 import { useRef } from "react";
 import { SearchIcon, XIcon } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "../ui/input-group";
 
 export function SidebarSearchField({
   value,
@@ -27,29 +31,30 @@ export function SidebarSearchField({
   };
 
   return (
-    <div className={cn("session-sidebar__search", className)}>
-      <SearchIcon className="session-sidebar__search-icon" aria-hidden="true" />
-      <Input
+    <InputGroup className={cn("w-full", className)}>
+      <InputGroupAddon align="inline-start">
+        <SearchIcon aria-hidden="true" />
+      </InputGroupAddon>
+      <InputGroupInput
         ref={inputRef}
         type="search"
-        className="session-sidebar__search-input"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         aria-label={ariaLabel}
       />
       {value ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          className="session-sidebar__search-clear"
-          aria-label={clearLabel}
-          onClick={clearSearch}
-        >
-          <XIcon aria-hidden="true" />
-        </Button>
+        <InputGroupAddon align="inline-end">
+          <InputGroupButton
+            type="button"
+            size="icon-xs"
+            aria-label={clearLabel}
+            onClick={clearSearch}
+          >
+            <XIcon aria-hidden="true" />
+          </InputGroupButton>
+        </InputGroupAddon>
       ) : null}
-    </div>
+    </InputGroup>
   );
 }
