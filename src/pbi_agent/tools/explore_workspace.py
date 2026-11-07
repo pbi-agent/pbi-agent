@@ -335,7 +335,7 @@ def _recover_missing_list(
         pass
     options = {
         "pattern": pattern,
-        "root": root.relative_to(workspace_root).as_posix(),
+        "root": relative_workspace_path(workspace_root, root),
         "target": "path",
         "path_scope": "basename",
         "regex": False,
@@ -361,14 +361,7 @@ def _recover_missing_list(
         if relative.is_absolute() or ".." in relative.parts:
             raise ValueError("search result must be under its root.")
         candidate = root / relative
-        # Validate backend output too: never print an outside-workspace symlink
-        # target (or trust that every backend will always skip symlinks).
-        _ensure_inside(
-            candidate.resolve(strict=True),
-            workspace_root,
-            message="search result must resolve inside the workspace.",
-        )
-        paths.append(candidate.relative_to(workspace_root).as_posix())
+        paths.append(relative_workspace_path(workspace_root, candidate))
 
     label = options["root"]
     text = (
@@ -432,9 +425,6 @@ def _resolve_space_separated_search_roots(
     exact_root = resolve_safe_path(workspace_root, raw_root, default=".").resolve(
         strict=False
     )
-    _ensure_inside(
-        exact_root, workspace_root, message="'root' must resolve inside the workspace."
-    )
     if exact_root.exists():
         return None
     try:
@@ -463,9 +453,6 @@ def _strip_matching_quotes(value: str) -> str:
 def _resolve_single_workspace_root(workspace_root: Path, raw_root: Any) -> Path:
     search_root = resolve_safe_path(workspace_root, raw_root, default=".").resolve(
         strict=False
-    )
-    _ensure_inside(
-        search_root, workspace_root, message="'root' must resolve inside the workspace."
     )
 
     try:
@@ -497,19 +484,7 @@ def _resolve_read_list_target(
     else:
         root_dir = root.resolve(strict=False)
         target_path = resolve_safe_path(root_dir, raw_pattern).resolve(strict=False)
-    _ensure_inside(
-        target_path,
-        workspace_root,
-        message="'pattern' must resolve inside the workspace.",
-    )
     return target_path
-
-
-def _ensure_inside(path: Path, root: Path, *, message: str) -> None:
-    try:
-        path.relative_to(root)
-    except ValueError as exc:
-        raise ValueError(message) from exc
 
 
 def _codetool_root_argument(search_root: Path | list[Path]) -> str | list[str]:
