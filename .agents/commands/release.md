@@ -92,6 +92,7 @@ When user asks to continue, merge, or publish existing release workflow:
    - `uv run ruff format --check .`
    - `uv run basedpyright`
    - `uv run python scripts/dead_code.py`
+   - `bun run lint` (ESLint + `@shadcn/lint` rules)
    - `uv run pytest -q --tb=short -x`
    - `bun run docs:build`
 12. Stage only release-scoped paths and inspect `git diff --cached`.
