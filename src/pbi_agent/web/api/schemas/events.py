@@ -277,6 +277,7 @@ class SubAgentStateSseEventPayloadModel(EventIdentityPayloadModel):
     sub_agent_id: str
     title: str
     status: str
+    intent: str | None = None
 
 
 class SubAgentStateSseEventModel(SseEventBaseModel):

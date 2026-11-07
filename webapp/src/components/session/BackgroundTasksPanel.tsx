@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { ChevronRightIcon, SquareIcon, XIcon } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { BotIcon, ChevronRightIcon, SquareIcon, XIcon } from "lucide-react";
 import { getBackgroundTaskOutput } from "../../api";
 import type { BackgroundTask, BackgroundTaskOutput } from "../../types";
 import { cn } from "../../lib/utils";
@@ -52,6 +53,7 @@ function useNow(active: boolean): number {
 }
 
 export function BackgroundTasksPanel({ sessionId, tasks, onKill, onClose }: Props) {
+  const navigate = useNavigate();
   const running = tasks.filter((task) => task.status === "running");
   const now = useNow(running.length > 0);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -130,12 +132,60 @@ export function BackgroundTasksPanel({ sessionId, tasks, onKill, onClose }: Prop
               <EmptyHeader>
                 <EmptyTitle>No background tasks</EmptyTitle>
                 <EmptyDescription>
-                  Shell commands started in the background appear here.
+                  Shell commands and sub-agents started in the background appear here.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
           ) : null}
           {tasks.map((task) => {
+            if (task.kind === "sub_agent" && task.sub_agent_id) {
+              const subAgentId = task.sub_agent_id;
+              const label = task.intent || task.command;
+              return (
+                <div key={task.task_id} className="min-w-0 overflow-hidden rounded-md border border-border bg-card">
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
+                      aria-label={`Open ${label} agent session`}
+                      disabled={!sessionId || !subAgentId}
+                      data-background-sub-agent
+                      onClick={() => {
+                        if (sessionId && subAgentId) {
+                          void navigate(`/sessions/${encodeURIComponent(sessionId)}/sub-agents/${encodeURIComponent(subAgentId)}`);
+                        }
+                      }}
+                    >
+                      <BotIcon aria-hidden="true" className="mt-1 size-3.5 shrink-0 text-muted-foreground" />
+                      <span className="flex min-w-0 flex-1 flex-col gap-1">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <Badge variant={STATUS_VARIANT[task.status]} size="meta">
+                            {STATUS_LABEL[task.status]}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {task.task_id} · {formatElapsed(elapsedFor(task))}
+                          </span>
+                        </span>
+                        <span className="truncate text-sm" title={task.command}>{label}</span>
+                      </span>
+                    </button>
+                    {task.status === "running" ? (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        disabled={!onKill}
+                        aria-label={`Kill background task ${label}`}
+                        onClick={() => void onKill?.(task.task_id)}
+                      >
+                        <SquareIcon data-icon="inline-start" aria-hidden="true" />
+                        Kill
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            }
             const isOpen = expanded.has(task.task_id);
             const output = outputs[task.task_id];
             return (

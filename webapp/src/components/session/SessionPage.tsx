@@ -100,6 +100,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 type SubAgentDisplayMap = Record<string, {
   title: string;
   status: string;
+  intent?: string | null;
   turnElapsedSeconds?: number | null;
 }>;
 
@@ -171,6 +172,7 @@ function useSubAgentDisplayMap(
         [routeSubAgentId]: {
           title: selected.title,
           status: selected.status,
+          intent: selected.intent ?? null,
           turnElapsedSeconds: selected.turnUsage?.elapsedSeconds ?? null,
         },
       };
@@ -181,6 +183,7 @@ function useSubAgentDisplayMap(
         {
           title: subAgent.title,
           status: subAgent.status,
+          intent: subAgent.intent ?? null,
           turnElapsedSeconds: subAgent.turnUsage?.elapsedSeconds ?? null,
         },
       ]),

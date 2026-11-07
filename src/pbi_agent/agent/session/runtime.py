@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pbi_agent.agent.reference_resolution import (
     resolve_command_references,
@@ -1289,6 +1290,9 @@ def run_sub_agent_task(
     parent_tracer: RunTracer | None = None,
     workspace_root: Path | None = None,
     workspace_directory_key: str | None = None,
+    intent: str | None = None,
+    cancel_event: threading.Event | None = None,
+    on_started: Callable[[str | None], None] | None = None,
 ) -> dict[str, Any]:
     workspace = (workspace_root or Path.cwd()).resolve()
     agent_definition = None
@@ -1414,7 +1418,14 @@ def run_sub_agent_task(
             task_instruction=task_instruction,
             reasoning_effort=child_settings.reasoning_effort,
             name=child_name,
+            intent=intent,
         )
+        if on_started is not None:
+            on_started(getattr(child_display, "sub_agent_id", None))
+        if cancel_event is not None:
+            child_display = cast(
+                DisplayProtocol, _CancellableDisplay(child_display, cancel_event)
+            )
         _child_tier = child_settings.service_tier or ""
         child_session_usage = TokenUsage(
             model=_selected_model(child_settings), service_tier=_child_tier
@@ -1619,6 +1630,7 @@ def run_sub_agent_task(
             task_instruction=task_instruction,
             reasoning_effort=settings.reasoning_effort,
             name=child_name,
+            intent=intent,
         )
         _fallback_tier = settings.service_tier or ""
         child_session_usage = child_session_usage or TokenUsage(
@@ -1656,6 +1668,7 @@ def run_sub_agent_task(
             task_instruction=task_instruction,
             reasoning_effort=settings.reasoning_effort,
             name=child_name,
+            intent=intent,
         )
         _fallback_tier = settings.service_tier or ""
         child_session_usage = child_session_usage or TokenUsage(
@@ -1694,6 +1707,31 @@ def run_sub_agent_task(
             parent_turn_usage.add_sub_agent(child_turn_usage)
         if child_session_usage is not None or child_turn_usage is not None:
             display.session_usage(parent_session_usage)
+
+
+class _CancellableDisplay:
+    """Display proxy whose interrupt state follows a background cancel event."""
+
+    def __init__(self, inner: DisplayProtocol, cancel_event: threading.Event) -> None:
+        self._inner = inner
+        self._cancel_event = cancel_event
+
+    def interrupt_requested(self) -> bool:
+        return self._cancel_event.is_set()
+
+    def tool_interrupt_requested(self, call_id: str) -> bool:
+        if self._cancel_event.is_set():
+            return True
+        checker = getattr(self._inner, "tool_interrupt_requested", None)
+        return bool(callable(checker) and checker(call_id))
+
+    def begin_sub_agent(self, *args: Any, **kwargs: Any) -> DisplayProtocol:
+        # Nested delegates must observe the same background cancellation.
+        child = self._inner.begin_sub_agent(*args, **kwargs)
+        return cast(DisplayProtocol, _CancellableDisplay(child, self._cancel_event))
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
 
 
 @contextmanager

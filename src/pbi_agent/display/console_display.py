@@ -161,6 +161,7 @@ class ConsoleDisplay(DisplayProtocol):
         task_instruction: str,
         reasoning_effort: str | None = None,
         name: str = "sub_agent",
+        intent: str | None = None,
     ) -> DisplayProtocol:
         from pbi_agent.display.console_sub_agent_display import ConsoleSubAgentDisplay
 

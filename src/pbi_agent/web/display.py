@@ -686,8 +686,10 @@ class _EventDisplayBase(DisplayProtocol):
         task_instruction: str,
         reasoning_effort: str | None = None,
         name: str = "sub_agent",
+        intent: str | None = None,
     ) -> DisplayProtocol:
-        summary = shorten(task_instruction.strip() or "task", 72)
+        label = (intent or "").strip() or task_instruction.strip() or "task"
+        summary = shorten(label, 72)
         title = f"{name} · {summary}"
         if reasoning_effort:
             title = f"{title} · {reasoning_effort}"
@@ -698,12 +700,14 @@ class _EventDisplayBase(DisplayProtocol):
                 "sub_agent_id": sub_agent_id,
                 "title": title,
                 "status": "running",
+                "intent": (intent or "").strip() or None,
             },
         )
         return WebSubAgentDisplay(
             publish_event=self._publish_event,
             verbose=self.verbose,
             sub_agent=_SubAgentContext(sub_agent_id=sub_agent_id, title=title),
+            intent=(intent or "").strip() or None,
             tool_interrupt_controller=self._tool_interrupt_controller,
         )
 
@@ -1840,6 +1844,7 @@ class WebSubAgentDisplay(_EventDisplayBase):
         verbose: bool = False,
         sub_agent: _SubAgentContext,
         tool_interrupt_controller: _ToolInterruptController,
+        intent: str | None = None,
     ) -> None:
         super().__init__(
             publish_event=publish_event,
@@ -1848,6 +1853,11 @@ class WebSubAgentDisplay(_EventDisplayBase):
             tool_interrupt_controller=tool_interrupt_controller,
         )
         self._title = sub_agent.title
+        self._intent = intent
+
+    @property
+    def sub_agent_id(self) -> str | None:
+        return self._sub_agent.sub_agent_id if self._sub_agent else None
 
     def finish_sub_agent(self, *, status: str) -> None:
         self.wait_stop()
@@ -1857,6 +1867,7 @@ class WebSubAgentDisplay(_EventDisplayBase):
                 "sub_agent_id": self._sub_agent.sub_agent_id if self._sub_agent else "",
                 "title": self._title,
                 "status": status,
+                "intent": self._intent,
             },
         )
 

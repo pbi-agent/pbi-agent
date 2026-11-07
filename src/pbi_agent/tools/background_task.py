@@ -12,12 +12,13 @@ _ACTIONS = ("list", "status", "output", "kill")
 SPEC = ToolSpec(
     name="background_task",
     description=(
-        "Manage background shell tasks started with `shell` "
+        "Manage background tasks started with `shell` or `sub_agent` "
         "`run_in_background`: list them, check status, read output, or kill one."
     ),
     prompt_usage=(
         "Use `background_task` only to list, inspect, read output of, or kill "
-        "tasks started by `shell` with `run_in_background`; never to run commands."
+        "tasks started by `shell` or `sub_agent` with `run_in_background`; never "
+        "to run commands."
     ),
     parameters_schema={
         "type": "object",
@@ -33,7 +34,7 @@ SPEC = ToolSpec(
             "task_id": {
                 "type": "string",
                 "description": (
-                    "Task id returned by `shell` `run_in_background`. Required "
+                    "Task id returned by `run_in_background`. Required "
                     "for status, output, and kill; ignored for list."
                 ),
             },

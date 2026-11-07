@@ -235,8 +235,9 @@ class _DisplaySpy:
         task_instruction: str,
         reasoning_effort: str | None = None,
         name: str = "sub_agent",
+        intent: str | None = None,
     ) -> _DisplaySpy:
-        del task_instruction, reasoning_effort, name
+        del task_instruction, reasoning_effort, name, intent
         return self
 
     def finish_sub_agent(self, *, status: str) -> None:
