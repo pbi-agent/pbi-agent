@@ -37,49 +37,6 @@ _MAX_FILE_BYTES = 1_000_000  # 1 MB
 _MEMORY_MAX_LINES = 200
 _MEMORY_MAX_BYTES = 25_000
 
-_MEMORY_RULES = """
-<memory_rules>
-- Memory is knowledge from past sessions that a future session cannot recover from the repo, config, or docs: decisions and why, tested rules, traps, the current goal, open follow-ups. Do not store what is re-readable from the workspace.
-- `MEMORY.md` at the workspace root is a small index preloaded below as workspace memory when present (first 200 lines / 25 KB only). Details live in topic pages it links, e.g. `.agents/memory/<topic>.md`; read a linked page before work that depends on it.
-- Write memory when the user asks or something is clearly worth remembering. Edit in place, merge duplicates, delete stale entries; keep `MEMORY.md` short.
-- Entry shape: rule or fact, why/evidence, and `[verified YYYY-MM-DD]` or `[unverified]`. Re-check unverified or old entries before relying on them.
-- Before acting on work that touches remembered areas, check relevant memory, then test assumptions instead of trusting them.
-</memory_rules>
-""".strip()
-
-_SUB_AGENT_MEMORY_POINTER = """
-<workspace_memory>
-`MEMORY.md` (workspace root) indexes durable project memory; it is not preloaded. Read it, and the topic pages it links, only when your task depends on prior decisions or conventions. Do not edit memory files; put candidate memory notes in your final answer for the main agent.
-</workspace_memory>
-""".strip()
-
-_SESSION_HISTORY_TEMPLATE = """
-<session_history>
-Past sessions are stored in SQLite at `{db_path}`. Use it as ground truth to recover earlier context or check a memory note. Query read-only from `shell` with Python, binding this workspace key as a parameter:
-
-```
-python3 - <<'SQL'
-import sqlite3
-db = sqlite3.connect("file:{db_uri_path}?mode=ro", uri=True)
-rows = db.execute(
-    "SELECT s.session_id, s.title, m.role, substr(m.content, 1, 400), m.created_at "
-    "FROM messages m JOIN sessions s USING (session_id) "
-    "WHERE s.directory = ? AND m.content LIKE ? ORDER BY m.id DESC LIMIT 20",
-    ({directory_key!r}, "%search term%"),
-).fetchall()
-for row in rows:
-    print(row)
-SQL
-```
-
-Tables (filter by `sessions.directory`; keys are lowercase):
-- `sessions(session_id, directory, title, model, created_at, updated_at)`
-- `messages(id, session_id, role, content, created_at)`: user/assistant conversation text.
-- `observability_events(session_id, event_type, tool_name, tool_input_json, tool_output_json, success, error_message, timestamp)`: `event_type` is `model_call` or `tool_call`; large payloads, select narrow columns.
-Always select only needed columns, truncate text with `substr`, and use `LIMIT`. Never write to this database.
-</session_history>
-""".strip()
-
 
 def _warn(message: str) -> None:
     print(message, file=sys.stderr)
@@ -268,47 +225,8 @@ def cap_workspace_memory(memory: str) -> str:
         f"{capped.rstrip()}\n\n"
         "[MEMORY.md truncated: only the first "
         f"{_MEMORY_MAX_LINES} lines / {_MEMORY_MAX_BYTES // 1000} KB are preloaded. "
-        "Read the file for the rest, and move details into linked topic pages.]"
+        "Read the file for the rest.]"
     )
-
-
-def _session_history_section(workspace_directory_key: str | None) -> str | None:
-    from pbi_agent.session_store import session_db_path
-    from pbi_agent.workspace_context import current_workspace_context
-
-    context = current_workspace_context()
-    if context.is_sandbox:
-        return None
-    directory_key = workspace_directory_key or context.directory_key
-    db_path = session_db_path()
-    return _SESSION_HISTORY_TEMPLATE.format(
-        db_path=db_path,
-        db_uri_path=db_path.as_posix(),
-        directory_key=directory_key,
-    )
-
-
-def _append_memory_rules(
-    base_prompt: str,
-    active_names: set[str],
-    workspace_directory_key: str | None,
-    cwd: Path | None = None,
-) -> str:
-    """Append memory rules and session-history guidance for opted-in workspaces.
-
-    Memory is opt-in: the guidance is added only when the workspace has an
-    ``AGENTS.md`` (created by ``pbi-agent init`` or by the user).
-    """
-    if load_project_rules(cwd) is None:
-        return base_prompt
-    prompt = base_prompt
-    if active_names & _WRITE_TOOL_NAMES:
-        prompt = f"{prompt}\n\n{_MEMORY_RULES}"
-    if "shell" in active_names:
-        section = _session_history_section(workspace_directory_key)
-        if section is not None:
-            prompt = f"{prompt}\n\n{section}"
-    return prompt
 
 
 def _append_workspace_memory(base_prompt: str, cwd: Path | None = None) -> str:
@@ -318,13 +236,6 @@ def _append_workspace_memory(base_prompt: str, cwd: Path | None = None) -> str:
         return base_prompt
     memory = cap_workspace_memory(memory)
     return f"{base_prompt}\n\n<workspace_memory>\n{memory}\n</workspace_memory>"
-
-
-def _append_sub_agent_memory_pointer(base_prompt: str, cwd: Path | None = None) -> str:
-    """Point sub-agents at ``MEMORY.md`` without preloading its content."""
-    if load_workspace_memory(cwd) is None:
-        return base_prompt
-    return f"{base_prompt}\n\n{_SUB_AGENT_MEMORY_POINTER}"
 
 
 def _append_available_skills(
@@ -526,7 +437,6 @@ def get_system_prompt(
             workspace_directory_key=workspace_directory_key,
         )
     prompt = _append_active_command(prompt, active_command_instructions)
-    prompt = _append_memory_rules(prompt, active_names, workspace_directory_key, cwd)
     return _append_workspace_memory(prompt, cwd)
 
 
@@ -580,4 +490,4 @@ def get_sub_agent_system_prompt(
             source_label=agent_source_label,
             workspace_directory_key=workspace_directory_key,
         )
-    return _append_sub_agent_memory_pointer(prompt, cwd)
+    return _append_workspace_memory(prompt, cwd)

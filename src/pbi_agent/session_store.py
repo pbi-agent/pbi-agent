@@ -528,11 +528,6 @@ def _default_kanban_stage_specs() -> list[KanbanStageConfigSpec]:
     ]
 
 
-def session_db_path() -> Path:
-    """Return the resolved session database path (env override or default)."""
-    return _db_path()
-
-
 def _db_path() -> Path:
     configured = os.getenv(SESSION_DB_PATH_ENV)
     if configured:

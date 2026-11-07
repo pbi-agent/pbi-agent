@@ -41,8 +41,10 @@ AGENTS_TEMPLATE = """# AGENTS.md
 ## Memory
 
 - Memory holds what a future session cannot recover from the repo or config: decisions and why, tested rules, traps, current focus, open follow-ups.
-- `MEMORY.md` is a short preloaded index; put topic detail in `.agents/memory/<topic>.md` and link it.
+- `MEMORY.md` is a short index preloaded into the agent (first 200 lines / 25 KB); put topic detail in `.agents/memory/<topic>.md` and link it.
 - Write when asked or clearly worth remembering; edit in place, delete stale entries; tag `[verified YYYY-MM-DD]` or `[unverified]`.
+- Check relevant memory before acting; re-check unverified or old entries. Only the main agent edits memory; sub-agents report candidate notes.
+- Past sessions: SQLite `~/.pbi-agent/sessions.db` (`PBI_AGENT_SESSION_DB_PATH` overrides). Query read-only (`python3`, `sqlite3.connect("file:<path>?mode=ro", uri=True)`); never write. `sessions(session_id, directory, title, updated_at)` with `directory` = lowercased absolute workspace path; `messages(session_id, role, content, created_at)`; `observability_events(session_id, event_type, tool_name, tool_input_json, tool_output_json, error_message)` (large). Use `?` params, narrow columns, `substr`, `LIMIT`.
 
 ## TODO
 

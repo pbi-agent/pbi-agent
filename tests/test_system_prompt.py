@@ -218,8 +218,6 @@ def test_get_system_prompt_without_agents_md(tmp_path, monkeypatch):
     prompt = get_system_prompt()
     _assert_builtin_prompt_base(prompt)
     assert prompt.endswith("</tool_usage_rules>")
-    assert "<memory_rules>" not in prompt
-    assert "<session_history>" not in prompt
     assert "<project_rules>" not in prompt
     assert "<workspace_memory>" not in prompt
     assert "<available_skills>" not in prompt
@@ -318,13 +316,9 @@ def test_get_sub_agent_system_prompt_with_memory_md(tmp_path):
     prompt = get_sub_agent_system_prompt(cwd=tmp_path)
 
     assert "<project_rules>" not in prompt
-    assert "Sub-agent memory." not in prompt
-    assert "<workspace_memory>" in prompt
-    assert "Do not edit memory files" in prompt
-    assert "<memory_rules>" not in prompt
-    assert "<session_history>" not in prompt
+    assert "<workspace_memory>\nSub-agent memory.\n</workspace_memory>" in prompt
     assert prompt.index("</available_skills>") < prompt.index("<workspace_memory>")
-    assert prompt.endswith("</workspace_memory>")
+    assert prompt.endswith("<workspace_memory>\nSub-agent memory.\n</workspace_memory>")
 
 
 def test_get_sub_agent_system_prompt_without_agents_md(tmp_path, monkeypatch):
@@ -941,7 +935,7 @@ def test_get_system_prompt_appends_active_command_instructions(tmp_path, monkeyp
 
 
 # ---------------------------------------------------------------------------
-# Memory cap, memory rules, and session history guidance
+# Injected MEMORY.md cap
 # ---------------------------------------------------------------------------
 
 
@@ -969,59 +963,16 @@ def test_cap_workspace_memory_limits_bytes():
     assert "[MEMORY.md truncated" in capped
 
 
-def test_get_system_prompt_caps_injected_memory(tmp_path):
+@pytest.mark.parametrize("builder", ["main", "sub_agent"])
+def test_system_prompts_cap_injected_memory(tmp_path, builder):
     memory = "\n".join(f"- fact {index}" for index in range(300))
     (tmp_path / "MEMORY.md").write_text(memory, encoding="utf-8")
 
-    prompt = get_system_prompt(cwd=tmp_path)
+    if builder == "main":
+        prompt = get_system_prompt(cwd=tmp_path)
+    else:
+        prompt = get_sub_agent_system_prompt(cwd=tmp_path)
 
     assert "- fact 199" in prompt
     assert "- fact 200" not in prompt
     assert "[MEMORY.md truncated" in prompt
-
-
-def test_get_system_prompt_includes_memory_rules_and_session_history(
-    tmp_path, monkeypatch
-):
-    db_path = tmp_path / "db" / "sessions.db"
-    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(db_path))
-    (tmp_path / "AGENTS.md").write_text("Project rules.", encoding="utf-8")
-
-    prompt = get_system_prompt(cwd=tmp_path, workspace_directory_key="/repo/x")
-
-    assert "<memory_rules>" in prompt
-    assert "[verified YYYY-MM-DD]" in prompt
-    assert f"`{db_path.resolve()}`" in prompt
-    assert "?mode=ro" in prompt
-    assert "('/repo/x', " in prompt
-    assert prompt.index("</memory_rules>") < prompt.index("<session_history>")
-
-
-def test_get_system_prompt_omits_session_history_in_sandbox(tmp_path, monkeypatch):
-    monkeypatch.setenv("PBI_AGENT_SANDBOX", "1")
-    (tmp_path / "AGENTS.md").write_text("Project rules.", encoding="utf-8")
-
-    prompt = get_system_prompt(cwd=tmp_path)
-
-    assert "<session_history>" not in prompt
-
-
-def test_get_system_prompt_omits_memory_sections_without_tools(tmp_path):
-    (tmp_path / "AGENTS.md").write_text("Project rules.", encoding="utf-8")
-    prompt = get_system_prompt(
-        cwd=tmp_path,
-        excluded_tools={"shell", "apply_patch", "replace_in_file", "write_file"},
-    )
-
-    assert "<memory_rules>" not in prompt
-    assert "<session_history>" not in prompt
-
-
-def test_get_system_prompt_memory_is_opt_in_via_agents_md(tmp_path):
-    (tmp_path / "MEMORY.md").write_text("Remember this.", encoding="utf-8")
-
-    prompt = get_system_prompt(cwd=tmp_path)
-
-    assert "<workspace_memory>\nRemember this.\n</workspace_memory>" in prompt
-    assert "<memory_rules>" not in prompt
-    assert "<session_history>" not in prompt

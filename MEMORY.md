@@ -5,7 +5,7 @@ Index of durable project memory, preloaded into every main-agent session (first 
 Entry shape: rule/fact — why/evidence — `[verified YYYY-MM-DD]` or `[unverified]`. Untagged entries predate this convention (migrated 2026-11-07).
 
 ## Current Focus
-- Memory redesign (2026-11-07): index + topic pages, capped injection, sub-agent pointer only, past sessions queried read-only from `~/.pbi-agent/sessions.db` per `<session_history>` prompt guidance. [verified 2026-11-07]
+- Memory redesign (2026-11-07): index + topic pages, capped injection; memory rules and session-DB query guidance live only in `AGENTS.md`, never in the system prompt code (user decision). [verified 2026-11-07]
 
 ## Top Rules
 - No migrations or backward-compat shims unless asked.
