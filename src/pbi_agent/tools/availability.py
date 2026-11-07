@@ -20,7 +20,7 @@ BUILTIN_TOOL_CATEGORIES: dict[str, frozenset[str]] = {
     "write": frozenset({"apply_patch", "replace_in_file", "write_file"}),
     "web": frozenset({_WEB_FETCH_TOOL, _WEB_SEARCH_TOOL}),
     "sub-agent": frozenset({"sub_agent"}),
-    "shell": frozenset({"shell"}),
+    "shell": frozenset({"shell", "background_task"}),
 }
 BUILTIN_TOOL_NAMES = frozenset().union(*BUILTIN_TOOL_CATEGORIES.values())
 
