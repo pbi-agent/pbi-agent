@@ -149,12 +149,16 @@ function ShellToolResult({
           <Button
             type="button"
             variant="destructive"
-            size="sm"
+            size="xs"
             disabled={interrupting}
             aria-label="Stop running shell command"
             onClick={() => onInterrupt(callId)}
           >
-            <SquareIcon data-icon="inline-start" aria-hidden="true" />
+            {interrupting ? (
+              <Spinner data-icon="inline-start" aria-hidden="true" />
+            ) : (
+              <SquareIcon data-icon="inline-start" aria-hidden="true" className="fill-current" />
+            )}
             {interrupting ? "Stopping…" : "Interrupt"}
           </Button>
         ) : null
@@ -397,8 +401,14 @@ function ToolCard({ metadata, running, icon, title, description, statusLabel, he
         </CardAction>
       </CardHeader>
       {headerAction ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-y border-destructive/20 bg-destructive/5 px-3 py-2">
-          <span className="text-xs text-muted-foreground">Shell command is still running</span>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-y border-border bg-muted/40 px-4 py-1.5">
+          <span className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="relative flex size-2" aria-hidden="true">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/60" />
+              <span className="relative inline-flex size-2 rounded-full bg-primary" />
+            </span>
+            Shell command is still running
+          </span>
           {headerAction}
         </div>
       ) : null}
