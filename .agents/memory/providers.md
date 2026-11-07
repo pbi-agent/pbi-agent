@@ -1,0 +1,13 @@
+# Providers, models, reasoning
+
+Migrated from `MEMORY.md` on 2026-11-07; entries predate verification tags.
+
+- Providers: shared `src/pbi_agent/providers/{transport,auth_strategies,endpoints,tool_execution,runtime}.py` + `protocols/`. Chat Completions: cached/cache-write tokens → `TokenUsage`; omit empty `tools`/`tool_choice`; parse `reasoning`, `reasoning_content`, `reasoning_details`, `<think>`; replay raw reasoning separately.
+- GitHub Copilot: no `previous_response_id` (replay local history). Claude bare `422` = public-code content filter on output (nondeterministic), not payload bug; mapped to actionable error. Never replay `reasoning_text`+`reasoning_opaque` on tool-call messages (causes 422).
+- xAI: API key or `xai_account` OAuth (PKCE via `urllib.request`, fixed `http://127.0.0.1:56121/callback`, HTTPS `x.ai` validation, refresh on 401). Merge OAuth-only `grok-composer-2.5-fast`. xAI account lacks STT/usage limits.
+- Models: longest case-insensitive exact/prefix match; `gpt-5.6` aliases Sol. `gpt-6-astra` $/MTok: input 10, cached 1, writes 12.50, output 50; context unspecified. Omit undocumented context windows; keep Fable/Mythos 5.1, Opus 5.5 aliases. Responses `cache_write_tokens` → write bucket.
+- Reasoning: discovery advertises efforts; fallback `low`/`medium`/`high`/`xhigh`; forward arbitrary non-empty values; Anthropic `xhigh`→`max`. Enrich classic OpenAI `/v1/models` via GPT-5/o-series/Codex patterns.
+- OpenAI/ChatGPT: Responses `instructions` + `previous_response_id`, include `reasoning.encrypted_content`. OpenAI-only `reasoning.mode` (`standard`/`pro`) for GPT-5.6, never to ChatGPT subscription. `CHATGPT_CODEX_VERSION` drives UA + discovery `client_version`; bump with upstream originator/UA/websocket beta check; tests derive from constant. WebSocket-only; caps 30s/30s/1s; `store=false`, stable cache key.
+- ChatGPT continuation: child spawn releases parent socket (clear IDs/turn-state, keep replay buffer); first post-child request full ID-less replay. Exact 400 `Invalid \`previous_response_id\`.` → one-shot ID-less replay without rerunning tools. Open: live-unverified recovered-ID reuse, delayed/encrypted-reasoning recovery, proactive replay.
+- Google Interactions: stateless replay uses steps, not role/content turns.
+- `google_gcp`: Vertex handlers for Gemini/Chat Completions/Responses/xAI/Anthropic; client history; no native search. Saved/CLI project/location before env. API-key-like tokens → `x-goog-api-key` + `v1beta1`, retry once via OAuth/ADC. ADC timeout `PBI_AGENT_GOOGLE_GCP_ACCESS_TOKEN_TIMEOUT` (30s), cached bearer. Strip `google/` prefix; drop `oneOf` for Responses.
