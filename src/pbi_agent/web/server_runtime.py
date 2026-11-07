@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import contextlib
 import logging
 import signal
@@ -85,6 +86,15 @@ class _GracefulUvicornServer(uvicorn.Server):
     def run(self, sockets=None) -> None:  # type: ignore[no-untyped-def]
         with _suppress_expected_startup_tracebacks(self._record_startup_failure):
             super().run(sockets=sockets)
+
+    async def shutdown(self, sockets=None) -> None:  # type: ignore[no-untyped-def]
+        # End long-lived SSE streams so graceful shutdown does not hang until
+        # a second Ctrl+C force-cancels them (which logs CancelledError).
+        app_state = getattr(self.config.app, "state", None)
+        shutdown_event = getattr(app_state, "sse_shutdown_event", None)
+        if isinstance(shutdown_event, asyncio.Event):
+            shutdown_event.set()
+        await super().shutdown(sockets=sockets)
 
     def _record_startup_failure(self, message: str) -> None:
         if self.startup_failure_callback is not None:

@@ -66,6 +66,7 @@ async def stream_events_sse(
         raise HTTPException(status_code=404, detail="Event stream not found.") from exc
     return _sse_response(
         stream,
+        shutdown_event=getattr(request.app.state, "sse_shutdown_event", None),
         since=resume_since,
         requested_since=resume_since,
         replay_events=replay_events,
@@ -109,6 +110,7 @@ async def stream_session_events_sse(
         raise HTTPException(status_code=404, detail="Event stream not found.") from exc
     return _sse_response(
         stream,
+        shutdown_event=getattr(request.app.state, "sse_shutdown_event", None),
         since=resume_since,
         requested_since=requested_since,
         replay_events=replay_events,
@@ -244,6 +246,32 @@ def _oldest_available_after_cursor(
     return max(oldest_retained_seq, cursor + 1)
 
 
+async def _next_stream_event(
+    queue: asyncio.Queue[dict[str, Any]],
+    shutdown_event: asyncio.Event | None,
+) -> dict[str, Any] | None:
+    """Wait for the next event; return None when server shutdown begins."""
+    if shutdown_event is None:
+        return await asyncio.wait_for(queue.get(), timeout=_SSE_HEARTBEAT_SECONDS)
+    get_task = asyncio.ensure_future(queue.get())
+    stop_task = asyncio.ensure_future(shutdown_event.wait())
+    try:
+        done, _pending = await asyncio.wait(
+            {get_task, stop_task},
+            timeout=_SSE_HEARTBEAT_SECONDS,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+    finally:
+        stop_task.cancel()
+        if not get_task.done():
+            get_task.cancel()
+    if get_task in done:
+        return get_task.result()
+    if stop_task in done:
+        return None
+    raise TimeoutError
+
+
 def _format_sse(event: dict[str, Any], *, event_id: int | None = None) -> str:
     lines = ["event: message"]
     if event_id is not None:
@@ -261,10 +289,12 @@ def _sse_response(
     requested_since: int | None = None,
     replay_events: list[dict[str, Any]] | None = None,
     log_context: dict[str, Any] | None = None,
+    shutdown_event: asyncio.Event | None = None,
 ) -> StreamingResponse:
     return StreamingResponse(
         _iter_sse_events(
             stream,
+            shutdown_event=shutdown_event,
             since=since,
             requested_since=requested_since,
             replay_events=replay_events,
@@ -286,6 +316,7 @@ async def _iter_sse_events(
     requested_since: int | None = None,
     replay_events: list[dict[str, Any]] | None = None,
     log_context: dict[str, Any] | None = None,
+    shutdown_event: asyncio.Event | None = None,
 ) -> AsyncIterator[str]:
     requested_since = since if requested_since is None else requested_since
     last_sent_seq = since
@@ -353,15 +384,16 @@ async def _iter_sse_events(
             yield _format_sse(event, event_id=seq)
 
         while True:
+            if shutdown_event is not None and shutdown_event.is_set():
+                break
             try:
-                event = await asyncio.wait_for(
-                    queue.get(),
-                    timeout=_SSE_HEARTBEAT_SECONDS,
-                )
+                event = await _next_stream_event(queue, shutdown_event)
             except TimeoutError:
                 yield _format_sse(_control_event("server.heartbeat", last_sent_seq))
                 continue
 
+            if event is None:
+                break
             seq = _event_seq(event)
             if event.get("type") == "server.replay_incomplete":
                 _oldest_retained_seq, current_latest_seq = stream.bounds()
