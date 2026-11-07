@@ -37,19 +37,13 @@ uv run pbi-agent --help
 uv tool install --reinstall .
 ```
 
-## Task Memory Protocol
+## Memory
 
-- Use a single `MEMORY.md` file for both durable memory and recent task history.
-- Keep `MEMORY.md` in three sections only: `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
-- At the start of substantive work, consult the preloaded `<workspace_memory>` system-prompt section for `Metadata`, `Long-Term Memory`, and any current-day detailed entries relevant to the task. Do not read `MEMORY.md` again with tools unless `<workspace_memory>` is absent, you are about to edit/compact it, or the user explicitly asks to inspect the file.
-- Keep `Long-Term Memory` compact and edited in place. Store only durable facts: stable repo conventions, important decisions, reusable validation patterns, active follow-ups, and artifacts that matter beyond one task.
-- Keep `Detailed Task Events` append-only within the active day. Group entries under one `## YYYY-MM-DD` heading per day.
-- After each implementation, append one short task entry to the current day with only: what changed, validation, and next context if needed.
-- On the first substantive task of a new day, compact the previous day's detailed entries before appending new ones.
-- During compaction, first review every prior-day detailed entry and explicitly write a compact resume of its durable outcome into `Long-Term Memory` before deleting the dated section. Do not delete a prior-day section unless its durable facts, decisions, validation patterns, and unresolved follow-ups have been promoted or consciously deemed non-durable.
-- Carry unresolved items into an active/open follow-up bullet if still relevant, then remove prior-day detail that is no longer needed.
-- Avoid duplicating long-term bullets. Merge with existing bullets when the fact already exists.
-- Keep the file token-efficient: prefer short bullets, avoid command noise, and do not preserve obsolete troubleshooting detail once compacted.
+- Memory is for what a future session cannot recover from the repo, config, or this file: decisions and why, tested rules, traps, current focus, open follow-ups.
+- `MEMORY.md` is a short index (current focus, top rules, open follow-ups, links), preloaded into the main agent. Topic detail lives in `.agents/memory/<topic>.md`; read the relevant page before work in that area.
+- Write when asked or when something is clearly worth remembering. Edit in place, merge duplicates, delete stale or superseded entries. No per-task changelog; past sessions are queryable from the session DB.
+- Entry shape: rule/fact, why/evidence, `[verified YYYY-MM-DD]` or `[unverified]`. Re-check unverified or old entries before relying on them.
+- Only the main agent edits memory; sub-agents report candidate notes.
 
 ## Session TODO Protocol
 

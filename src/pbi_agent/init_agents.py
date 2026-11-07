@@ -40,11 +40,9 @@ AGENTS_TEMPLATE = """# AGENTS.md
 
 ## Memory
 
-- `MEMORY.md` sections: `Metadata`, `Long-Term Memory`, `Detailed Task Events`.
-- Use preloaded `<workspace_memory>`; read the file only if absent or before editing it.
-- `Long-Term Memory`: compact durable facts, edited in place, no duplicates.
-- `Detailed Task Events`: one `## YYYY-MM-DD` heading per day; after each task append one short entry (change, validation, next context).
-- New day: promote durable outcomes/open follow-ups from prior days, then delete their dated sections.
+- Memory holds what a future session cannot recover from the repo or config: decisions and why, tested rules, traps, current focus, open follow-ups.
+- `MEMORY.md` is a short preloaded index; put topic detail in `.agents/memory/<topic>.md` and link it.
+- Write when asked or clearly worth remembering; edit in place, delete stale entries; tag `[verified YYYY-MM-DD]` or `[unverified]`.
 
 ## TODO
 
