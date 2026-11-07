@@ -104,7 +104,7 @@ describe("UsageBar", () => {
     expect(screen.getAllByText("1,000").length).toBeGreaterThan(0);
     const metaNodes = screen.getAllByText(
       (_, node) =>
-        node?.classList.contains("context-gauge__tooltip-meta") === true &&
+        node?.hasAttribute("data-tooltip-meta") === true &&
         node?.textContent === "125.0% of compaction threshold",
     );
     expect(metaNodes.length).toBeGreaterThan(0);
@@ -126,13 +126,13 @@ describe("UsageBar", () => {
       expect(screen.getAllByText("85,000").length).toBeGreaterThan(0);
     });
     const tooltip = screen.getByRole("tooltip");
-    expect(tooltip).toHaveClass("context-gauge__tooltip-content");
+    expect(tooltip).toHaveClass("fixed");
     expect(tooltip).toHaveAttribute("data-app-tooltip");
     expect(tooltip).toHaveAttribute("data-placement", "bottom");
     expect(screen.getAllByText("200,000").length).toBeGreaterThan(0);
     const metaNodes = screen.getAllByText(
       (_, node) =>
-        node?.classList.contains("context-gauge__tooltip-meta") === true &&
+        node?.hasAttribute("data-tooltip-meta") === true &&
         node?.textContent === "42.5% of compaction threshold",
     );
     expect(metaNodes.length).toBeGreaterThan(0);
@@ -154,7 +154,8 @@ describe("UsageBar", () => {
     const trigger = screen.getByRole("button", {
       name: "Run history. Context usage 42.5% (85,000 of 200,000 tokens).",
     });
-    expect(trigger).toHaveClass("context-gauge", "context-gauge--interactive");
+    expect(trigger).toHaveAttribute("data-context-gauge");
+    expect(trigger).toHaveAttribute("data-interactive");
 
     await user.hover(trigger);
     await waitFor(() => {

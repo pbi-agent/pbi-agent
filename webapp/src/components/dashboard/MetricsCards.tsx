@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { DailyBucket, DashboardOverview } from "../../types";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { cn } from "@/lib/utils";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Sparkline } from "./Sparkline";
 
 type MetricsCardsProps = {
@@ -12,7 +13,7 @@ type CardDef = {
   label: string;
   value: string;
   sparkValues: number[];
-  accent?: string;
+  danger?: boolean;
 };
 
 function formatNumber(n: number): string {
@@ -77,7 +78,7 @@ export function MetricsCards({ overview, daily }: MetricsCardsProps) {
         label: "Errors",
         value: formatNumber(overview.total_errors),
         sparkValues: errorsSpark,
-        accent: overview.total_errors > 0 ? "var(--color-error)" : undefined,
+        danger: overview.total_errors > 0,
       },
       {
         label: "Avg Duration",
@@ -88,22 +89,26 @@ export function MetricsCards({ overview, daily }: MetricsCardsProps) {
   }, [overview, daily]);
 
   return (
-    <div className="metrics-grid">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {cards.map((card) => (
-        <Card className="metric-card" key={card.label}>
-          <CardHeader className="metric-card__header">
-            <CardTitle className="metric-card__label">{card.label}</CardTitle>
+        <Card size="sm" key={card.label}>
+          <CardHeader>
+            <CardTitle>{card.label}</CardTitle>
+            <CardAction>
             <Sparkline
               values={card.sparkValues}
               width={80}
               height={24}
-              color={card.accent}
+              className={card.danger ? "text-destructive" : undefined}
             />
+            </CardAction>
           </CardHeader>
           <CardContent>
           <span
-            className="metric-card__value"
-            style={card.accent ? { color: card.accent } : undefined}
+            className={cn(
+              "font-mono text-xl font-semibold",
+              card.danger && "text-destructive",
+            )}
           >
             {card.value}
           </span>

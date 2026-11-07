@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { ActivityIcon, AlertTriangleIcon, CalendarIcon } from "lucide-react";
 import { fetchDashboardStats } from "../../api";
 import { Alert, AlertDescription } from "../ui/alert";
-import { Input } from "../ui/input";
+import { Card, CardAction, CardHeader, CardTitle } from "../ui/card";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { MetricsCards } from "./MetricsCards";
@@ -48,78 +49,69 @@ export function DashboardPage() {
   });
 
   return (
-    <div className="dashboard-page">
-      <div className="dashboard-page__inner">
-        {/* ── Header ──────────────────────────── */}
-        <div className="dashboard-header">
-          <div className="dashboard-header__section dashboard-header__section--left">
-            <div className="dashboard-header__title">
-              <ActivityIcon className="dashboard-header__icon" />
-              <h2 className="dashboard-header__heading">Observability</h2>
-            </div>
-          </div>
-
-          <div className="dashboard-header__section dashboard-header__section--center">
-            <div className="dashboard-header__date-group">
-              <span className="dashboard-header__date-label">From</span>
-              <label className="dashboard-date-field">
-                <span className="sr-only">Start date</span>
-                <CalendarIcon className="dashboard-date-field__icon" aria-hidden="true" />
-                <Input
+    <div className="flex-1 overflow-y-auto p-6">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+        {/* ── Header ── */}
+        <Card size="sm">
+          <CardHeader>
+            <CardTitle>
+              <div className="flex items-center gap-2">
+                <ActivityIcon aria-hidden="true" />
+                <h2>Observability</h2>
+              </div>
+            </CardTitle>
+            <CardAction>
+              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-muted-foreground">From</span>
+              <InputGroup className="w-auto">
+                <InputGroupAddon>
+                  <CalendarIcon aria-hidden="true" />
+                </InputGroupAddon>
+                <InputGroupInput
                   type="date"
-                  className="dashboard-date-input dashboard-date-input--compact"
+                  aria-label="Start date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                 />
-              </label>
-              <span className="dashboard-header__date-label">To</span>
-              <label className="dashboard-date-field">
-                <span className="sr-only">End date</span>
-                <CalendarIcon className="dashboard-date-field__icon" aria-hidden="true" />
-                <Input
+              </InputGroup>
+                <span className="text-sm text-muted-foreground">To</span>
+              <InputGroup className="w-auto">
+                <InputGroupAddon>
+                  <CalendarIcon aria-hidden="true" />
+                </InputGroupAddon>
+                <InputGroupInput
                   type="date"
-                  className="dashboard-date-input dashboard-date-input--compact"
+                  aria-label="End date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
                 />
-              </label>
-            </div>
-          </div>
-
-          <div className="dashboard-header__section dashboard-header__section--right">
-            <ToggleGroup
-              type="single"
-              value={scope}
-              onValueChange={(value) => {
-                if (value === "workspace" || value === "global") setScope(value);
-              }}
-              className="dashboard-controls__scope"
-              spacing={0}
-              variant="default"
-            >
-              <ToggleGroupItem
-                value="workspace"
-                className="dashboard-controls__scope-button"
+              </InputGroup>
+              </div>
+              <ToggleGroup
+                type="single"
+                value={scope}
+                onValueChange={(value) => {
+                  if (value === "workspace" || value === "global") setScope(value);
+                }}
+                variant="outline"
+                size="sm"
               >
-                Workspace
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="global"
-                className="dashboard-controls__scope-button"
-              >
-                Global
-              </ToggleGroupItem>
-            </ToggleGroup>
-          </div>
-        </div>
+                <ToggleGroupItem value="workspace">Workspace</ToggleGroupItem>
+                <ToggleGroupItem value="global">Global</ToggleGroupItem>
+              </ToggleGroup>
+              </div>
+            </CardAction>
+          </CardHeader>
+        </Card>
 
         {/* ── L1: Overview KPIs ─────────────────────── */}
         {statsQuery.isLoading ? (
-          <div className="dashboard-loading">
+          <div className="flex justify-center py-12">
             <LoadingSpinner size="lg" />
           </div>
         ) : statsQuery.isError ? (
-          <Alert variant="destructive" className="dashboard-error">
+          <Alert variant="destructive">
             <AlertTriangleIcon />
             <AlertDescription>
               Failed to load dashboard data. Please try again.

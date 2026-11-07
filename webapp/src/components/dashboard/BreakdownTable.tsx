@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ProviderBreakdown } from "../../types";
 import { Button } from "../ui/button";
+import { Empty, EmptyDescription, EmptyHeader } from "../ui/empty";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import {
   Table,
@@ -68,30 +69,34 @@ export function BreakdownTable({ breakdown }: BreakdownTableProps) {
 
   function sortIndicator(key: SortKey) {
     if (sortKey !== key) return null;
-    return <span className="sort-arrow">{sortAsc ? "\u25B2" : "\u25BC"}</span>;
+    return <span className="text-xs">{sortAsc ? "\u25B2" : "\u25BC"}</span>;
   }
 
   if (breakdown.length === 0) {
     return (
-      <Card className="dashboard-panel">
-        <CardHeader className="dashboard-panel__header">
-          <CardTitle className="dashboard-panel__title">Provider / Model Breakdown</CardTitle>
+      <Card>
+        <CardHeader>
+          <CardTitle>Provider / Model Breakdown</CardTitle>
         </CardHeader>
-        <CardContent className="dashboard-panel__body dashboard-panel__empty">
-          No run data available.
+        <CardContent>
+          <Empty>
+            <EmptyHeader>
+              <EmptyDescription>No run data available.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <Card className="dashboard-panel">
-      <CardHeader className="dashboard-panel__header">
-        <CardTitle className="dashboard-panel__title">Provider / Model Breakdown</CardTitle>
+    <Card>
+      <CardHeader>
+        <CardTitle>Provider / Model Breakdown</CardTitle>
       </CardHeader>
-      <CardContent className="dashboard-panel__body">
-        <div className="dashboard-table-wrap">
-          <Table className="dashboard-table">
+      <CardContent>
+        <div className="min-w-0">
+          <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>
@@ -135,13 +140,15 @@ export function BreakdownTable({ breakdown }: BreakdownTableProps) {
               {sorted.map((row, i) => (
                 <TableRow key={`${row.provider ?? "provider"}-${row.model ?? "model"}-${i}`}>
                   <TableCell>{row.provider ?? "--"}</TableCell>
-                  <TableCell className="mono">{row.model ?? "--"}</TableCell>
+                  <TableCell><span className="font-mono">{row.model ?? "--"}</span></TableCell>
                   <TableCell>{row.run_count}</TableCell>
                   <TableCell>{formatNumber(row.total_tokens)}</TableCell>
                   <TableCell>{formatCost(row.total_cost)}</TableCell>
                   <TableCell>{formatDuration(row.avg_duration_ms)}</TableCell>
-                  <TableCell className={row.error_count > 0 ? "text-error" : ""}>
-                    {row.error_count}
+                  <TableCell>
+                    <span className={row.error_count > 0 ? "text-destructive" : undefined}>
+                      {row.error_count}
+                    </span>
                   </TableCell>
                 </TableRow>
               ))}

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
-import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 
@@ -59,7 +58,7 @@ export function CopyShortcut({
             type="button"
             variant="outline"
             size="icon-sm"
-            className={cn("copy-shortcut", className)}
+            className={className}
             aria-label={buttonLabel}
             data-copy-status={status}
             onClick={(event) => {

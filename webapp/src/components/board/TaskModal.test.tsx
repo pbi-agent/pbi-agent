@@ -132,10 +132,10 @@ describe("TaskModal", () => {
     const dialog = screen.getByRole("dialog", { name: "New Task" });
     expect(dialog.querySelector('[data-slot="dialog-title"]')).toHaveTextContent("New Task");
     expect(screen.getByRole("heading", { name: "New Task" })).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Draft implementation plan")).toHaveClass("task-form__input");
-    expect(screen.getByDisplayValue("Write a careful implementation plan.")).toHaveClass("task-form__textarea");
-    expect(screen.getByRole("combobox", { name: "Stage" })).toHaveClass("task-form__select");
-    expect(screen.getByRole("combobox", { name: "Profile Override" })).toHaveClass("task-form__select");
+    expect(screen.getByDisplayValue("Draft implementation plan")).toHaveAttribute("data-slot", "input");
+    expect(screen.getByDisplayValue("Write a careful implementation plan.")).toHaveAttribute("data-slot", "textarea");
+    expect(screen.getByRole("combobox", { name: "Stage" })).toHaveAttribute("data-slot", "select-trigger");
+    expect(screen.getByRole("combobox", { name: "Profile Override" })).toHaveAttribute("data-slot", "select-trigger");
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });

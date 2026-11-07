@@ -19,7 +19,7 @@ describe("DictationWaveform", () => {
     );
 
     const band = screen.getByRole("img", { name: "Recording audio" });
-    expect(band.querySelectorAll(".composer__waveform-bar")).toHaveLength(6);
+    expect(band.querySelectorAll("[data-waveform-bar]")).toHaveLength(6);
   });
 
   it("scales bars from the live frequency spectrum", () => {
@@ -32,11 +32,9 @@ describe("DictationWaveform", () => {
       <DictationWaveform barCount={2} getFrequencyData={() => data} />,
     );
 
-    const bars = document.querySelectorAll<HTMLSpanElement>(
-      ".composer__waveform-bar",
-    );
+    const bars = document.querySelectorAll<SVGRectElement>("[data-waveform-bar]");
     expect(bars).toHaveLength(2);
-    expect(bars[0]?.style.transform).toBe("scaleY(1.000)");
+    expect(bars[0]?.getAttribute("data-scale")).toBe("1.000");
     expect(rafSpy).toHaveBeenCalled();
   });
 
@@ -50,12 +48,10 @@ describe("DictationWaveform", () => {
       <DictationWaveform barCount={16} getFrequencyData={() => data} />,
     );
 
-    const bars = document.querySelectorAll<HTMLSpanElement>(
-      ".composer__waveform-bar",
-    );
+    const bars = document.querySelectorAll<SVGRectElement>("[data-waveform-bar]");
     expect(bars).toHaveLength(16);
-    expect(bars[0]?.style.transform).toBe("scaleY(1.000)");
-    expect(bars[15]?.style.transform).toBe("scaleY(1.000)");
+    expect(bars[0]?.getAttribute("data-scale")).toBe("1.000");
+    expect(bars[15]?.getAttribute("data-scale")).toBe("1.000");
   });
 
   it("stops the animation frame loop on unmount", () => {

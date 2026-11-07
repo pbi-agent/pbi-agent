@@ -641,7 +641,7 @@ async function openSettingsTab(
   tabName: string,
 ) {
   const label = await screen.findByText(tabName, {
-    selector: ".settings-nav__item-label",
+    selector: "[data-settings-nav-label]",
   });
   const button = label.closest("button");
   expect(button).not.toBeNull();
@@ -1353,7 +1353,7 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByText("Review")).toBeInTheDocument();
     expect(screen.getByText("Review Mode")).toBeInTheDocument();
-    const commandCard = screen.getByText("Review Mode").closest(".command-card");
+    const commandCard = screen.getByText("Review Mode").closest("[data-settings-command-card]");
     expect(commandCard).not.toBeNull();
     expect(
       within(commandCard as HTMLElement).getAllByText(".agents/commands/review.md").length,
@@ -1574,19 +1574,19 @@ describe("SettingsPage", () => {
 
     expect(
       await screen.findByText("Models", {
-        selector: ".settings-nav__group-label",
+        selector: "[data-settings-nav-group-label]",
       }),
     ).toBeInTheDocument();
 
-    const groups = Array.from(document.querySelectorAll(".settings-nav__group"));
+    const groups = Array.from(document.querySelectorAll("[data-settings-nav-group]"));
     expect(
       groups.map((group) =>
-        group.querySelector(".settings-nav__group-label")?.textContent,
+        group.querySelector("[data-settings-nav-group-label]")?.textContent,
       ),
     ).toEqual(["General", "Models", "Project", "Desktop", "Data"]);
     expect(
       groups.map((group) =>
-        Array.from(group.querySelectorAll(".settings-nav__item-label")).map(
+        Array.from(group.querySelectorAll("[data-settings-nav-label]")).map(
           (item) => item.textContent,
         ),
       ),
@@ -2261,7 +2261,7 @@ describe("SettingsPage", () => {
     await user.clear(input);
     await user.type(input, "14");
     const saveButton = screen.getByRole("button", { name: "Save Changes" });
-    expect(saveButton).toHaveClass("settings-action-button");
+    expect(saveButton).toHaveAttribute("data-settings-action-button");
     expect(saveButton).toHaveAttribute("data-variant", "ghost");
     expect(saveButton).toHaveAttribute("data-size", "sm");
     await user.click(saveButton);
@@ -2343,12 +2343,12 @@ describe("SettingsPage", () => {
     const providerSelect = await screen.findByRole("combobox", {
       name: /speech-to-text provider/i,
     });
-    const providerControl = providerSelect.closest(".active-profile-control");
+    const providerControl = providerSelect.closest("[data-settings-active-control]");
     expect(providerControl).not.toBeNull();
     expect(
       within(providerControl as HTMLElement).getByText("Active default"),
     ).toBeInTheDocument();
-    expect(providerSelect).toHaveClass("active-profile-control__select");
+    expect(providerSelect).toHaveAttribute("data-settings-active-select");
 
     await selectRadixOption(user, providerSelect, "Google Main (Google)");
 
@@ -2369,7 +2369,7 @@ describe("SettingsPage", () => {
     const profileSelect = await screen.findByRole("combobox", {
       name: /prompt enhancement model profile/i,
     });
-    const profileControl = profileSelect.closest(".active-profile-control");
+    const profileControl = profileSelect.closest("[data-settings-active-control]");
     expect(profileControl).not.toBeNull();
     expect(
       within(profileControl as HTMLElement).getByText("Current model"),
@@ -2483,16 +2483,16 @@ describe("SettingsPage", () => {
 
     await openSettingsTab(user, "Providers");
     const openAiCard = (await screen.findByText("OpenAI Main")).closest(
-      ".provider-card",
+      "[data-settings-provider-card]",
     );
     const chatGptCard = (await screen.findByText("ChatGPT Main")).closest(
-      ".provider-card",
+      "[data-settings-provider-card]",
     );
     const elevenLabsCard = (await screen.findByText("ElevenLabs Main")).closest(
-      ".provider-card",
+      "[data-settings-provider-card]",
     );
     const xaiAccountCard = (await screen.findByText("X Account")).closest(
-      ".provider-card",
+      "[data-settings-provider-card]",
     );
 
     expect(openAiCard).not.toBeNull();
@@ -2894,14 +2894,14 @@ describe("SettingsPage", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Add Provider" });
     expect(dialog.querySelector('[data-slot="dialog-title"]')).toHaveTextContent("Add Provider");
-    expect(dialog.querySelector(".task-form__body")).not.toBeNull();
-    expect(document.querySelector('input[name="provider-name"]')).toHaveClass(
-      "task-form__input",
+    expect(dialog.querySelector("[data-form-dialog-body]")).not.toBeNull();
+    expect(document.querySelector('input[name="provider-name"]')).toHaveAttribute(
+      "data-settings-input",
     );
-    expect(within(dialog).getByRole("combobox", { name: "Kind" })).toHaveClass(
-      "task-form__select",
+    expect(within(dialog).getByRole("combobox", { name: "Kind" })).toHaveAttribute(
+      "data-settings-select",
     );
-    const credentialSource = document.querySelector(".secret-mode-tabs");
+    const credentialSource = document.querySelector("[data-settings-secret-mode-tabs]");
     expect(credentialSource).not.toBeNull();
     const [envVarSourceButton, apiKeySourceButton] = Array.from(
       credentialSource?.querySelectorAll('[data-slot="toggle-group-item"]') ?? [],
@@ -3419,12 +3419,12 @@ describe("SettingsPage", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Add Profile" });
     expect(dialog.querySelector('[data-slot="dialog-title"]')).toHaveTextContent("Add Profile");
-    expect(dialog.querySelector(".task-form__body")).not.toBeNull();
-    expect(document.querySelector('input[name="profile-name"]')).toHaveClass(
-      "task-form__input",
+    expect(dialog.querySelector("[data-form-dialog-body]")).not.toBeNull();
+    expect(document.querySelector('input[name="profile-name"]')).toHaveAttribute(
+      "data-settings-input",
     );
-    expect(within(dialog).getByRole("combobox", { name: "Provider" })).toHaveClass(
-      "task-form__select",
+    expect(within(dialog).getByRole("combobox", { name: "Provider" })).toHaveAttribute(
+      "data-settings-select",
     );
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute(
       "data-variant",

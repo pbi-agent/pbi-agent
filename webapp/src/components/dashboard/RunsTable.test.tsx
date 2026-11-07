@@ -69,7 +69,7 @@ describe("RunsTable", () => {
 
     expect(status).toHaveAttribute("data-variant", "running");
     expect(status).toHaveAttribute("data-size", "meta");
-    expect(status).toHaveClass("runs-row__status");
+    expect(status.closest("[data-run-id]")).toHaveAttribute("data-run-id", "run-1");
   });
 
   it("loads filter options from the distinct database values endpoint", async () => {

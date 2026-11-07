@@ -3,7 +3,6 @@ import { AlertTriangleIcon, InfoIcon } from "lucide-react";
 import type { UserProfile } from "../../types";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import {
   Field,
   FieldDescription,
@@ -13,6 +12,7 @@ import {
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
 import { Textarea } from "../ui/textarea";
+import { SettingsPanel, SettingsSection } from "./settings-layout";
 
 const EMPTY_PROFILE: UserProfile = {
   preferred_name: "",
@@ -60,8 +60,8 @@ export function ProfileSettingsSection({
   }
 
   return (
-    <section className="settings-section settings-section--active">
-      <Alert className="settings-inline-note">
+    <SettingsSection>
+      <Alert>
         <InfoIcon />
         <AlertDescription>
           Saved globally for every project. Profile content is included in agent
@@ -70,19 +70,12 @@ export function ProfileSettingsSection({
         </AlertDescription>
       </Alert>
 
-      <Card className="settings-panel">
-        <CardHeader className="settings-panel__header">
-          <div>
-            <CardTitle className="settings-panel__title">Profile</CardTitle>
-            <div className="settings-panel__subtitle">
-              Personal context, preferences, and reusable instructions
-            </div>
-          </div>
-        </CardHeader>
-
-        <CardContent className="settings-panel__body profile-settings-panel__body">
+      <SettingsPanel
+        title="Profile"
+        description="Personal context, preferences, and reusable instructions"
+      >
           <FieldGroup>
-            <div className="profile-settings-grid">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Field>
                 <FieldLabel htmlFor="profile-preferred-name">
                   Preferred name
@@ -92,7 +85,6 @@ export function ProfileSettingsSection({
                 </FieldDescription>
                 <Input
                   id="profile-preferred-name"
-                  className="task-form__input"
                   value={draft.preferred_name}
                   maxLength={200}
                   disabled={saving}
@@ -110,7 +102,6 @@ export function ProfileSettingsSection({
                 </FieldDescription>
                 <Input
                   id="profile-role"
-                  className="task-form__input"
                   value={draft.role}
                   maxLength={500}
                   disabled={saving}
@@ -127,7 +118,7 @@ export function ProfileSettingsSection({
               </FieldDescription>
               <Textarea
                 id="profile-about"
-                className="task-form__textarea profile-settings-textarea"
+                className="min-h-24"
                 value={draft.about}
                 maxLength={4_000}
                 disabled={saving}
@@ -148,7 +139,7 @@ export function ProfileSettingsSection({
               </FieldDescription>
               <Textarea
                 id="profile-preferences"
-                className="task-form__textarea profile-settings-textarea"
+                className="min-h-24"
                 value={draft.preferences}
                 maxLength={8_000}
                 disabled={saving}
@@ -173,7 +164,7 @@ export function ProfileSettingsSection({
               </FieldDescription>
               <Textarea
                 id="profile-global-instructions"
-                className="task-form__textarea profile-settings-textarea profile-settings-textarea--instructions"
+                className="min-h-40"
                 value={draft.instructions}
                 maxLength={12_000}
                 disabled={saving}
@@ -192,12 +183,12 @@ export function ProfileSettingsSection({
             </Alert>
           )}
 
-          <div className="settings-panel__actions">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="settings-action-button"
+              data-settings-action-button
               onClick={() => onDraftChange(EMPTY_PROFILE)}
               disabled={saving || Object.values(draft).every((value) => !value)}
             >
@@ -207,15 +198,14 @@ export function ProfileSettingsSection({
               type="button"
               variant="ghost"
               size="sm"
-              className="settings-action-button"
+              data-settings-action-button
               onClick={() => void handleSave()}
               disabled={saving || !dirty}
             >
               {saving ? "Saving…" : "Save Changes"}
             </Button>
           </div>
-        </CardContent>
-      </Card>
-    </section>
+      </SettingsPanel>
+    </SettingsSection>
   );
 }

@@ -6,7 +6,22 @@ import { EmptyState } from "../shared/EmptyState";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
+import type * as React from "react";
+import { cn } from "../../lib/utils";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "../ui/card";
+import {
+  SettingsList,
+  SettingsPanel,
+  SettingsSection,
+} from "./settings-layout";
 import { Alert, AlertDescription } from "../ui/alert";
 
 export function HooksSettingsSection() {
@@ -17,7 +32,10 @@ export function HooksSettingsSection() {
     staleTime: 10_000,
   });
   const mutation = useMutation({
-    mutationFn: async (action: { type: "trust" | "enable" | "disable"; key: string }) => {
+    mutationFn: async (action: {
+      type: "trust" | "enable" | "disable";
+      key: string;
+    }) => {
       if (action.type === "trust") return trustHook(action.key);
       if (action.type === "enable") return enableHook(action.key);
       return disableHook(action.key);
@@ -30,65 +48,64 @@ export function HooksSettingsSection() {
 
   const data = hooksQuery.data;
   return (
-    <section className="settings-section settings-section--active">
-      <Card className="settings-panel">
-        <CardHeader className="settings-panel__header">
-          <div className="settings-panel__heading">
-            <CardTitle className="settings-panel__title">Hooks</CardTitle>
-            <CardDescription className="settings-panel__subtitle">
-              Review declarative command hooks before they can run.
-            </CardDescription>
+    <SettingsSection>
+      <SettingsPanel
+        title="Hooks"
+        description="Review declarative command hooks before they can run."
+      >
+        {hooksQuery.isLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <LoadingSpinner size="sm" />
+            <span>Loading hooks…</span>
           </div>
-        </CardHeader>
-        <CardContent className="settings-panel__body settings-hooks-panel__body">
-          {hooksQuery.isLoading ? (
-            <div className="settings-hooks__loading">
-              <LoadingSpinner size="sm" />
-              <span>Loading hooks…</span>
-            </div>
-          ) : hooksQuery.isError || !data ? (
-            <Alert variant="destructive" className="settings-error-banner">
-              <AlertDescription>
-                Failed to load hooks: {(hooksQuery.error as Error)?.message ?? "Unknown error"}
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <>
-              {data.trust_bypass_active && (
-                <Alert className="settings-inline-note">
-                  <ShieldAlertIcon />
-                  <AlertDescription>
-                    Dangerous hook trust bypass is active; untrusted and modified hooks can run.
-                  </AlertDescription>
-                </Alert>
-              )}
-              {data.diagnostics.length > 0 && (
-                <Alert variant="destructive" className="settings-error-banner">
-                  <AlertDescription>{data.diagnostics.join("\n")}</AlertDescription>
-                </Alert>
-              )}
-              {data.hooks.length === 0 ? (
-                <EmptyState
-                  title="No hooks found"
-                  description="Add ~/.pbi-agent/hooks.json or .agents/hooks.json to configure hooks."
-                />
-              ) : (
-                <div className="settings-card-list">
-                  {data.hooks.map((hook) => (
-                    <HookCard
-                      key={hook.key}
-                      hook={hook}
-                      busy={mutation.isPending}
-                      onAction={(type) => mutation.mutate({ type, key: hook.key })}
-                    />
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
-    </section>
+        ) : hooksQuery.isError || !data ? (
+          <Alert variant="destructive">
+            <AlertDescription>
+              Failed to load hooks:{" "}
+              {(hooksQuery.error as Error)?.message ?? "Unknown error"}
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <>
+            {data.trust_bypass_active && (
+              <Alert>
+                <ShieldAlertIcon />
+                <AlertDescription>
+                  Dangerous hook trust bypass is active; untrusted and modified
+                  hooks can run.
+                </AlertDescription>
+              </Alert>
+            )}
+            {data.diagnostics.length > 0 && (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  {data.diagnostics.join("\n")}
+                </AlertDescription>
+              </Alert>
+            )}
+            {data.hooks.length === 0 ? (
+              <EmptyState
+                title="No hooks found"
+                description="Add ~/.pbi-agent/hooks.json or .agents/hooks.json to configure hooks."
+              />
+            ) : (
+              <SettingsList>
+                {data.hooks.map((hook) => (
+                  <HookCard
+                    key={hook.key}
+                    hook={hook}
+                    busy={mutation.isPending}
+                    onAction={(type) =>
+                      mutation.mutate({ type, key: hook.key })
+                    }
+                  />
+                ))}
+              </SettingsList>
+            )}
+          </>
+        )}
+      </SettingsPanel>
+    </SettingsSection>
   );
 }
 
@@ -101,86 +118,88 @@ function HookCard({
   busy: boolean;
   onAction: (type: "trust" | "enable" | "disable") => void;
 }) {
-  const needsReview = hook.trust_status === "untrusted" || hook.trust_status === "modified";
+  const needsReview =
+    hook.trust_status === "untrusted" || hook.trust_status === "modified";
+  const details: Array<[string, React.ReactNode, boolean?]> = [
+    ["Command", hook.command],
+    ["Status message", hook.status_message || "—"],
+    ["Timeout", `${hook.timeout}s`],
+    ["Hash", hook.current_hash, true],
+    ["Source path", hook.source_path],
+  ];
+  if (hook.diagnostics.length > 0)
+    details.push(["Diagnostics", hook.diagnostics.join("\n")]);
   return (
-    <Card className="settings-item settings-hook-card">
-      <div className="settings-hook-card__main">
-        <div className="settings-row settings-hook-card__header">
-          <div>
-            <span className="settings-item__name">{hook.event}</span>
-            <div className="provider-card__subtitle">
-              matcher {hook.matcher || "*"} · {hook.source}
-            </div>
-          </div>
-          <div className="settings-row__actions settings-hook-card__status">
+    <Card size="sm">
+      <CardHeader>
+        <CardTitle>{hook.event}</CardTitle>
+        <CardDescription>
+          matcher {hook.matcher || "*"} · {hook.source}
+        </CardDescription>
+        <CardAction>
+          <div className="flex items-center gap-2 text-muted-foreground">
             <Badge
               size="meta"
-              variant={needsReview ? "warning" : hook.runnable ? "success" : "secondary"}
-              className="settings-hook-card__badge"
+              variant={
+                needsReview
+                  ? "warning"
+                  : hook.runnable
+                    ? "success"
+                    : "secondary"
+              }
             >
               {hook.managed ? "managed" : hook.trust_status}
             </Badge>
             {hook.runnable ? (
-              <ShieldCheckIcon className="settings-hook-card__status-icon" aria-hidden="true" />
+              <ShieldCheckIcon className="size-4" aria-hidden="true" />
             ) : (
-              <ShieldAlertIcon className="settings-hook-card__status-icon" aria-hidden="true" />
+              <ShieldAlertIcon className="size-4" aria-hidden="true" />
             )}
           </div>
-        </div>
-        <dl className="settings-detail-list settings-hook-card__details">
-          <div>
-            <dt>Command</dt>
-            <dd>{hook.command}</dd>
-          </div>
-          <div>
-            <dt>Status message</dt>
-            <dd>{hook.status_message || "—"}</dd>
-          </div>
-          <div>
-            <dt>Timeout</dt>
-            <dd>{hook.timeout}s</dd>
-          </div>
-          <div>
-            <dt>Hash</dt>
-            <dd className="settings-monospace">{hook.current_hash}</dd>
-          </div>
-          <div>
-            <dt>Source path</dt>
-            <dd>{hook.source_path}</dd>
-          </div>
-          {hook.diagnostics.length > 0 && (
-            <div>
-              <dt>Diagnostics</dt>
-              <dd>{hook.diagnostics.join("\n")}</dd>
+        </CardAction>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid gap-2 text-sm">
+          {details.map(([label, value, mono]) => (
+            <div key={label} className="grid min-w-0 gap-0.5">
+              <dt className="text-xs text-muted-foreground">{label}</dt>
+              <dd
+                className={cn(
+                  "min-w-0 break-words whitespace-pre-wrap",
+                  mono && "font-mono text-xs",
+                )}
+              >
+                {value}
+              </dd>
             </div>
-          )}
+          ))}
         </dl>
-      </div>
+      </CardContent>
       {!hook.managed && (
-        <div className="settings-item__actions settings-hook-card__actions">
-          {needsReview && (
+        <CardFooter>
+          <div className="flex flex-wrap justify-end gap-2 w-full">
+            {needsReview && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => onAction("trust")}
+              >
+                Trust current hash
+              </Button>
+            )}
             <Button
               type="button"
               size="sm"
               variant="ghost"
-              className="settings-action-button"
               disabled={busy}
-              onClick={() => onAction("trust")}
+              onClick={() => onAction(hook.enabled ? "disable" : "enable")}
             >
-              Trust current hash
+              {hook.enabled ? "Disable" : "Enable"}
             </Button>
-          )}
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="settings-action-button"
-            disabled={busy}
-            onClick={() => onAction(hook.enabled ? "disable" : "enable")}
-          >
-            {hook.enabled ? "Disable" : "Enable"}
-          </Button>
-        </div>
+          </div>
+        </CardFooter>
       )}
     </Card>
   );

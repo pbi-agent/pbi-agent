@@ -16,6 +16,8 @@ interface DictationWaveformProps {
 
 const DEFAULT_BAR_COUNT = 64;
 const MIN_BAR_SCALE = 0.08;
+const VIEWBOX_HEIGHT = 28;
+const BAR_WIDTH = 0.7;
 const FREQUENCY_NOISE_FLOOR = 8;
 const ACTIVE_BIN_PEAK_RATIO = 0.14;
 const VOICE_BIN_FRACTION = 0.45;
@@ -91,7 +93,7 @@ export function DictationWaveform({
   className,
   label = "Recording audio",
 }: DictationWaveformProps) {
-  const barRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const barRefs = useRef<(SVGRectElement | null)[]>([]);
   const frameRef = useRef<number | null>(null);
   const getFrequencyDataRef = useRef(getFrequencyData);
 
@@ -116,7 +118,10 @@ export function DictationWaveform({
     const applyScale = (index: number, scale: number) => {
       const node = barRefs.current[index];
       if (node) {
-        node.style.transform = `scaleY(${scale.toFixed(3)})`;
+        const height = VIEWBOX_HEIGHT * scale;
+        node.setAttribute("height", height.toFixed(3));
+        node.setAttribute("y", ((VIEWBOX_HEIGHT - height) / 2).toFixed(3));
+        node.setAttribute("data-scale", scale.toFixed(3));
       }
     };
 
@@ -155,24 +160,36 @@ export function DictationWaveform({
     };
   }, [bars]);
 
+  const minHeight = VIEWBOX_HEIGHT * MIN_BAR_SCALE;
+
   return (
     <div
-      className={cn("composer__waveform", className)}
+      className={cn("flex min-h-10 min-w-0 flex-1 items-center px-3", className)}
       role="img"
       aria-label={label}
     >
-      <div className="composer__waveform-bars" aria-hidden="true">
+      <svg
+        className="h-7 w-full min-w-0 flex-1 fill-destructive"
+        viewBox={`0 0 ${bars.length} ${VIEWBOX_HEIGHT}`}
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
         {bars.map((index) => (
-          <span
+          <rect
             key={index}
             ref={(node) => {
               barRefs.current[index] = node;
             }}
-            className="composer__waveform-bar"
-            style={{ transform: `scaleY(${MIN_BAR_SCALE})` }}
+            data-waveform-bar=""
+            data-scale={MIN_BAR_SCALE.toFixed(3)}
+            x={index + (1 - BAR_WIDTH) / 2}
+            y={(VIEWBOX_HEIGHT - minHeight) / 2}
+            width={BAR_WIDTH}
+            height={minHeight}
+            rx={BAR_WIDTH / 2}
           />
         ))}
-      </div>
+      </svg>
     </div>
   );
 }

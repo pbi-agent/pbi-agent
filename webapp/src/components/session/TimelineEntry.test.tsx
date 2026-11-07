@@ -71,14 +71,15 @@ it("renders the compacted context marker with the opening separator only", () =>
   const { container } = renderTimelineEntry(item);
 
   expect(screen.queryByText("[compacted context]")).not.toBeInTheDocument();
-  expect(screen.getByText("compacted context")).toHaveClass(
-    "timeline-entry__compaction-label",
+  expect(screen.getByText("compacted context")).toHaveAttribute(
+    "data-compaction-label",
   );
-  expect(container.querySelector('[data-timeline-item-id="compact-system"]')).toHaveClass(
-    "timeline-entry--compaction",
+  expect(container.querySelector('[data-timeline-item-id="compact-system"]')).toHaveAttribute(
+    "data-timeline-entry",
+    "compaction",
   );
   expect(container.querySelectorAll('[data-slot="separator"]')).toHaveLength(1);
-  expect(container.querySelector(".timeline-entry__content")).not.toBeInTheDocument();
+  expect(container.querySelector("[data-timeline-content]")).not.toBeInTheDocument();
 });
 
 it("renders the closing separator after the compaction summary block", () => {
@@ -93,10 +94,11 @@ it("renders the closing separator after the compaction summary block", () => {
   const { container } = renderTimelineEntry(item);
 
   expect(screen.getByText(/summary/)).toBeInTheDocument();
-  expect(container.querySelector('[data-timeline-item-id="compact-summary"]')).toHaveClass(
-    "timeline-entry--assistant",
+  expect(container.querySelector('[data-timeline-item-id="compact-summary"]')).toHaveAttribute(
+    "data-timeline-entry",
+    "assistant",
   );
-  expect(container.querySelector(".timeline-entry--compaction-summary-end")).toBeInTheDocument();
+  expect(container.querySelector('[data-timeline-entry="compaction-summary-end"]')).toBeInTheDocument();
   expect(container.querySelectorAll('[data-slot="separator"]')).toHaveLength(1);
 });
 
@@ -164,10 +166,10 @@ it("highlights file and installed skill tags in user turn content", async () => 
 
   const { container } = renderTimelineEntry(item);
 
-  expect(container.querySelector(".timeline-entry__file-tag")).toHaveTextContent("src/main.py");
-  expect(container.querySelector(".timeline-entry__skill-tag")).not.toBeInTheDocument();
+  expect(container.querySelector('[data-special-tag="file"]')).toHaveTextContent("src/main.py");
+  expect(container.querySelector('[data-special-tag="skill"]')).not.toBeInTheDocument();
   await waitFor(() => {
-    expect(container.querySelector(".timeline-entry__skill-tag")).toHaveTextContent("$compress");
+    expect(container.querySelector('[data-special-tag="skill"]')).toHaveTextContent("$compress");
   });
 });
 
@@ -187,12 +189,12 @@ it("keeps unknown skill tags in user turn content plain", async () => {
   const { container } = renderTimelineEntry(item);
 
   await waitFor(() => {
-    expect(container.querySelector(".timeline-entry__skill-tag")).toHaveTextContent("$compress");
+    expect(container.querySelector('[data-special-tag="skill"]')).toHaveTextContent("$compress");
   });
-  expect(container.querySelector(".timeline-entry__user-text")).toHaveTextContent(
+  expect(container.querySelector("[data-user-text]")).toHaveTextContent(
     "Use $notaskill then $compress",
   );
-  expect(container.querySelectorAll(".timeline-entry__skill-tag")).toHaveLength(1);
+  expect(container.querySelectorAll('[data-special-tag="skill"]')).toHaveLength(1);
 });
 
 it("copies user turn content from the hover action row", async () => {
@@ -209,7 +211,7 @@ it("copies user turn content from the hover action row", async () => {
 
   const { container } = renderTimelineEntry(item);
 
-  expect(container.querySelector(".timeline-entry__actions")).toBeInTheDocument();
+  expect(container.querySelector("[data-timeline-actions]")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Copy turn" }));
 
   expect(writeText).toHaveBeenCalledWith("hello\nworld");
@@ -289,16 +291,16 @@ it("renders fenced code snippets with detected language chrome", async () => {
   };
 
   const { container } = renderTimelineEntry(item);
-  const snippets = container.querySelectorAll(".markdown-code-snippet");
+  const snippets = container.querySelectorAll("[data-markdown-code-snippet]");
 
   expect(snippets).toHaveLength(2);
   expect(snippets[0]).toHaveAttribute("data-language", "markdown");
-  expect(snippets[0]?.querySelector(".markdown-code-snippet__language"))
+  expect(snippets[0]?.querySelector("[data-markdown-code-language]"))
     .toHaveTextContent("markdown");
   expect(snippets[0]?.querySelector('[data-language="markdown"]'))
     .toHaveTextContent("This is a brief sentence for markdown formatting testing.");
   expect(snippets[1]).toHaveAttribute("data-language", "python");
-  expect(snippets[1]?.querySelector(".markdown-code-snippet__language"))
+  expect(snippets[1]?.querySelector("[data-markdown-code-language]"))
     .toHaveTextContent("python");
   expect(snippets[1]?.querySelector('[data-language="python"]'))
     .toHaveTextContent('first = "Hello"');

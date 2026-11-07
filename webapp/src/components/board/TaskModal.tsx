@@ -14,6 +14,8 @@ import { Button } from "../ui/button";
 import { FormDialog } from "../ui/form-dialog";
 import {
   Field,
+  FieldDescription,
+  FieldError,
   FieldGroup,
   FieldLabel,
 } from "../ui/field";
@@ -235,7 +237,7 @@ export function TaskModal({
                 <FieldLabel htmlFor={titleId}>Title</FieldLabel>
                 <Input
                   id={titleId}
-                  className="task-form__input"
+                 
                   value={task.title}
                   onChange={(e) => onChange({ title: e.target.value })}
                   required
@@ -247,7 +249,7 @@ export function TaskModal({
                 <FieldLabel htmlFor={promptId}>Prompt</FieldLabel>
                 <Textarea
                   id={promptId}
-                  className="task-form__textarea"
+                 
                   value={task.prompt}
                   onChange={(e) => onChange({ prompt: e.target.value })}
                   onPaste={handlePromptPaste}
@@ -257,7 +259,7 @@ export function TaskModal({
 
               <Field>
                 <FieldLabel>Image attachments</FieldLabel>
-                <div className="app-action-row app-action-row--compact task-form__attachment-actions">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
                     variant="outline"
@@ -268,31 +270,31 @@ export function TaskModal({
                     <ImageIcon data-icon="inline-start" />
                     Add images
                   </Button>
-                  <span className="task-form__attachment-note">
+                  <FieldDescription>
                     PNG, JPEG, WEBP, HEIC, or HEIF. Paste screenshots into the
                     prompt or add files here.
                     Sent with the task prompt on the first run.
-                  </span>
+                  </FieldDescription>
                 </div>
                 {hasImages ? (
-                  <div className="task-form__attachments" aria-label="Task image attachments">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="list" aria-label="Task image attachments">
                     {task.imageAttachments.map((attachment) => (
-                      <div key={attachment.upload_id} className="task-form__attachment-card">
+                      <div key={attachment.upload_id} role="listitem" className="flex min-w-0 items-center gap-3 rounded-lg border border-border p-2">
                         <img
                           src={attachment.preview_url}
                           alt={attachment.name}
-                          className="task-form__attachment-preview"
+                          className="size-12 shrink-0 rounded-md object-cover"
                         />
-                        <div className="task-form__attachment-copy">
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="task-form__attachment-name">
+                              <span className="truncate text-sm font-medium">
                                 {attachment.name}
                               </span>
                             </TooltipTrigger>
                             <TooltipContent>{attachment.name}</TooltipContent>
                           </Tooltip>
-                          <span className="task-form__attachment-meta">
+                          <span className="text-xs text-muted-foreground">
                             {formatBytes(attachment.byte_count)}
                           </span>
                         </div>
@@ -309,22 +311,22 @@ export function TaskModal({
                       </div>
                     ))}
                     {task.imageFiles.map((image) => (
-                      <div key={image.id} className="task-form__attachment-card">
+                      <div key={image.id} role="listitem" className="flex min-w-0 items-center gap-3 rounded-lg border border-border p-2">
                         <img
                           src={image.previewUrl}
                           alt={image.file.name}
-                          className="task-form__attachment-preview"
+                          className="size-12 shrink-0 rounded-md object-cover"
                         />
-                        <div className="task-form__attachment-copy">
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="task-form__attachment-name">
+                              <span className="truncate text-sm font-medium">
                                 {image.file.name}
                               </span>
                             </TooltipTrigger>
                             <TooltipContent>{image.file.name}</TooltipContent>
                           </Tooltip>
-                          <span className="task-form__attachment-meta">
+                          <span className="text-xs text-muted-foreground">
                             {formatBytes(image.file.size)} pending
                           </span>
                         </div>
@@ -343,7 +345,7 @@ export function TaskModal({
                   </div>
                 ) : null}
                 {task.imageError ? (
-                  <p className="task-form__error" role="alert">{task.imageError}</p>
+                  <FieldError>{task.imageError}</FieldError>
                 ) : null}
                 {selectedProfileDoesNotSupportImages && hasImages ? (
                   <Alert variant="destructive">
@@ -360,7 +362,7 @@ export function TaskModal({
                   value={task.stage}
                   onValueChange={(value) => onChange({ stage: value })}
                 >
-                  <SelectTrigger id={stageId} className="task-form__select">
+                  <SelectTrigger id={stageId}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -381,7 +383,7 @@ export function TaskModal({
                     onChange({ profileId: fromSelectValue(value) })
                   }
                 >
-                  <SelectTrigger id={profileId} className="task-form__select">
+                  <SelectTrigger id={profileId}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

@@ -26,6 +26,7 @@ import type {
   UserProfile,
 } from "../../types";
 import { useSettingsDialog } from "../../hooks/useSettingsDialog";
+import { cn } from "@/lib/utils";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
@@ -415,12 +416,12 @@ export function SettingsPage() {
     return (
       <Dialog open={open} onOpenChange={(v) => { if (!v) closeSettings(); }}>
         <DialogPortal>
-          <DialogOverlay className="settings-dialog__overlay" />
-          <div className="settings-dialog">
+          <DialogOverlay />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
             <DialogPrimitive.Content asChild aria-describedby={undefined}>
-              <div className="settings-dialog__panel">
+              <div className="relative flex h-full max-h-192 w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-background text-foreground shadow-lg ring-1 ring-foreground/10 duration-150 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95">
                 <DialogTitle className="sr-only">Settings</DialogTitle>
-                <div className="center-spinner">
+                <div className="flex flex-1 items-center justify-center">
                   <LoadingSpinner size="lg" />
                 </div>
               </div>
@@ -435,23 +436,22 @@ export function SettingsPage() {
     return (
       <Dialog open={open} onOpenChange={(v) => { if (!v) closeSettings(); }}>
         <DialogPortal>
-          <DialogOverlay className="settings-dialog__overlay" />
-          <div className="settings-dialog">
+          <DialogOverlay />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
             <DialogPrimitive.Content asChild aria-describedby={undefined}>
-              <div className="settings-dialog__panel settings-dialog__panel--error">
+              <div className="relative flex h-auto w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-background text-foreground shadow-lg ring-1 ring-foreground/10 duration-150 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95">
                 <DialogTitle className="sr-only">Settings</DialogTitle>
-                <div className="settings-error-layout">
+                <div className="flex flex-col items-end gap-3 p-4">
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon-sm"
-                    className="settings-nav__header-close app-close-icon-button"
                     onClick={closeSettings}
                   >
                     <XIcon />
                     <span className="sr-only">Close</span>
                   </Button>
-                  <Alert variant="destructive" className="settings-error-banner">
+                  <Alert variant="destructive">
                     <AlertTriangleIcon />
                     <AlertDescription>
                       Failed to load settings: {(configQuery.error as Error)?.message ?? "Unknown error"}
@@ -487,59 +487,72 @@ export function SettingsPage() {
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) closeSettings(); }}>
       <DialogPortal>
-        <DialogOverlay className="settings-dialog__overlay" />
-        <div className="settings-dialog">
+        <DialogOverlay />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
           <DialogPrimitive.Content asChild aria-describedby={undefined}>
-            <div className="settings-dialog__panel">
+            <div className="relative flex h-full max-h-192 w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-background text-foreground shadow-lg ring-1 ring-foreground/10 duration-150 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95">
               <DialogTitle className="sr-only">Settings</DialogTitle>
-              <div className="settings-page__inner">
-                <div className="settings-shell">
-                  <aside className="settings-nav" aria-label="Settings sections">
-                    <div className="settings-nav__header">
-                      <div className="settings-nav__eyebrow">Settings</div>
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+                  <aside
+                    className="flex min-w-0 shrink-0 flex-col gap-3 border-b md:w-60 border-border bg-muted/40 p-3 md:min-h-0 md:gap-5 md:overflow-hidden md:border-r md:border-b-0 md:px-3 md:py-5"
+                    aria-label="Settings sections"
+                  >
+                    <div className="flex items-center justify-between gap-2 px-2">
+                      <div className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                        Settings
+                      </div>
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        className="settings-nav__header-close app-close-icon-button"
                         onClick={closeSettings}
                       >
                         <XIcon />
                         <span className="sr-only">Close</span>
                       </Button>
                     </div>
-                    <div className="settings-nav__body">
+                    <nav className="flex min-h-0 gap-4 overflow-x-auto md:flex-col md:overflow-y-auto">
                       {SETTINGS_NAV_GROUPS.map((group) => (
-                        <div className="settings-nav__group" key={group.label}>
-                          <div className="settings-nav__group-label">{group.label}</div>
-                          <div className="settings-nav__items">
+                        <div className="flex min-w-0 flex-col gap-1" data-settings-nav-group key={group.label}>
+                          <div className="px-2 text-xs font-medium text-muted-foreground" data-settings-nav-group-label>
+                            {group.label}
+                          </div>
+                          <div className="flex gap-1 md:flex-col">
                             {group.items.map((item) => (
                               <button
                                 key={item.id}
                                 type="button"
-                                className={`settings-nav__item ${activeTab === item.id ? "settings-nav__item--active" : ""}`}
+                                className={cn(
+                                  "flex w-full min-w-0 flex-col items-start gap-0.5 rounded-md border border-transparent px-3 py-2 text-left text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
+                                  activeTab === item.id && "border-border bg-muted text-foreground shadow-xs",
+                                )}
                                 aria-pressed={activeTab === item.id}
                                 onClick={() => setActiveTab(item.id)}
                               >
-                                <span className="settings-nav__item-label">{item.label}</span>
-                                <span className="settings-nav__item-description">{item.description}</span>
+                                <span className="text-sm font-medium whitespace-nowrap" data-settings-nav-label>
+                                  {item.label}
+                                </span>
+                                <span className="hidden max-w-full truncate text-xs text-muted-foreground md:block">
+                                  {item.description}
+                                </span>
                               </button>
                             ))}
                           </div>
                         </div>
                       ))}
-                    </div>
+                    </nav>
                   </aside>
 
-                  <div className="settings-tab-content">
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-4 md:p-5">
                     {(model_profiles.length === 0 || pageError) && (
-                      <div className="settings-global-alerts">
+                      <div className="flex flex-col gap-3">
                         {model_profiles.length === 0 && (
-                          <Alert className="settings-inline-note settings-onboarding-guide">
+                          <Alert>
                             <AlertDescription>
                               <strong>First-time setup:</strong> To start using the app, complete these
                               steps:
-                              <ol>
+                              <ol className="mt-1 list-decimal pl-5">
                                 <li>Add an LLM provider and finish any sign-in step</li>
                                 <li>Create a model profile that uses that provider</li>
                               </ol>
@@ -548,7 +561,7 @@ export function SettingsPage() {
                         )}
 
                         {pageError && (
-                          <Alert variant="destructive" className="settings-error-banner">
+                          <Alert variant="destructive">
                             <AlertTriangleIcon />
                             <AlertDescription>{pageError}</AlertDescription>
                           </Alert>

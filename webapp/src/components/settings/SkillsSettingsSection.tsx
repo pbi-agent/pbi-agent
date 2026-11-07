@@ -29,7 +29,14 @@ import { SettingsPreviewDialog } from "./SettingsPreviewDialog";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import {
+  Card,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "../ui/card";
+import { SettingsPanel, SettingsSection } from "./settings-layout";
 import {
   Dialog,
   DialogContent,
@@ -37,12 +44,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "../ui/field";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "../ui/field";
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
 import { Skeleton } from "../ui/skeleton";
@@ -60,53 +62,47 @@ function SkillCard({
   toggling: boolean;
 }) {
   return (
-    <Card className="settings-item settings-item--provider skill-card">
-      <div className="provider-card__info">
-        <span className="settings-item__name">
+    <Card size="sm" data-settings-item-card>
+      <CardHeader>
+        <CardTitle className="min-w-0 break-words">
           {skill.name}
           {skill.enabled === false ? (
-            <Badge size="meta" variant="secondary" className="ml-2">
+            <Badge size="meta" variant="secondary">
               disabled
             </Badge>
           ) : null}
-        </span>
+        </CardTitle>
         {skill.description ? (
-          <div className="settings-item__summary skill-card__description">
-            {skill.description}
-          </div>
+          <CardDescription>{skill.description}</CardDescription>
         ) : null}
-        <div className="provider-card__subtitle">{skill.path}</div>
-      </div>
-      <div className="settings-item__actions settings-item__actions--provider command-card__actions">
-        <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-          <Switch
-            size="sm"
-            checked={skill.enabled !== false}
-            disabled={toggling}
-            onCheckedChange={onToggle}
-            aria-label={`${skill.enabled !== false ? "Disable" : "Enable"} ${skill.name}`}
-          />
-          {skill.enabled !== false ? "Enabled" : "Disabled"}
-        </label>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="settings-action-button"
-          onClick={onPreview}
-        >
-          <EyeIcon data-icon="inline-start" />
-          Preview
-        </Button>
-      </div>
+        <CardDescription className="break-all">{skill.path}</CardDescription>
+      </CardHeader>
+      <CardFooter>
+        <div className="flex w-full flex-wrap items-center justify-end gap-2">
+          <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+            <Switch
+              size="sm"
+              checked={skill.enabled !== false}
+              disabled={toggling}
+              onCheckedChange={onToggle}
+              aria-label={`${skill.enabled !== false ? "Disable" : "Enable"} ${skill.name}`}
+            />
+            {skill.enabled !== false ? "Enabled" : "Disabled"}
+          </label>
+          <Button type="button" variant="ghost" size="sm" onClick={onPreview}>
+            <EyeIcon data-icon="inline-start" />
+            Preview
+          </Button>
+        </div>
+      </CardFooter>
     </Card>
   );
 }
 
 function CandidateSkeleton() {
   return (
-    <div className="skill-candidate">
-      <div className="skill-candidate__main">
+    <div className="flex min-w-0 items-start gap-3 rounded-lg border border-border p-3">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
         <Skeleton className="h-4 w-40" />
         <Skeleton className="h-3 w-full" />
         <Skeleton className="h-3 w-24" />
@@ -128,10 +124,10 @@ function CandidateCard({
   onInstall: () => void;
 }) {
   return (
-    <div className="skill-candidate">
-      <div className="skill-candidate__main">
-        <div className="skill-candidate__name">{candidate.name}</div>
-        <p className="skill-candidate__description">
+    <div className="flex min-w-0 items-start gap-3 rounded-lg border border-border p-3">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="text-sm font-medium break-words">{candidate.name}</div>
+        <p className="text-sm text-muted-foreground">
           {candidate.description || "No description provided."}
         </p>
         {candidate.subpath ? (
@@ -146,7 +142,7 @@ function CandidateCard({
         variant="outline"
         onClick={onInstall}
         disabled={disabled}
-        className="skill-candidate__action settings-action-button"
+        className="shrink-0"
       >
         {isInstalling ? (
           <LoadingSpinner size="sm" />
@@ -323,19 +319,15 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
   const isBusy = loadingCandidates || installingSkill !== null;
 
   return (
-    <section className="settings-section settings-section--active">
-      <Card className="settings-panel">
-        <CardHeader className="settings-panel__header">
-          <div className="settings-panel__heading">
-            <CardTitle className="settings-panel__title">Project Skills</CardTitle>
-            <div className="settings-panel__subtitle">
-              Installed Agent Skills from .agents/skills
-            </div>
-          </div>
-          <div className="settings-panel__actions">
+    <SettingsSection>
+      <SettingsPanel
+        title="Project Skills"
+        description="Installed Agent Skills from .agents/skills"
+        actions={
+          <>
             {skills.length > 0 ? (
               <div
-                className="settings-panel__bulk-toggle"
+                className="flex items-center gap-1"
                 role="group"
                 aria-label="Toggle all skills"
               >
@@ -343,21 +335,16 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="settings-action-button settings-panel__bulk-toggle-button"
                   onClick={() => void handleToggleAll(true)}
                   disabled={togglingAll}
                 >
                   Enable all
                 </Button>
-                <Separator
-                  orientation="vertical"
-                  className="settings-panel__bulk-toggle-divider"
-                />
+                <Separator orientation="vertical" className="h-4" />
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="settings-action-button settings-panel__bulk-toggle-button"
                   onClick={() => void handleToggleAll(false)}
                   disabled={togglingAll}
                 >
@@ -369,33 +356,31 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
               type="button"
               variant="ghost"
               size="sm"
-              className="settings-action-button"
               onClick={openAddDialog}
             >
               <PlusIcon data-icon="inline-start" />
               Add Skill
             </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="settings-panel__body">
-          {skills.length === 0 ? (
-            <EmptyState
-              title="No project skills installed"
-              description="Add skills from the official catalog, GitHub, or a server-side local path."
+          </>
+        }
+      >
+        {skills.length === 0 ? (
+          <EmptyState
+            title="No project skills installed"
+            description="Add skills from the official catalog, GitHub, or a server-side local path."
+          />
+        ) : (
+          skills.map((skill) => (
+            <SkillCard
+              key={skill.id}
+              skill={skill}
+              onPreview={() => setPreviewSkill(skill)}
+              onToggle={(enabled) => void handleToggleSkill(skill, enabled)}
+              toggling={togglingSkill === skill.name}
             />
-          ) : (
-            skills.map((skill) => (
-              <SkillCard
-                key={skill.id}
-                skill={skill}
-                onPreview={() => setPreviewSkill(skill)}
-                onToggle={(enabled) => void handleToggleSkill(skill, enabled)}
-                toggling={togglingSkill === skill.name}
-              />
-            ))
-          )}
-        </CardContent>
-      </Card>
+          ))
+        )}
+      </SettingsPanel>
 
       <Dialog
         open={addOpen}
@@ -403,7 +388,7 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
           if (!nextOpen) closeAddDialog();
         }}
       >
-        <DialogContent className="task-form-dialog skill-add-dialog">
+        <DialogContent className="max-h-screen overflow-hidden sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Add Project Skill</DialogTitle>
             <DialogDescription>
@@ -412,28 +397,31 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="task-form skill-add-dialog__form">
-            <div className="task-form__body skill-add-dialog__body">
+          <div className="flex min-h-0 flex-col">
+            <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
               <form
-                className="skill-source-form"
+                className="flex flex-col"
                 onSubmit={handleBrowseCustomSource}
               >
                 <FieldGroup>
                   <Field>
-                    <FieldLabel htmlFor="skill-source">Custom source</FieldLabel>
-                    <div className="skill-source-form__row">
+                    <FieldLabel htmlFor="skill-source">
+                      Custom source
+                    </FieldLabel>
+                    <div className="flex gap-2">
                       <Input
                         id="skill-source"
-                        className="task-form__input"
+                        className="flex-1"
                         value={customSource}
-                        onChange={(event) => setCustomSource(event.target.value)}
+                        onChange={(event) =>
+                          setCustomSource(event.target.value)
+                        }
                         placeholder="owner/repo or /path/to/skills"
                         disabled={isBusy}
                       />
                       <Button
                         type="submit"
                         variant="outline"
-                        className="skill-source-form__submit settings-action-button"
                         disabled={isBusy}
                       >
                         {loadingCandidates ? (
@@ -452,25 +440,20 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
                 </FieldGroup>
               </form>
 
-              <Separator className="skill-add-dialog__divider" />
+              <Separator />
 
-              <section className="skill-add-dialog__listing">
-                <header className="skill-add-dialog__listing-header">
-                  <div className="skill-add-dialog__listing-meta">
-                    <div className="skill-add-dialog__listing-title">
-                      Available skills
-                    </div>
-                    <div className="skill-add-dialog__source">
-                      <FolderGit2Icon aria-hidden="true" />
-                      <span className="skill-add-dialog__source-text">
-                        {sourceLabel}
-                      </span>
+              <section className="flex min-w-0 flex-col gap-3">
+                <header className="flex items-start justify-between gap-2">
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <div className="text-sm font-medium">Available skills</div>
+                    <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                      <FolderGit2Icon
+                        className="size-3.5 shrink-0"
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0 truncate">{sourceLabel}</span>
                       {listing?.ref ? (
-                        <Badge
-                          size="meta"
-                          variant="outline"
-                          className="skill-add-dialog__source-ref"
-                        >
+                        <Badge size="meta" variant="outline">
                           {listing.ref}
                         </Badge>
                       ) : null}
@@ -479,7 +462,7 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
                 </header>
 
                 {candidatesError ? (
-                  <Alert variant="destructive" className="task-form__error">
+                  <Alert variant="destructive">
                     <AlertCircleIcon />
                     <AlertTitle>Could not load skills</AlertTitle>
                     <AlertDescription>{candidatesError}</AlertDescription>
@@ -487,11 +470,11 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
                 ) : null}
 
                 {installError ? (
-                  <Alert variant="destructive" className="task-form__error">
+                  <Alert variant="destructive">
                     <AlertCircleIcon />
                     <AlertTitle>Could not install skill</AlertTitle>
                     <AlertDescription>
-                      <div className="skill-install-error__content">
+                      <div className="flex flex-col items-start gap-2">
                         <span>{installError}</span>
                         {conflictRetry ? (
                           <Button
@@ -519,7 +502,7 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
                   </Alert>
                 ) : null}
 
-                <div className="skill-candidate-list" aria-live="polite">
+                <div className="flex min-w-0 flex-col gap-2" aria-live="polite">
                   {loadingCandidates ? (
                     <>
                       <CandidateSkeleton />
@@ -558,6 +541,6 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
           onClose={() => setPreviewSkill(null)}
         />
       ) : null}
-    </section>
+    </SettingsSection>
   );
 }

@@ -46,7 +46,7 @@ describe("CodeBlock", () => {
       expect(container.querySelector(".shiki")).not.toBeNull();
     });
 
-    const wrapper = container.querySelector(".tool-result__code");
+    const wrapper = container.querySelector("[data-code-block=\"highlighted\"]");
     expect(wrapper).not.toBeNull();
     expect(wrapper?.getAttribute("data-language")).toBe("python");
     expect(wrapper?.getAttribute("data-highlighted")).toBe("true");

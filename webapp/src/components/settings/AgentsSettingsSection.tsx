@@ -29,7 +29,14 @@ import { SettingsPreviewDialog } from "./SettingsPreviewDialog";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import {
+  Card,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "../ui/card";
+import { SettingsPanel, SettingsSection } from "./settings-layout";
 import {
   Dialog,
   DialogContent,
@@ -37,12 +44,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "../ui/field";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "../ui/field";
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
 import { Skeleton } from "../ui/skeleton";
@@ -75,38 +77,32 @@ function AgentCard({
   toggling: boolean;
 }) {
   return (
-    <Card className="settings-item settings-item--provider skill-card">
-      <div className="provider-card__info">
-        <span className="settings-item__name">{agent.name}</span>
+    <Card size="sm" data-settings-item-card>
+      <CardHeader>
+        <CardTitle className="min-w-0 break-words">{agent.name}</CardTitle>
         {agent.description ? (
-          <div className="settings-item__summary skill-card__description">
-            {agent.description}
-          </div>
+          <CardDescription>{agent.description}</CardDescription>
         ) : null}
-        <div className="provider-card__subtitle">{agent.path}</div>
-      </div>
-      <div className="settings-item__actions settings-item__actions--provider command-card__actions">
-        <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-          <Switch
-            size="sm"
-            checked={agent.enabled !== false}
-            disabled={toggling}
-            onCheckedChange={onToggle}
-            aria-label={`${agent.enabled !== false ? "Disable" : "Enable"} ${agent.name}`}
-          />
-          {agent.enabled !== false ? "Enabled" : "Disabled"}
-        </label>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="settings-action-button"
-          onClick={onPreview}
-        >
-          <EyeIcon data-icon="inline-start" />
-          Preview
-        </Button>
-      </div>
+        <CardDescription className="break-all">{agent.path}</CardDescription>
+      </CardHeader>
+      <CardFooter>
+        <div className="flex w-full flex-wrap items-center justify-end gap-2">
+          <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+            <Switch
+              size="sm"
+              checked={agent.enabled !== false}
+              disabled={toggling}
+              onCheckedChange={onToggle}
+              aria-label={`${agent.enabled !== false ? "Disable" : "Enable"} ${agent.name}`}
+            />
+            {agent.enabled !== false ? "Enabled" : "Disabled"}
+          </label>
+          <Button type="button" variant="ghost" size="sm" onClick={onPreview}>
+            <EyeIcon data-icon="inline-start" />
+            Preview
+          </Button>
+        </div>
+      </CardFooter>
     </Card>
   );
 }
@@ -124,7 +120,7 @@ function AgentPreviewBadges({ agent }: { agent: AgentView }) {
 
   return (
     <div
-      className="settings-preview-dialog__header-meta"
+      className="flex flex-wrap gap-1"
       role="group"
       aria-label="Agent metadata"
     >
@@ -148,8 +144,8 @@ function AgentPreviewBadges({ agent }: { agent: AgentView }) {
 
 function CandidateSkeleton() {
   return (
-    <div className="skill-candidate">
-      <div className="skill-candidate__main">
+    <div className="flex min-w-0 items-start gap-3 rounded-lg border border-border p-3">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
         <Skeleton className="h-4 w-40" />
         <Skeleton className="h-3 w-full" />
         <Skeleton className="h-3 w-24" />
@@ -171,13 +167,15 @@ function CandidateCard({
   onInstall: () => void;
 }) {
   return (
-    <div className="skill-candidate">
-      <div className="skill-candidate__main">
-        <div className="skill-candidate__name">{candidate.agent_name}</div>
-        <p className="skill-candidate__description">
+    <div className="flex min-w-0 items-start gap-3 rounded-lg border border-border p-3">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="text-sm font-medium break-words">
+          {candidate.agent_name}
+        </div>
+        <p className="text-sm text-muted-foreground">
           {candidate.description || "No description provided."}
         </p>
-        <div className="command-candidate__badges">
+        <div className="flex flex-wrap gap-1">
           {candidate.model_profile_id ? (
             <Badge size="meta" variant="outline">
               Profile: {candidate.model_profile_id}
@@ -196,7 +194,7 @@ function CandidateCard({
         variant="outline"
         onClick={onInstall}
         disabled={disabled}
-        className="skill-candidate__action settings-action-button"
+        className="shrink-0"
       >
         {isInstalling ? (
           <LoadingSpinner size="sm" />
@@ -373,19 +371,15 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
   const isBusy = loadingCandidates || installingAgent !== null;
 
   return (
-    <section className="settings-section settings-section--active">
-      <Card className="settings-panel">
-        <CardHeader className="settings-panel__header">
-          <div className="settings-panel__heading">
-            <CardTitle className="settings-panel__title">Project Agents</CardTitle>
-            <div className="settings-panel__subtitle">
-              Installed sub-agents from .agents/agents
-            </div>
-          </div>
-          <div className="settings-panel__actions">
+    <SettingsSection>
+      <SettingsPanel
+        title="Project Agents"
+        description="Installed sub-agents from .agents/agents"
+        actions={
+          <>
             {agents.length > 0 ? (
               <div
-                className="settings-panel__bulk-toggle"
+                className="flex items-center gap-1"
                 role="group"
                 aria-label="Toggle all agents"
               >
@@ -393,21 +387,16 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="settings-action-button settings-panel__bulk-toggle-button"
                   onClick={() => void handleToggleAll(true)}
                   disabled={togglingAll}
                 >
                   Enable all
                 </Button>
-                <Separator
-                  orientation="vertical"
-                  className="settings-panel__bulk-toggle-divider"
-                />
+                <Separator orientation="vertical" className="h-4" />
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="settings-action-button settings-panel__bulk-toggle-button"
                   onClick={() => void handleToggleAll(false)}
                   disabled={togglingAll}
                 >
@@ -419,33 +408,31 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
               type="button"
               variant="ghost"
               size="sm"
-              className="settings-action-button"
               onClick={openAddDialog}
             >
               <PlusIcon data-icon="inline-start" />
               Add Agent
             </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="settings-panel__body">
-          {agents.length === 0 ? (
-            <EmptyState
-              title="No project agents installed"
-              description="Add agents from the official catalog, GitHub, or a server-side local path."
+          </>
+        }
+      >
+        {agents.length === 0 ? (
+          <EmptyState
+            title="No project agents installed"
+            description="Add agents from the official catalog, GitHub, or a server-side local path."
+          />
+        ) : (
+          agents.map((agent) => (
+            <AgentCard
+              key={agent.id}
+              agent={agent}
+              onPreview={() => setPreviewAgent(agent)}
+              onToggle={(enabled) => void handleToggleAgent(agent, enabled)}
+              toggling={togglingAgent === agent.name}
             />
-          ) : (
-            agents.map((agent) => (
-              <AgentCard
-                key={agent.id}
-                agent={agent}
-                onPreview={() => setPreviewAgent(agent)}
-                onToggle={(enabled) => void handleToggleAgent(agent, enabled)}
-                toggling={togglingAgent === agent.name}
-              />
-            ))
-          )}
-        </CardContent>
-      </Card>
+          ))
+        )}
+      </SettingsPanel>
 
       <Dialog
         open={addOpen}
@@ -453,7 +440,7 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
           if (!nextOpen) closeAddDialog();
         }}
       >
-        <DialogContent className="task-form-dialog skill-add-dialog">
+        <DialogContent className="max-h-screen overflow-hidden sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Add Project Agent</DialogTitle>
             <DialogDescription>
@@ -462,28 +449,31 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="task-form skill-add-dialog__form">
-            <div className="task-form__body skill-add-dialog__body">
+          <div className="flex min-h-0 flex-col">
+            <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
               <form
-                className="skill-source-form"
+                className="flex flex-col"
                 onSubmit={handleBrowseCustomSource}
               >
                 <FieldGroup>
                   <Field>
-                    <FieldLabel htmlFor="agent-source">Custom source</FieldLabel>
-                    <div className="skill-source-form__row">
+                    <FieldLabel htmlFor="agent-source">
+                      Custom source
+                    </FieldLabel>
+                    <div className="flex gap-2">
                       <Input
                         id="agent-source"
-                        className="task-form__input"
+                        className="flex-1"
                         value={customSource}
-                        onChange={(event) => setCustomSource(event.target.value)}
+                        onChange={(event) =>
+                          setCustomSource(event.target.value)
+                        }
                         placeholder="owner/repo or /path/to/agents"
                         disabled={isBusy}
                       />
                       <Button
                         type="submit"
                         variant="outline"
-                        className="skill-source-form__submit settings-action-button"
                         disabled={isBusy}
                       >
                         {loadingCandidates ? (
@@ -502,25 +492,20 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
                 </FieldGroup>
               </form>
 
-              <Separator className="skill-add-dialog__divider" />
+              <Separator />
 
-              <section className="skill-add-dialog__listing">
-                <header className="skill-add-dialog__listing-header">
-                  <div className="skill-add-dialog__listing-meta">
-                    <div className="skill-add-dialog__listing-title">
-                      Available agents
-                    </div>
-                    <div className="skill-add-dialog__source">
-                      <FolderGit2Icon aria-hidden="true" />
-                      <span className="skill-add-dialog__source-text">
-                        {sourceLabel}
-                      </span>
+              <section className="flex min-w-0 flex-col gap-3">
+                <header className="flex items-start justify-between gap-2">
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <div className="text-sm font-medium">Available agents</div>
+                    <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                      <FolderGit2Icon
+                        className="size-3.5 shrink-0"
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0 truncate">{sourceLabel}</span>
                       {listing?.ref ? (
-                        <Badge
-                          size="meta"
-                          variant="outline"
-                          className="skill-add-dialog__source-ref"
-                        >
+                        <Badge size="meta" variant="outline">
                           {listing.ref}
                         </Badge>
                       ) : null}
@@ -529,7 +514,7 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
                 </header>
 
                 {candidatesError ? (
-                  <Alert variant="destructive" className="task-form__error">
+                  <Alert variant="destructive">
                     <AlertCircleIcon />
                     <AlertTitle>Could not load agents</AlertTitle>
                     <AlertDescription>{candidatesError}</AlertDescription>
@@ -537,11 +522,11 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
                 ) : null}
 
                 {installError ? (
-                  <Alert variant="destructive" className="task-form__error">
+                  <Alert variant="destructive">
                     <AlertCircleIcon />
                     <AlertTitle>Could not install agent</AlertTitle>
                     <AlertDescription>
-                      <div className="skill-install-error__content">
+                      <div className="flex flex-col items-start gap-2">
                         <span>{installError}</span>
                         {conflictRetry ? (
                           <Button
@@ -570,7 +555,7 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
                   </Alert>
                 ) : null}
 
-                <div className="skill-candidate-list" aria-live="polite">
+                <div className="flex min-w-0 flex-col gap-2" aria-live="polite">
                   {loadingCandidates ? (
                     <>
                       <CandidateSkeleton />
@@ -610,6 +595,6 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
           onClose={() => setPreviewAgent(null)}
         />
       ) : null}
-    </section>
+    </SettingsSection>
   );
 }

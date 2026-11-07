@@ -137,7 +137,7 @@ function latestUsageBarProps(): { compactThreshold: number | null; usage: UsageP
 }
 
 function getSessionTopbar(): HTMLElement {
-  const topbar = document.querySelector(".session-topbar");
+  const topbar = document.querySelector("[data-session-topbar]");
   if (!(topbar instanceof HTMLElement)) {
     throw new Error("Expected session topbar to be rendered");
   }
@@ -145,7 +145,7 @@ function getSessionTopbar(): HTMLElement {
 }
 
 function getWorkspaceExplorerChangeDot(toggle: HTMLElement): HTMLElement | null {
-  return toggle.querySelector(".session-file-tree-toggle__change-dot");
+  return toggle.querySelector("[data-change-dot]");
 }
 
 vi.mock("./Composer", async () => {
@@ -722,7 +722,7 @@ describe("SessionPage", () => {
     const workspaceLabel = await within(topbar).findByText("workspace/demo");
     const sidebar = screen.getByRole("complementary", { name: "Application sidebar" });
 
-    expect(workspaceLabel.closest(".session-topbar__workspace")).toBeInTheDocument();
+    expect(workspaceLabel.closest("[data-session-topbar-workspace]")).toBeInTheDocument();
     const workspaceBadge = workspaceLabel.closest('[data-size="meta"]');
     expect(workspaceBadge).toHaveAttribute("data-variant", "secondary");
     expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
@@ -754,7 +754,7 @@ describe("SessionPage", () => {
 
     const fileTreePanel = await screen.findByRole("complementary", { name: "Workspace explorer" });
     expect(fileTreePanel).toBeInTheDocument();
-    const fileTreeHeader = fileTreePanel.querySelector(".workspace-file-panel__header");
+    const fileTreeHeader = fileTreePanel.querySelector("[data-panel-header]");
     expect(fileTreeHeader).not.toBeNull();
     expect(within(fileTreeHeader as HTMLElement).getByRole("searchbox", { name: "Search files" })).toBeInTheDocument();
     const srcFolder = await screen.findByRole("button", { name: "src" });
@@ -1289,8 +1289,7 @@ describe("SessionPage", () => {
       name: "Enable interactive mode",
     });
     expect(toggle).not.toHaveAttribute("title");
-    expect(toggle).toHaveClass("session-topbar-control");
-    expect(toggle).toHaveClass("session-interactive-toggle");
+    expect(toggle).toHaveAttribute("data-topbar-control", "interactive");
     expect(toggle).toHaveAttribute("aria-pressed", "false");
     expect(screen.queryByText("Interactive")).not.toBeInTheDocument();
 
@@ -1306,8 +1305,7 @@ describe("SessionPage", () => {
 
     const enabledToggle = await screen.findByRole("button", { name: "Disable interactive mode" });
     expect(enabledToggle).toHaveAttribute("aria-pressed", "true");
-    expect(enabledToggle).toHaveClass("session-topbar-control");
-    expect(enabledToggle).toHaveClass("session-interactive-toggle");
+    expect(enabledToggle).toHaveAttribute("data-topbar-control", "interactive");
 
     await user.unhover(toggle);
     await user.hover(enabledToggle);
@@ -1918,14 +1916,12 @@ describe("SessionPage", () => {
     expect(await screen.findByText("Timeline 0")).toBeInTheDocument();
     const toggle = screen.getByRole("button", { name: "Enable tool history" });
     expect(toggle).toHaveAttribute("aria-pressed", "false");
-    expect(toggle).toHaveClass("session-topbar-control");
-    expect(toggle).toHaveClass("session-tool-history-toggle");
+    expect(toggle).toHaveAttribute("data-topbar-control", "tool-history");
 
     await user.click(toggle);
     const enabledToggle = await screen.findByRole("button", { name: "Disable tool history" });
     expect(enabledToggle).toHaveAttribute("aria-pressed", "true");
-    expect(enabledToggle).toHaveClass("session-topbar-control");
-    expect(enabledToggle).toHaveClass("session-tool-history-toggle");
+    expect(enabledToggle).toHaveAttribute("data-topbar-control", "tool-history");
     expect(window.localStorage.getItem("pbi-agent.include-tool-history")).toBe("true");
     await user.click(screen.getByRole("button", { name: "Submit Slash" }));
 
@@ -1995,7 +1991,7 @@ describe("SessionPage", () => {
     renderSessionRoute("/sessions/session-1");
 
     expect(await screen.findByText("Composer live session live-recovery")).toBeInTheDocument();
-    const layout = document.querySelector(".session-panel-wrapper");
+    const layout = document.querySelector("[data-session-panel-wrapper]");
     expect(layout).toHaveAttribute("data-debug-session-key", sessionKey);
     expect(layout).toHaveAttribute("data-debug-session-id", "session-1");
     expect(layout).toHaveAttribute("data-debug-live-session-id", "live-recovery");
@@ -3969,9 +3965,10 @@ describe("SessionPage", () => {
     await user.click(trigger);
 
     const menu = screen.getByRole("menu");
-    expect(menu).toHaveClass("profile-selector__content");
+    expect(menu).toHaveAttribute("data-profile-selector-content");
     const option = within(menu).getByText("Analysis").closest("[role='menuitem']");
-    expect(option).toHaveClass("profile-selector__option", "is-selected");
+    expect(option).toHaveAttribute("data-profile-option");
+    expect(option).toHaveAttribute("data-selected", "true");
     expect(screen.getByText("claude-sonnet-4-6-with-a-very-long-deployment-name")).toBeInTheDocument();
   });
 

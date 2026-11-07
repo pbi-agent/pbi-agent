@@ -9,11 +9,7 @@ import {
   PlusIcon,
   SearchIcon,
 } from "lucide-react";
-import {
-  ApiError,
-  fetchCommandCandidates,
-  installCommand,
-} from "../../api";
+import { ApiError, fetchCommandCandidates, installCommand } from "../../api";
 import type {
   CommandCandidateView,
   CommandCandidatesPayload,
@@ -27,7 +23,14 @@ import { SettingsPreviewDialog } from "./SettingsPreviewDialog";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import {
+  Card,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "../ui/card";
+import { SettingsPanel, SettingsSection } from "./settings-layout";
 import {
   Dialog,
   DialogContent,
@@ -35,12 +38,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "../ui/field";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "../ui/field";
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
 import { Skeleton } from "../ui/skeleton";
@@ -68,28 +66,22 @@ function CommandCard({
   onPreview: () => void;
 }) {
   return (
-    <Card className="settings-item settings-item--provider skill-card command-card">
-      <div className="provider-card__info">
-        <span className="settings-item__name">{command.name}</span>
+    <Card size="sm" data-settings-command-card>
+      <CardHeader>
+        <CardTitle className="min-w-0 break-words">{command.name}</CardTitle>
         {command.description ? (
-          <div className="settings-item__summary skill-card__description">
-            {command.description}
-          </div>
+          <CardDescription>{command.description}</CardDescription>
         ) : null}
-        <div className="provider-card__subtitle">{command.path}</div>
-      </div>
-      <div className="settings-item__actions settings-item__actions--provider command-card__actions">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="settings-action-button"
-          onClick={onPreview}
-        >
-          <EyeIcon data-icon="inline-start" />
-          Preview
-        </Button>
-      </div>
+        <CardDescription className="break-all">{command.path}</CardDescription>
+      </CardHeader>
+      <CardFooter>
+        <div className="flex w-full flex-wrap items-center justify-end gap-2">
+          <Button type="button" variant="ghost" size="sm" onClick={onPreview}>
+            <EyeIcon data-icon="inline-start" />
+            Preview
+          </Button>
+        </div>
+      </CardFooter>
     </Card>
   );
 }
@@ -97,7 +89,7 @@ function CommandCard({
 function CommandPreviewBadges({ command }: { command: CommandView }) {
   return (
     <div
-      className="settings-preview-dialog__header-meta"
+      className="flex flex-wrap gap-1"
       role="group"
       aria-label="Command metadata"
     >
@@ -118,8 +110,8 @@ function CommandPreviewBadges({ command }: { command: CommandView }) {
 
 function CandidateSkeleton() {
   return (
-    <div className="skill-candidate">
-      <div className="skill-candidate__main">
+    <div className="flex min-w-0 items-start gap-3 rounded-lg border border-border p-3">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
         <Skeleton className="h-4 w-40" />
         <Skeleton className="h-3 w-full" />
         <Skeleton className="h-3 w-24" />
@@ -141,13 +133,13 @@ function CandidateCard({
   onInstall: () => void;
 }) {
   return (
-    <div className="skill-candidate">
-      <div className="skill-candidate__main">
-        <div className="skill-candidate__name">{candidate.name}</div>
-        <p className="skill-candidate__description">
+    <div className="flex min-w-0 items-start gap-3 rounded-lg border border-border p-3">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="text-sm font-medium break-words">{candidate.name}</div>
+        <p className="text-sm text-muted-foreground">
           {candidate.description || `Install ${candidate.slash_alias}.`}
         </p>
-        <div className="command-candidate__badges">
+        <div className="flex flex-wrap gap-1">
           <Badge size="meta" variant="secondary">
             {candidate.slash_alias}
           </Badge>
@@ -169,7 +161,7 @@ function CandidateCard({
         variant="outline"
         onClick={onInstall}
         disabled={disabled}
-        className="skill-candidate__action settings-action-button"
+        className="shrink-0"
       >
         {isInstalling ? (
           <LoadingSpinner size="sm" />
@@ -188,15 +180,23 @@ function candidateInstallSource(
   return listing?.source ?? null;
 }
 
-export function CommandsSettingsSection({ commands }: { commands: CommandView[] }) {
+export function CommandsSettingsSection({
+  commands,
+}: {
+  commands: CommandView[];
+}) {
   const queryClient = useQueryClient();
-  const [previewCommand, setPreviewCommand] = useState<CommandView | null>(null);
+  const [previewCommand, setPreviewCommand] = useState<CommandView | null>(
+    null,
+  );
   const [addOpen, setAddOpen] = useState(false);
   const [customSource, setCustomSource] = useState("");
   const [listing, setListing] = useState<CommandCandidatesPayload | null>(null);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [candidatesError, setCandidatesError] = useState<string | null>(null);
-  const [installingCommand, setInstallingCommand] = useState<string | null>(null);
+  const [installingCommand, setInstallingCommand] = useState<string | null>(
+    null,
+  );
   const [installError, setInstallError] = useState<string | null>(null);
   const [conflictRetry, setConflictRetry] = useState<{
     source: string | null;
@@ -306,43 +306,37 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
   const isBusy = loadingCandidates || installingCommand !== null;
 
   return (
-    <section className="settings-section settings-section--active">
-      <Card className="settings-panel">
-        <CardHeader className="settings-panel__header">
-          <div className="settings-panel__heading">
-            <CardTitle className="settings-panel__title">Project Commands</CardTitle>
-            <div className="settings-panel__subtitle">
-              Installed slash commands from .agents/commands
-            </div>
-          </div>
+    <SettingsSection>
+      <SettingsPanel
+        title="Project Commands"
+        description="Installed slash commands from .agents/commands"
+        actions={
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="settings-action-button"
             onClick={openAddDialog}
           >
             <PlusIcon data-icon="inline-start" />
             Add Command
           </Button>
-        </CardHeader>
-        <CardContent className="settings-panel__body">
-          {commands.length === 0 ? (
-            <EmptyState
-              title="No commands found"
-              description="Add commands from the official catalog, GitHub, or a server-side local path."
+        }
+      >
+        {commands.length === 0 ? (
+          <EmptyState
+            title="No commands found"
+            description="Add commands from the official catalog, GitHub, or a server-side local path."
+          />
+        ) : (
+          commands.map((command) => (
+            <CommandCard
+              key={command.id}
+              command={command}
+              onPreview={() => setPreviewCommand(command)}
             />
-          ) : (
-            commands.map((command) => (
-              <CommandCard
-                key={command.id}
-                command={command}
-                onPreview={() => setPreviewCommand(command)}
-              />
-            ))
-          )}
-        </CardContent>
-      </Card>
+          ))
+        )}
+      </SettingsPanel>
 
       <Dialog
         open={addOpen}
@@ -350,7 +344,7 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
           if (!nextOpen) closeAddDialog();
         }}
       >
-        <DialogContent className="task-form-dialog skill-add-dialog command-add-dialog">
+        <DialogContent className="max-h-screen overflow-hidden sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Add Project Command</DialogTitle>
             <DialogDescription>
@@ -359,28 +353,31 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
             </DialogDescription>
           </DialogHeader>
 
-          <div className="task-form skill-add-dialog__form">
-            <div className="task-form__body skill-add-dialog__body">
+          <div className="flex min-h-0 flex-col">
+            <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
               <form
-                className="skill-source-form command-source-form"
+                className="flex flex-col"
                 onSubmit={handleBrowseCustomSource}
               >
                 <FieldGroup>
                   <Field>
-                    <FieldLabel htmlFor="command-source">Custom source</FieldLabel>
-                    <div className="skill-source-form__row">
+                    <FieldLabel htmlFor="command-source">
+                      Custom source
+                    </FieldLabel>
+                    <div className="flex gap-2">
                       <Input
                         id="command-source"
-                        className="task-form__input"
+                        className="flex-1"
                         value={customSource}
-                        onChange={(event) => setCustomSource(event.target.value)}
+                        onChange={(event) =>
+                          setCustomSource(event.target.value)
+                        }
                         placeholder="owner/repo or /path/to/commands"
                         disabled={isBusy}
                       />
                       <Button
                         type="submit"
                         variant="outline"
-                        className="skill-source-form__submit settings-action-button"
                         disabled={isBusy}
                       >
                         {loadingCandidates ? (
@@ -399,25 +396,22 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
                 </FieldGroup>
               </form>
 
-              <Separator className="skill-add-dialog__divider" />
+              <Separator />
 
-              <section className="skill-add-dialog__listing">
-                <header className="skill-add-dialog__listing-header">
-                  <div className="skill-add-dialog__listing-meta">
-                    <div className="skill-add-dialog__listing-title">
+              <section className="flex min-w-0 flex-col gap-3">
+                <header className="flex items-start justify-between gap-2">
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <div className="text-sm font-medium">
                       Available commands
                     </div>
-                    <div className="skill-add-dialog__source">
-                      <FolderGit2Icon aria-hidden="true" />
-                      <span className="skill-add-dialog__source-text">
-                        {sourceLabel}
-                      </span>
+                    <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                      <FolderGit2Icon
+                        className="size-3.5 shrink-0"
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0 truncate">{sourceLabel}</span>
                       {listing?.ref ? (
-                        <Badge
-                          size="meta"
-                          variant="outline"
-                          className="skill-add-dialog__source-ref"
-                        >
+                        <Badge size="meta" variant="outline">
                           {listing.ref}
                         </Badge>
                       ) : null}
@@ -426,7 +420,7 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
                 </header>
 
                 {candidatesError ? (
-                  <Alert variant="destructive" className="task-form__error">
+                  <Alert variant="destructive">
                     <AlertCircleIcon />
                     <AlertTitle>Could not load commands</AlertTitle>
                     <AlertDescription>{candidatesError}</AlertDescription>
@@ -434,11 +428,11 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
                 ) : null}
 
                 {installError ? (
-                  <Alert variant="destructive" className="task-form__error">
+                  <Alert variant="destructive">
                     <AlertCircleIcon />
                     <AlertTitle>Could not install command</AlertTitle>
                     <AlertDescription>
-                      <div className="skill-install-error__content">
+                      <div className="flex flex-col items-start gap-2">
                         <span>{installError}</span>
                         {conflictRetry ? (
                           <Button
@@ -469,7 +463,7 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
                   </Alert>
                 ) : null}
 
-                <div className="skill-candidate-list" aria-live="polite">
+                <div className="flex min-w-0 flex-col gap-2" aria-live="polite">
                   {loadingCandidates ? (
                     <>
                       <CandidateSkeleton />
@@ -486,7 +480,9 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
                       <CandidateCard
                         key={`${sourceLabel}:${candidate.command_id}`}
                         candidate={candidate}
-                        isInstalling={installingCommand === candidate.command_id}
+                        isInstalling={
+                          installingCommand === candidate.command_id
+                        }
                         disabled={isBusy}
                         onInstall={() => void handleInstall(candidate)}
                       />
@@ -509,6 +505,6 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
           onClose={() => setPreviewCommand(null)}
         />
       ) : null}
-    </section>
+    </SettingsSection>
   );
 }

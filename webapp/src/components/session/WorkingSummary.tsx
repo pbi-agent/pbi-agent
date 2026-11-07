@@ -140,8 +140,8 @@ function AnimatedNumber({ value }: { value: number }) {
   }).reverse();
 
   return (
-    <span data-component="animated-number" className="animated-count-number">
-      <span className="animated-count-number__text">{label}</span>
+    <span data-component="animated-number">
+      <span className="text-transparent">{label}</span>
       <span
         data-slot="animated-number-value"
         aria-hidden="true"

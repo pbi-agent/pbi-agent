@@ -12,7 +12,7 @@ import {
   type BrowserNotificationPermission,
 } from "../../lib/notificationPreferences";
 import { Button } from "../ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
+import { SettingsPanel, SettingsSection } from "./settings-layout";
 import { Checkbox } from "../ui/checkbox";
 import {
   Field,
@@ -64,22 +64,15 @@ export function NotificationsSettingsSection() {
   }
 
   return (
-    <section className="settings-section settings-section--active">
-      <Card className="settings-panel">
-        <CardHeader className="settings-panel__header">
-          <div>
-            <CardTitle className="settings-panel__title">Notifications</CardTitle>
-            <CardDescription className="settings-panel__subtitle">
-              Alerts for interactive questions and finished sessions
-            </CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent className="settings-panel__body settings-notifications">
+    <SettingsSection>
+      <SettingsPanel
+        title="Notifications"
+        description="Alerts for interactive questions and finished sessions"
+      >
           <FieldGroup>
-            <Field orientation="horizontal" className="settings-notifications__field">
+            <Field orientation="horizontal">
               <Checkbox
                 id="desktop-notifications"
-                className="settings-notifications__checkbox"
                 checked={desktopChecked}
                 disabled={desktopUnavailable}
                 onCheckedChange={(checked) => {
@@ -98,10 +91,9 @@ export function NotificationsSettingsSection() {
               </FieldContent>
             </Field>
 
-            <Field orientation="horizontal" className="settings-notifications__field">
+            <Field orientation="horizontal">
               <Checkbox
                 id="sound-notifications"
-                className="settings-notifications__checkbox"
                 checked={preferences.soundEnabled}
                 onCheckedChange={(checked) => {
                   setSoundNotificationsEnabled(checked === true);
@@ -117,11 +109,8 @@ export function NotificationsSettingsSection() {
                 </FieldDescription>
                 {preferences.soundEnabled && (
                   <>
-                    <div className="settings-notifications__sound-row">
-                      <FieldLabel
-                        htmlFor="notification-sound"
-                        className="settings-notifications__sound-label"
-                      >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <FieldLabel htmlFor="notification-sound">
                         Notification sound
                       </FieldLabel>
                       <Select
@@ -135,7 +124,7 @@ export function NotificationsSettingsSection() {
                         <SelectTrigger
                           id="notification-sound"
                           size="sm"
-                          className="settings-notifications__sound-select"
+                          className="w-48"
                           aria-describedby="notification-sound-description"
                         >
                           <SelectValue />
@@ -154,13 +143,12 @@ export function NotificationsSettingsSection() {
                             type="button"
                             variant="outline"
                             size="icon-sm"
-                            className="settings-notifications__sound-preview"
                             aria-label="Preview notification sound"
                             onClick={() => {
                               void playNotificationSound(preferences.soundId);
                             }}
                           >
-                            <PlayIcon aria-hidden="true" />
+                            <PlayIcon data-icon="inline-start" aria-hidden="true" />
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>Preview notification sound</TooltipContent>
@@ -178,8 +166,7 @@ export function NotificationsSettingsSection() {
               </FieldContent>
             </Field>
           </FieldGroup>
-        </CardContent>
-      </Card>
-    </section>
+      </SettingsPanel>
+    </SettingsSection>
   );
 }

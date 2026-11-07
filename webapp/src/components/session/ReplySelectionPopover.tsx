@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type JSX, type KeyboardEvent, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX, type KeyboardEvent, type RefObject, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { MessageSquareQuoteIcon, XIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
+import { cn } from "@/lib/utils";
 
-const ASSISTANT_CONTENT_SELECTOR = ".timeline-entry--assistant .timeline-entry__content";
+const ASSISTANT_CONTENT_SELECTOR = "[data-timeline-entry=\"assistant\"] [data-timeline-content]";
 const VIEWPORT_GUTTER = 8;
 const SHORTCUT_GAP = 14;
 const COMPOSE_WIDTH = 360;
@@ -143,8 +144,12 @@ export function ReplySelectionPopover({
   return createPortal(
     <div
       ref={popoverRef}
-      className={state.mode === "compose" ? "reply-selection reply-selection--compose" : "reply-selection reply-selection--shortcut"}
-      style={{ top, left }}
+      className={cn(
+        "fixed top-(--reply-top) left-(--reply-left) z-50 isolate rounded-md border border-border bg-popover text-popover-foreground",
+        state.mode === "compose" ? "w-sm max-w-full p-3 shadow-md" : "p-0.5 shadow-lg",
+      )}
+      data-reply-selection={state.mode}
+      style={{ "--reply-top": `${top}px`, "--reply-left": `${left}px` } as CSSProperties}
       role={state.mode === "compose" ? "dialog" : undefined}
       aria-label={state.mode === "compose" ? "Reply to selection" : undefined}
     >
@@ -153,7 +158,7 @@ export function ReplySelectionPopover({
           type="button"
           size="sm"
           variant="default"
-          className="reply-selection__button"
+         
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => setState({ ...state, mode: "compose" })}
         >
@@ -161,8 +166,8 @@ export function ReplySelectionPopover({
           Reply
         </Button>
       ) : (
-        <div className="reply-selection__form">
-          <blockquote className="reply-selection__quote">{state.quote}</blockquote>
+        <div className="flex flex-col gap-2">
+          <blockquote className="m-0 line-clamp-4 border-l-2 border-border pl-2 text-xs wrap-anywhere whitespace-pre-wrap text-muted-foreground">{state.quote}</blockquote>
           <Textarea
             autoFocus
             value={comment}
@@ -170,16 +175,16 @@ export function ReplySelectionPopover({
             onKeyDown={handleKeyDown}
             placeholder="Add your comment…"
             aria-label="Reply comment"
-            className="reply-selection__input"
+            className="max-h-40 min-h-16"
             rows={2}
           />
-          <div className="reply-selection__actions">
-            <span className="reply-selection__hint">Enter to add · Shift+Enter for newline</span>
-            <Button type="button" size="sm" variant="ghost" className="reply-selection__cancel" onClick={close}>
+          <div className="flex items-center justify-end gap-1">
+            <span className="mr-auto min-w-0 flex-1 text-xs text-muted-foreground">Enter to add · Shift+Enter for newline</span>
+            <Button type="button" size="sm" variant="ghost" onClick={close}>
               <XIcon data-icon="inline-start" aria-hidden="true" />
               Cancel
             </Button>
-            <Button type="button" size="sm" className="reply-selection__submit" onClick={submit} disabled={!comment.trim()}>
+            <Button type="button" size="sm" onClick={submit} disabled={!comment.trim()}>
               Add to message
             </Button>
           </div>

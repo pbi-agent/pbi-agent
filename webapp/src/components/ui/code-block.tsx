@@ -10,7 +10,25 @@ type CodeBlockProps = {
   /** Workspace path used to derive a language when `language` is omitted. */
   path?: string;
   className?: string;
+  /** `tool` (default): wrapped, compact. `markdown`: unwrapped, taller fenced block. */
+  variant?: "tool" | "markdown";
 };
+
+const SHIKI_CLASSES =
+  "[&_.shiki]:m-0 [&_.shiki]:bg-transparent! [&_.shiki]:text-(--shiki-light,var(--muted-foreground)) [&_.shiki_span]:text-(--shiki-light,inherit) dark:[&_.shiki]:text-(--shiki-dark,var(--muted-foreground)) dark:[&_.shiki_span]:text-(--shiki-dark,inherit)";
+
+const VARIANT_CLASSES = {
+  tool: {
+    frame: "max-h-[min(36vh,360px)]",
+    text: "p-3 whitespace-pre-wrap break-words",
+    shiki: "[&_.shiki]:p-3 [&_.shiki]:whitespace-pre-wrap [&_.shiki]:break-words",
+  },
+  markdown: {
+    frame: "max-h-[min(52vh,560px)]",
+    text: "p-4 whitespace-pre",
+    shiki: "[&_.shiki]:p-4 [&_.shiki]:whitespace-pre",
+  },
+} as const;
 
 type HighlightState = {
   key: string;
@@ -28,7 +46,13 @@ type HighlightState = {
  * results from a previous render are ignored without needing to reset state
  * synchronously inside the effect.
  */
-export function CodeBlock({ value, language, path, className }: CodeBlockProps) {
+export function CodeBlock({
+  value,
+  language,
+  path,
+  className,
+  variant = "tool",
+}: CodeBlockProps) {
   const resolvedLanguage = language ?? languageForPath(path);
   const currentKey = resolvedLanguage ? `${resolvedLanguage}::${value}` : null;
 
@@ -51,7 +75,12 @@ export function CodeBlock({ value, language, path, className }: CodeBlockProps) 
   }, [currentKey, resolvedLanguage, value]);
 
   const highlightedHtml = state && state.key === currentKey ? state.html : null;
-  const wrapperClassName = cn("tool-result__code", className);
+  const styles = VARIANT_CLASSES[variant];
+  const baseClassName = cn(
+    "m-0 overflow-auto font-mono text-xs leading-relaxed",
+    styles.frame,
+  );
+  const wrapperClassName = cn(baseClassName, SHIKI_CLASSES, styles.shiki, className);
 
   if (highlightedHtml) {
     return (
@@ -59,6 +88,7 @@ export function CodeBlock({ value, language, path, className }: CodeBlockProps) 
         className={wrapperClassName}
         data-language={resolvedLanguage}
         data-highlighted="true"
+        data-code-block="highlighted"
         dangerouslySetInnerHTML={{ __html: highlightedHtml }}
       />
     );
@@ -66,9 +96,10 @@ export function CodeBlock({ value, language, path, className }: CodeBlockProps) 
 
   return (
     <pre
-      className={cn("tool-result__pre", className)}
+      className={cn(baseClassName, "text-muted-foreground", styles.text, className)}
       data-language={resolvedLanguage}
       data-highlighted="false"
+      data-code-block="plain"
     >
       {value}
     </pre>

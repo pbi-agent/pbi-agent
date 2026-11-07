@@ -29,7 +29,9 @@ import {
 import type { BoardStage, TaskRecord } from "../../types";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
-import { Card, CardHeader } from "../ui/card";
+import { Badge } from "../ui/badge";
+import { Card, CardHeader, CardTitle } from "../ui/card";
+import { Separator } from "../ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -351,13 +353,14 @@ export function BoardPage() {
 
   if (tasksQuery.isLoading || stagesQuery.isLoading || configQuery.isLoading) {
     return (
-      <section className="board-layout">
-        <div className="board-layout__header">
+      <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-20 shrink-0 items-center justify-between gap-4 px-6 py-5">
           <div>
-            <h2 className="board-layout__title">Kanban</h2>
+            <h2 className="font-heading text-lg font-medium">Kanban</h2>
           </div>
         </div>
-        <div className="center-spinner">
+        <Separator />
+        <div className="flex flex-1 items-center justify-center p-6">
           <LoadingSpinner size="lg" />
         </div>
       </section>
@@ -366,13 +369,14 @@ export function BoardPage() {
 
   if (tasksQuery.isError || stagesQuery.isError || configQuery.isError) {
     return (
-      <section className="board-layout">
-        <div className="board-layout__header">
+      <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-20 shrink-0 items-center justify-between gap-4 px-6 py-5">
           <div>
-            <h2 className="board-layout__title">Kanban</h2>
+            <h2 className="font-heading text-lg font-medium">Kanban</h2>
           </div>
         </div>
-        <Alert variant="destructive" className="settings-error-banner">
+        <Separator />
+        <Alert variant="destructive" className="m-4 w-auto">
           <AlertTriangleIcon />
           <AlertDescription>
             Failed to load board data.
@@ -383,20 +387,19 @@ export function BoardPage() {
   }
 
   return (
-    <section className="board-layout">
-      <div className="board-layout__header">
-        <div>
-          <h2 className="board-layout__title">Kanban</h2>
-          <p className="board-layout__subtitle">
+    <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-20 shrink-0 flex-col items-stretch justify-between gap-4 px-6 py-5 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-col gap-1">
+          <h2 className="font-heading text-lg font-medium">Kanban</h2>
+          <p className="text-sm text-muted-foreground">
             Tasks move by configured stage order and can auto-start per stage
           </p>
         </div>
-        <div className="app-action-row app-action-row--compact app-action-row--end board-layout__actions">
+        <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="board-layout__action-button"
             onClick={() => openBoardEditor(false)}
           >
             <Settings2Icon data-icon="inline-start" />
@@ -406,7 +409,6 @@ export function BoardPage() {
             type="button"
             variant="ghost"
             size="sm"
-            className="board-layout__action-button"
             onClick={openNewTask}
           >
             <PlusIcon data-icon="inline-start" />
@@ -415,14 +417,17 @@ export function BoardPage() {
         </div>
       </div>
 
+      <Separator />
+
       {runError ? (
-        <Alert variant="destructive" className="settings-error-banner">
+        <Alert variant="destructive" className="mx-4 mt-4 w-auto">
           <AlertTriangleIcon />
           <AlertDescription>{runError}</AlertDescription>
         </Alert>
       ) : null}
 
       {tasks.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center p-6">
         <EmptyState
           title="No tasks yet"
           description="Create your first task to get started"
@@ -433,6 +438,7 @@ export function BoardPage() {
             </Button>
           }
         />
+        </div>
       ) : (
         <DndContext
           collisionDetection={closestCenter}
@@ -444,7 +450,7 @@ export function BoardPage() {
             items={boardStages.map((s) => `sortable-stage:${s.id}`)}
             strategy={horizontalListSortingStrategy}
           >
-            <div className="board-grid">
+            <div className="flex min-h-0 flex-1 items-start gap-4 overflow-x-auto px-4 py-5" data-board-grid>
               {boardStages.map((stage) => (
                 <StageColumn
                   key={stage.id}
@@ -467,21 +473,31 @@ export function BoardPage() {
           </SortableContext>
           <DragOverlay dropAnimation={null}>
             {activeTask ? (
-              <Card className="task-card task-card--overlay">
-                <TaskCardContent task={activeTask} />
-              </Card>
+              <div className="pointer-events-none scale-105 cursor-grabbing rounded-xl shadow-lg">
+                <Card size="sm">
+                  <CardHeader>
+                    <div className="flex min-w-0 flex-col gap-2">
+                      <TaskCardContent task={activeTask} />
+                    </div>
+                  </CardHeader>
+                </Card>
+              </div>
             ) : null}
             {activeDragStage ? (
-              <Card className="board-column board-column--overlay">
-                <CardHeader className="board-column__header">
-                  <div className="board-column__heading">
-                    <span className="board-column__name">{activeDragStage.name}</span>
-                  </div>
-                  <span className="board-column__count">
-                    {(tasksByStage[activeDragStage.id] ?? []).length}
-                  </span>
-                </CardHeader>
-              </Card>
+              <div className="pointer-events-none scale-105 cursor-grabbing rounded-xl shadow-lg">
+                <Card>
+                  <CardHeader>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <div className="min-w-0 flex-1 truncate">
+                        <CardTitle>{activeDragStage.name}</CardTitle>
+                      </div>
+                      <Badge variant="outline">
+                        {(tasksByStage[activeDragStage.id] ?? []).length}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                </Card>
+              </div>
             ) : null}
           </DragOverlay>
         </DndContext>
@@ -537,16 +553,14 @@ export function BoardPage() {
         <Dialog open onOpenChange={(open) => setIsCreateStagePromptOpen(open)}>
           <DialogContent>
             <DialogHeader>
-              <div className="modal-icon-shell">
-                <Columns3Icon />
-              </div>
+              <Columns3Icon aria-hidden="true" className="text-muted-foreground" />
               <DialogTitle>Create Runnable Stage</DialogTitle>
               <DialogDescription>
                 This board only has <strong>Backlog</strong> and <strong>Done</strong>.
                 Add a stage between them before starting backlog tasks.
               </DialogDescription>
             </DialogHeader>
-            <DialogFooter className="app-action-row app-action-row--end">
+            <DialogFooter>
               <Button
                 type="button"
                 variant="outline"

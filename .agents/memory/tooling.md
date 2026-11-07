@@ -9,3 +9,4 @@ Migrated from `MEMORY.md` on 2026-11-07; entries predate verification tags.
 - Upgrade: `pbi-agent upgrade`/`update`; `self_update.py` detects uv tool/pipx/venv pip, refuses PEP 610 source installs; `--check` exits 0/100/1. Windows path unit-tested only.
 - Security: open packaging follow-up — transitive security minima are lock-only, not enforced in published runtime metadata.
 - Linux browser open: stdlib `webbrowser.open` in `-I` child, DEVNULL stdio, bounded wait; Snap Brave GPU/AppArmor logs are browser noise. GUI launch unverified.
+- `shadcn add` may emit `import { cn } from "cn"` (resolves via `@shadcn/lint` dep); rewrite to `@/lib/utils`. Build static assets with the CI-pinned Bun (1.4.4; local upgraded) or the CI static-asset check drifts. [verified 2026-11-07]

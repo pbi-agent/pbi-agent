@@ -15,6 +15,7 @@ import {
   type RefObject,
   type UIEvent,
 } from "react";
+import { cn } from "@/lib/utils";
 import type { ApplyPatchToolMetadata } from "../../types";
 import { Badge } from "../ui/badge";
 import {
@@ -28,6 +29,55 @@ import {
 
 type DiffLineKind = "added" | "removed" | "context" | "hunk" | "meta" | "empty";
 export type GitDiffLayout = "stacked" | "split";
+
+const FILE_ICON_CLASSES =
+  "inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary *:size-4";
+const TABLE_CLASSES = "border-collapse font-mono text-xs leading-normal";
+const CELL_BASE_CLASSES = "border-b border-border/50 py-0.5 align-top";
+const GUTTER_CLASSES = cn(
+  CELL_BASE_CLASSES,
+  "w-12 min-w-12 bg-muted/60 px-2 text-right text-muted-foreground select-none",
+);
+const MARKER_CLASSES = cn(
+  CELL_BASE_CLASSES,
+  "w-9 min-w-9 px-2 text-center text-muted-foreground select-none",
+);
+const CODE_CLASSES = cn(CELL_BASE_CLASSES, "min-w-0 px-3 whitespace-pre text-muted-foreground");
+const SPANNING_CLASSES = cn(CELL_BASE_CLASSES, "px-3 whitespace-pre text-muted-foreground");
+const SPANNING_MARKER_CLASSES =
+  "inline-block w-12 pr-2 text-right text-muted-foreground select-none";
+
+function lineRowClasses(kind: DiffLineKind | "collapsed", focused: boolean): string {
+  if (kind === "added") return focused ? "bg-primary/15" : "bg-primary/10";
+  if (kind === "removed") return focused ? "bg-destructive/15" : "bg-destructive/10";
+  if (kind === "hunk" || kind === "meta") return "bg-accent text-accent-foreground";
+  if (kind === "collapsed") return "bg-muted/70 text-muted-foreground";
+  return "bg-transparent";
+}
+
+function toneTextClasses(kind: DiffLineKind): string | undefined {
+  if (kind === "added") return "text-primary";
+  if (kind === "removed") return "text-destructive";
+  if (kind === "hunk" || kind === "meta") return "text-accent-foreground";
+  return undefined;
+}
+
+function splitCellClasses(kind: DiffLineKind): string | undefined {
+  if (kind === "added") return "bg-primary/10 text-primary in-data-[focused=true]:bg-primary/15";
+  if (kind === "removed") {
+    return "bg-destructive/10 text-destructive in-data-[focused=true]:bg-destructive/15";
+  }
+  if (kind === "empty") return "bg-muted/40 text-transparent";
+  return undefined;
+}
+
+function tokenClasses(kind: DiffLineKind): string {
+  return cn(
+    "rounded-sm px-0.5 font-semibold box-decoration-clone ring-1 ring-inset",
+    kind === "added" && "bg-primary/25 text-primary ring-primary/30",
+    kind === "removed" && "bg-destructive/25 text-destructive ring-destructive/30",
+  );
+}
 
 const EMPTY_DIFF_MESSAGE = "No diff content was provided for this operation.";
 const CONTEXT_EDGE_LINES = 3;
@@ -216,31 +266,40 @@ export function GitDiffResult({
   return (
     <Card
       size="sm"
-      className="git-diff-result"
+      data-git-diff-result
       data-status={metadata.success === false ? "failed" : "done"}
       data-layout={layout}
     >
-      <CardHeader className="git-diff-result__header">
-        <div className="git-diff-result__title-row">
-          <span className="git-diff-result__file-icon" aria-hidden="true">
+      <CardHeader className="items-center">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className={FILE_ICON_CLASSES} aria-hidden="true">
             <FileCode2Icon />
           </span>
-          <div className="git-diff-result__title-copy">
-            <CardTitle className="git-diff-result__title">
-              {title}
-            </CardTitle>
-            <CardDescription className="git-diff-result__description">
-              <span>{operationLabel}</span>
-              {fileCountLabel ? <span>{fileCountLabel}</span> : null}
-              {metadata.detail ? <span>{metadata.detail}</span> : null}
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <div className="truncate font-mono" data-git-diff-title>
+              <CardTitle>{title}</CardTitle>
+            </div>
+            <CardDescription>
+              <span className="flex flex-wrap items-center gap-2 text-xs">
+                {[operationLabel, fileCountLabel, metadata.detail]
+                  .filter((part): part is string => Boolean(part))
+                  .map((part, index) => (
+                    <span key={`${index}-${part}`} className="inline-flex items-center gap-2">
+                      {index > 0 ? (
+                        <span aria-hidden="true" className="size-1 rounded-full bg-muted-foreground" />
+                      ) : null}
+                      <span>{part}</span>
+                    </span>
+                  ))}
+              </span>
             </CardDescription>
           </div>
         </div>
-        <CardAction className="git-diff-result__actions">
+        <CardAction>
+          <div className="flex items-center justify-end gap-2 font-mono">
           <Badge
             variant={metadata.success === false ? "destructive" : "secondary"}
             size="meta"
-            className="git-diff-result__status"
           >
             {metadata.success === false ? (
               <XCircleIcon data-icon="inline-start" />
@@ -249,42 +308,44 @@ export function GitDiffResult({
             )}
             {statusLabel}
           </Badge>
-          <div className="git-diff-result__stats" aria-label="Diff summary">
-            <Badge
-              variant="outline"
-              size="meta"
-              className="git-diff-result__stat git-diff-result__stat--added"
-            >
-              <PlusIcon data-icon="inline-start" />
-              {parsed.added}
-            </Badge>
-            <Badge
-              variant="outline"
-              size="meta"
-              className="git-diff-result__stat git-diff-result__stat--removed"
-            >
-              <MinusIcon data-icon="inline-start" />
-              {parsed.removed}
-            </Badge>
+          <div className="flex items-center gap-2" aria-label="Diff summary">
+            <span className="text-primary" data-diff-stat="added">
+              <Badge variant="outline" size="meta">
+                <PlusIcon data-icon="inline-start" />
+                {parsed.added}
+              </Badge>
+            </span>
+            <span className="text-destructive" data-diff-stat="removed">
+              <Badge variant="outline" size="meta">
+                <MinusIcon data-icon="inline-start" />
+                {parsed.removed}
+              </Badge>
+            </span>
+          </div>
           </div>
         </CardAction>
       </CardHeader>
 
-      <CardContent className="git-diff-result__content">
+      <CardContent>
+        <div className="flex flex-col gap-2">
         <div
-          className="git-diff-result__viewport git-diff-result__viewport--focused"
+          className={cn(
+            "max-h-140 rounded-md border border-border bg-background",
+            layout === "split" ? "flex overflow-hidden" : "overflow-auto",
+          )}
           role="region"
           aria-label={`Diff for ${metadata.path ?? "file"}`}
         >
           {layout === "split" ? (
             <div
-              className="git-diff-result__split"
+              className="grid min-h-0 w-full min-w-0 flex-auto grid-cols-2"
               role="group"
               aria-label="Split diff panes"
             >
               <div
                 ref={oldSplitScrollRef}
-                className="git-diff-result__split-pane git-diff-result__split-pane--old"
+                className="min-h-0 min-w-0 overflow-auto overscroll-x-contain"
+                data-split-pane="old"
                 onScroll={handleSplitPaneScroll}
               >
                 {renderSplitPaneTable("old", splitRows, {
@@ -293,7 +354,8 @@ export function GitDiffResult({
               </div>
               <div
                 ref={newSplitScrollRef}
-                className="git-diff-result__split-pane git-diff-result__split-pane--new"
+                className="min-h-0 min-w-0 overflow-auto overscroll-x-contain border-l border-border"
+                data-split-pane="new"
                 onScroll={handleSplitPaneScroll}
               >
                 {renderSplitPaneTable("new", splitRows, {
@@ -302,18 +364,21 @@ export function GitDiffResult({
               </div>
             </div>
           ) : (
-            <table className="git-diff-result__table git-diff-result__table--stacked">
+            <table className={cn(TABLE_CLASSES, "w-full min-w-160")} data-diff-table="stacked">
               <tbody>{visibleBlocks.flatMap((block) => renderBlock(block))}</tbody>
             </table>
           )}
         </div>
-        <div className="git-diff-result__footer">
+        <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs text-muted-foreground">
           <span>{footerLabel}</span>
           {metadata.call_id ? (
-            <Badge variant="ghost" size="meta" className="git-diff-result__call-id">
-              {metadata.call_id}
-            </Badge>
+            <span className="max-w-64 truncate font-mono">
+              <Badge variant="ghost" size="meta">
+                {metadata.call_id}
+              </Badge>
+            </span>
           ) : null}
+        </div>
         </div>
       </CardContent>
     </Card>
@@ -326,29 +391,31 @@ function DeletedFileResult({ metadata }: { metadata: ApplyPatchToolMetadata }) {
   return (
     <Card
       size="sm"
-      className="git-diff-result git-diff-result--delete"
+      data-git-diff-result="delete"
       data-operation="delete_file"
       data-status="done"
     >
-      <CardContent className="git-diff-result__delete-body">
-        <div className="git-diff-result__title-row">
+      <CardContent>
+        <div className="flex min-h-11 items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <span
-            className="git-diff-result__file-icon git-diff-result__file-icon--delete"
+            className={cn(FILE_ICON_CLASSES, "bg-destructive/10 text-destructive")}
             aria-hidden="true"
           >
             <FileCode2Icon />
           </span>
-          <div className="git-diff-result__title-copy">
-            <CardTitle className="git-diff-result__title git-diff-result__title--deleted">
-              {fileName}
-            </CardTitle>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <div className="truncate font-mono text-destructive line-through">
+              <CardTitle data-deleted-title>{fileName}</CardTitle>
+            </div>
           </div>
         </div>
-        <div className="git-diff-result__actions git-diff-result__actions--delete">
-          <Badge variant="secondary" size="meta" className="git-diff-result__status">
+        <div className="flex flex-none items-center justify-end gap-2 font-mono">
+          <Badge variant="secondary" size="meta">
             <CheckCircle2Icon data-icon="inline-start" />
             Done
           </Badge>
+        </div>
         </div>
       </CardContent>
     </Card>
@@ -748,18 +815,19 @@ function renderLine(
   return (
     <tr
       key={options.key}
-      className={`git-diff-result__line git-diff-result__line--${line.kind}`}
+      className={lineRowClasses(line.kind, Boolean(options.inlineParts?.some((part) => part.changed)))}
+      data-diff-line={line.kind}
       data-focused={options.inlineParts?.some((part) => part.changed) ? "true" : undefined}
       data-group-start={options.showTopRadius ? "true" : undefined}
     >
-      <td className="git-diff-result__gutter git-diff-result__gutter--old">
+      <td className={GUTTER_CLASSES}>
         {line.oldNumber ?? ""}
       </td>
-      <td className="git-diff-result__gutter git-diff-result__gutter--new">
+      <td className={GUTTER_CLASSES}>
         {line.newNumber ?? ""}
       </td>
-      <td className="git-diff-result__marker">{markerForLine(line.kind)}</td>
-      <td className="git-diff-result__code">
+      <td className={cn(MARKER_CLASSES, toneTextClasses(line.kind))}>{markerForLine(line.kind)}</td>
+      <td className={cn(CODE_CLASSES, toneTextClasses(line.kind))} data-diff-code>
         <code>{renderCode(line, options.inlineParts)}</code>
       </td>
     </tr>
@@ -773,11 +841,8 @@ function renderCode(line: DiffLine, inlineParts: InlinePart[] | undefined): Reac
   return inlineParts.map((part) => (
     <span
       key={part.key}
-      className={
-        part.changed
-          ? `git-diff-result__token git-diff-result__token--${line.kind}`
-          : undefined
-      }
+      className={part.changed ? tokenClasses(line.kind) : undefined}
+      data-diff-token={part.changed ? line.kind : undefined}
     >
       {part.text || " "}
     </span>
@@ -794,12 +859,13 @@ function renderSplitPaneTable(
   return (
     <table
       ref={options.ref}
-      className="git-diff-result__split-table"
+      className={cn(TABLE_CLASSES, "w-max min-w-full")}
+      data-diff-table={side}
     >
       <colgroup>
-        <col className="git-diff-result__col git-diff-result__col--gutter" />
-        <col className="git-diff-result__col git-diff-result__col--marker" />
-        <col className="git-diff-result__col git-diff-result__col--code" />
+        <col className="w-12" />
+        <col className="w-8" />
+        <col className="w-auto" />
       </colgroup>
       <tbody>{rows.map((row) => renderSplitPaneRow(side, row))}</tbody>
     </table>
@@ -817,7 +883,7 @@ function renderSplitPaneRow(
     return (
       <tr
         key={`${side}-${row.key}`}
-        className="git-diff-result__line git-diff-result__line--split"
+        data-diff-line="split"
         data-focused={row.focused ? "true" : undefined}
         data-group-start={row.showTopRadius ? "true" : undefined}
       >
@@ -831,20 +897,18 @@ function renderSplitPaneRow(
     return (
       <tr
         key={`${side}-${row.key}`}
-        className="git-diff-result__line git-diff-result__line--collapsed"
+        className={lineRowClasses("collapsed", false)}
+        data-diff-line="collapsed"
         aria-hidden={renderCollapsedContent ? undefined : "true"}
       >
-        <td
-          className="git-diff-result__split-spanning git-diff-result__split-spanning--collapsed"
-          colSpan={3}
-        >
+        <td className={SPANNING_CLASSES} colSpan={3}>
           {renderCollapsedContent ? (
             <>
-              <span className="git-diff-result__split-spanning-marker">⋯</span>
+              <span className={SPANNING_MARKER_CLASSES}>⋯</span>
               <code>{row.count} unchanged lines</code>
             </>
           ) : (
-            <span className="git-diff-result__split-spanning-placeholder">
+            <span>
               &nbsp;
             </span>
           )}
@@ -857,23 +921,21 @@ function renderSplitPaneRow(
   return (
     <tr
       key={`${side}-${row.key}`}
-      className={`git-diff-result__line git-diff-result__line--${row.line.kind}`}
+      className={lineRowClasses(row.line.kind, false)}
+      data-diff-line={row.line.kind}
       data-group-start={row.showTopRadius ? "true" : undefined}
       aria-hidden={renderSpanningContent ? undefined : "true"}
     >
-      <td
-        className={`git-diff-result__split-spanning git-diff-result__split-spanning--${row.line.kind}`}
-        colSpan={3}
-      >
+      <td className={cn(SPANNING_CLASSES, toneTextClasses(row.line.kind))} colSpan={3}>
         {renderSpanningContent ? (
           <>
-            <span className="git-diff-result__split-spanning-marker">
+            <span className={SPANNING_MARKER_CLASSES}>
               {markerForLine(row.line.kind)}
             </span>
             <code>{row.line.text || " "}</code>
           </>
         ) : (
-          <span className="git-diff-result__split-spanning-placeholder">
+          <span>
             &nbsp;
           </span>
         )}
@@ -889,20 +951,19 @@ function renderSplitSideCells(
 ): ReactElement[] {
   const kind = line?.kind ?? "empty";
   const number = line ? (side === "old" ? line.oldNumber : line.newNumber) : null;
-  const cellClass =
-    `git-diff-result__split-cell git-diff-result__split-cell--${side} `
-    + `git-diff-result__split-cell--${kind}`;
+  const cellClass = splitCellClasses(kind);
   return [
     <td
       key={`${side}-gutter`}
-      className={`git-diff-result__gutter git-diff-result__gutter--${side} ${cellClass}`}
+      className={cn(GUTTER_CLASSES, cellClass)}
+      data-split-cell={kind}
     >
       {number ?? ""}
     </td>,
-    <td key={`${side}-marker`} className={`git-diff-result__marker ${cellClass}`}>
+    <td key={`${side}-marker`} className={cn(MARKER_CLASSES, cellClass)}>
       {line ? markerForLine(line.kind) : ""}
     </td>,
-    <td key={`${side}-code`} className={`git-diff-result__code ${cellClass}`}>
+    <td key={`${side}-code`} className={cn(CODE_CLASSES, cellClass)} data-diff-code>
       <code>{line ? renderCode(line, inlineParts) : " "}</code>
     </td>,
   ];
@@ -910,11 +971,11 @@ function renderSplitSideCells(
 
 function renderCollapsedRow(key: string, count: number): ReactElement {
   return (
-    <tr key={key} className="git-diff-result__line git-diff-result__line--collapsed">
-      <td className="git-diff-result__gutter" />
-      <td className="git-diff-result__gutter" />
-      <td className="git-diff-result__marker">⋯</td>
-      <td className="git-diff-result__code">
+    <tr key={key} className={lineRowClasses("collapsed", false)} data-diff-line="collapsed">
+      <td className={GUTTER_CLASSES} />
+      <td className={GUTTER_CLASSES} />
+      <td className={MARKER_CLASSES}>⋯</td>
+      <td className={CODE_CLASSES} data-diff-code>
         <code>{count} unchanged lines</code>
       </td>
     </tr>

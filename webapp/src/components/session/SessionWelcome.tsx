@@ -5,6 +5,7 @@ import {
   TerminalIcon,
   WandSparklesIcon,
 } from "lucide-react";
+import { Kbd } from "../ui/kbd";
 import {
   Empty,
   EmptyContent,
@@ -44,7 +45,6 @@ const TIPS: Tip[] = [
 export function SessionWelcome() {
   return (
     <Empty
-      className="session-welcome border-0"
       role="status"
       aria-live="polite"
     >
@@ -52,10 +52,10 @@ export function SessionWelcome() {
         <EmptyMedia variant="icon" className="size-10 [&_svg:not([class*='size-'])]:size-5">
           <WandSparklesIcon />
         </EmptyMedia>
-        <EmptyTitle className="text-base">{'>'}_ work smart</EmptyTitle>
+        <EmptyTitle>{'>'}_ work smart</EmptyTitle>
       </EmptyHeader>
       <EmptyContent>
-        <ul className="session-welcome__tips grid w-full gap-2 text-left">
+        <ul className="grid w-full gap-2 text-left">
           {TIPS.map((tip) => {
             const Icon = tip.icon;
             return (
@@ -68,9 +68,7 @@ export function SessionWelcome() {
                 </span>
                 <span className="flex-1 leading-snug">{tip.label}</span>
                 {tip.kbd ? (
-                  <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded border border-border bg-background px-1.5 font-mono text-[11px] font-medium text-foreground">
-                    {tip.kbd}
-                  </kbd>
+                  <Kbd>{tip.kbd}</Kbd>
                 ) : null}
               </li>
             );

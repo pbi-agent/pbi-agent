@@ -43,7 +43,7 @@ export function RunHistory({
         setIsOpen(open);
         if (open) void runsQuery.refetch();
       }}>
-        <div className="run-history">
+        <div className="relative inline-flex">
           <DropdownMenuTrigger asChild>
             <UsageBar
               interactive
@@ -53,17 +53,17 @@ export function RunHistory({
             />
           </DropdownMenuTrigger>
 
-          <DropdownMenuContent align="end" className="run-history__panel">
+          <DropdownMenuContent align="end" className="w-max max-w-screen min-w-70">
             {runsQuery.isLoading ? (
-              <div className="run-history__loading">
+              <div className="flex items-center justify-center p-5 text-xs text-muted-foreground">
                 <LoadingSpinner size="sm" />
               </div>
             ) : runsQuery.isError ? (
-              <div className="run-history__empty">Failed to load runs.</div>
+              <div className="flex items-center justify-center p-5 text-xs text-muted-foreground">Failed to load runs.</div>
             ) : !hasRuns ? (
-              <div className="run-history__empty">No runs recorded yet.</div>
+              <div className="flex items-center justify-center p-5 text-xs text-muted-foreground">No runs recorded yet.</div>
             ) : (
-              <div className="run-history__list">
+              <div className="flex w-max max-w-full min-w-0 flex-col">
                 {runs.map((run) => (
                   <RunCard
                     key={run.run_session_id}
@@ -110,16 +110,16 @@ function RunCard({
   return (
     <button
       type="button"
-      className="run-card"
+      className="flex w-full min-w-0 cursor-pointer flex-col items-stretch gap-px rounded-md px-2 py-1 text-left transition-colors outline-none hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring"
       onClick={onSelect}
     >
-      <div className="run-card__header">
-        <StatusPill status={run.status} size="meta" className="run-card__status" />
-        <span className="run-card__agent" title={agentLabel}>{agentLabel}</span>
-        {durationLabel ? <span className="run-card__duration">{durationLabel}</span> : null}
+      <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+        <StatusPill status={run.status} size="meta" />
+        <span className="max-w-34 min-w-0 truncate text-xs font-medium text-foreground" title={agentLabel}>{agentLabel}</span>
+        {durationLabel ? <span className="shrink-0 font-mono text-xs whitespace-nowrap text-muted-foreground">{durationLabel}</span> : null}
       </div>
-      <div className="run-card__summary" title={detailSummary}>
-        <span className="run-card__summary-text">{detailSummary}</span>
+      <div className="flex max-w-full min-w-0 items-center overflow-hidden font-mono text-xs whitespace-nowrap text-muted-foreground" title={detailSummary}>
+        <span className="block min-w-0 flex-1 truncate">{detailSummary}</span>
       </div>
     </button>
   );

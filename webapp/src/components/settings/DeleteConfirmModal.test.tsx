@@ -34,11 +34,11 @@ describe("DeleteConfirmModal", () => {
 
     const cancel = screen.getByRole("button", { name: "Cancel" });
     expect(cancel).toHaveAttribute("data-variant", "outline");
-    expect(cancel).toHaveClass("alert-dialog__button");
+    expect(cancel).toHaveAttribute("data-slot");
 
     const action = screen.getByRole("button", { name: "Delete" });
     expect(action).toHaveAttribute("data-variant", "destructive");
-    expect(action).toHaveClass("alert-dialog__button");
+    expect(action).toHaveAttribute("data-slot");
   });
 
   it("disables the confirmation action while delete is pending", async () => {

@@ -35,6 +35,7 @@ import {
   type CompletionItem,
 } from "../../hooks/useComposerCompletions";
 import { useSkillCatalog } from "../../hooks/useSkillCatalog";
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import {
   DropdownMenu,
@@ -45,6 +46,7 @@ import {
 } from "../ui/dropdown-menu";
 import {
   InputGroup,
+  InputGroupAddon,
   InputGroupTextarea,
 } from "../ui/input-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
@@ -99,6 +101,9 @@ type PendingImage = {
   source: "picker" | "clipboard";
 };
 
+const COMPLETIONS_PANEL_CLASS =
+  "absolute inset-x-3 bottom-full md:inset-x-8 z-30 mb-2 flex max-h-96 min-h-11 flex-col gap-px overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg";
+
 type FollowUpTiming = "checkpoint" | "after_finish";
 
 const FOLLOW_UP_OPTIONS: Array<{
@@ -106,21 +111,24 @@ const FOLLOW_UP_OPTIONS: Array<{
   label: string;
   description: string;
   badge: string;
-  badgeClassName: string;
+  badgeVariant: "outline" | "secondary";
+  badgeKind: string;
 }> = [
   {
     timing: "checkpoint",
     label: "After next safe checkpoint",
     description: "Send to the live session as soon as pbi-agent can accept queued input.",
     badge: "soon",
-    badgeClassName: "composer__completion-kind--project",
+    badgeVariant: "outline",
+    badgeKind: "project",
   },
   {
     timing: "after_finish",
     label: "After assistant finishes",
     description: "Queue on the backend and send automatically when the current turn is ready.",
     badge: "later",
-    badgeClassName: "composer__completion-kind--built-in",
+    badgeVariant: "secondary",
+    badgeKind: "built-in",
   },
 ];
 
@@ -1387,22 +1395,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     (pendingImages.length > 0
       ? `${pendingImages.length} image${pendingImages.length === 1 ? "" : "s"} attached`
       : null);
-  const inputRowClassName = cn(
-    "composer__input-row",
-    isShellMode && "composer__input-row--shell",
-    interactiveMode && "composer__input-row--interactive",
-    showProcessingAnimation && "composer__input-row--processing",
-    showFollowUpReadyAnimation && "composer__input-row--follow-up-ready",
-    dictationState === "recording" && "composer__input-row--recording",
-  );
-
   const handleComposerKeyDownCapture = (event: KeyboardEvent<HTMLFormElement>) => {
     composerActions.handleShortcut(event);
   };
 
   return (
     <form
-      className="composer"
+      data-composer=""
+      className="relative mx-auto w-full max-w-6xl shrink-0 px-3 py-2 md:px-8"
       onKeyDownCapture={handleComposerKeyDownCapture}
       onSubmit={(event) => {
         void handleSubmit(event);
@@ -1422,21 +1422,37 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         }}
       />
 
-      <div className={inputRowClassName}>
+      <div
+        data-composer-input-row=""
+        data-shell={isShellMode ? "" : undefined}
+        data-interactive={interactiveMode ? "" : undefined}
+        data-processing={showProcessingAnimation ? "" : undefined}
+        data-follow-up-ready={showFollowUpReadyAnimation ? "" : undefined}
+        data-recording={dictationState === "recording" ? "" : undefined}
+        className={cn(
+          "relative rounded-lg",
+          isShellMode && "*:data-[slot=input-group]:border-chart-4",
+          interactiveMode && "*:data-[slot=input-group]:border-primary",
+          showProcessingAnimation && "*:data-[slot=input-group]:border-primary/40",
+          showFollowUpReadyAnimation && "animate-pulse",
+          dictationState === "recording" && "*:data-[slot=input-group]:border-destructive/50",
+        )}
+      >
+        <InputGroup className="h-auto min-h-12">
+        <InputGroupAddon align="inline-start">
         <DropdownMenu
           open={isActionMenuOpen}
           onOpenChange={(open) => setActionMenuOpen(composerInputAvailable && !isShellMode && open)}
         >
-          <div className="composer__action-menu">
+          <div className="shrink-0">
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="composer__action-tooltip-trigger">
+                <span data-action-tooltip-trigger="" className="inline-flex shrink-0">
                   <DropdownMenuTrigger asChild>
                     <Button
                       type="button"
                       variant="outline"
                       size="icon-sm"
-                      className="composer__action-trigger"
                       disabled={!composerInputAvailable || isShellMode}
                       aria-label="Actions"
                     >
@@ -1450,10 +1466,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               </TooltipContent>
             </Tooltip>
           </div>
-          <DropdownMenuContent className="composer__action-popover" align="start">
+          <DropdownMenuContent className="min-w-40" align="start">
             <DropdownMenuGroup>
               <DropdownMenuItem
-                className="composer__action-item"
                 onSelect={(event) => {
                   event.preventDefault();
                   openImagePicker();
@@ -1461,32 +1476,43 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 disabled={!supportsImageInputs}
               >
                 <ImageIcon />
-                <span className="composer__action-item-label">Image</span>
+                <span>Image</span>
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
         {isShellMode ? (
-          <div className="composer__mode-pill composer__mode-pill--shell" aria-label="Shell command mode">
+          <Badge variant="warning" aria-label="Shell command mode">
             <TerminalIcon data-icon="inline-start" />
             <span>Shell</span>
-          </div>
+          </Badge>
         ) : null}
+        </InputGroupAddon>
         {dictationState === "recording" ? (
           <DictationWaveform
             getFrequencyData={getDictationFrequencyData}
             label="Recording audio… Ctrl+Space to stop"
           />
         ) : (
-        <InputGroup className="composer__textarea-wrap">
-          <div ref={highlightRef} className="composer__textarea-highlights" aria-hidden="true">
+        <div className="relative flex min-w-0 flex-1 self-center [&_textarea]:text-transparent [&_textarea]:caret-foreground [&_textarea]:wrap-anywhere [&_textarea]:selection:bg-primary/25">
+          <div
+            ref={highlightRef}
+            className="pointer-events-none absolute inset-0 overflow-hidden px-2.5 py-2 text-base whitespace-pre-wrap wrap-anywhere text-foreground md:text-sm"
+            aria-hidden="true"
+          >
             {highlightSegments.map((segment, index) => (
               segment.kind === "text" ? (
                 <span key={`highlight-${index}`}>{segment.text}</span>
               ) : (
                 <span
                   key={`highlight-${index}`}
-                  className={`composer__textarea-highlight composer__textarea-highlight--${segment.kind}`}
+                  data-highlight={segment.kind}
+                  className={cn(
+                    "rounded-sm",
+                    segment.kind === "skill"
+                      ? "bg-chart-2/15 text-chart-2"
+                      : "bg-primary/15 text-primary",
+                  )}
                 >
                   {segment.text}
                 </span>
@@ -1497,7 +1523,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             ref={textareaRef}
             name="message"
             aria-label="Message"
-            className="composer__textarea"
+            className="relative z-10 max-h-50 min-h-5 field-sizing-fixed overflow-y-auto"
             value={input}
             onChange={(event) => {
               resetHistoryBrowsing();
@@ -1524,7 +1550,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             rows={1}
             disabled={!composerInputAvailable}
           />
-        </InputGroup>
+        </div>
         )}
         {showProcessingAnimation || showFollowUpReadyAnimation ? (
           <span className="sr-only" role="status" aria-live="polite">
@@ -1550,10 +1576,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           dictationUnavailableReason={dictationUnavailableReason}
           toggleDictation={toggleDictation}
         />
+        </InputGroup>
       </div>
 
       {isShellMode ? (
-        <div className="composer__mode-status composer__mode-status--shell">
+        <div className="mt-2 truncate px-2 text-xs text-muted-foreground">
           {shellCommandPreview
             ? "Enter will run this command in the workspace shell."
             : "Shell command mode: type a command after !"}
@@ -1561,7 +1588,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       ) : null}
 
       {completionOpen ? (
-        <div className="composer__completions" role="listbox" aria-label={completionLabel}>
+        <div
+          className={COMPLETIONS_PANEL_CLASS}
+          role="listbox"
+          aria-label={completionLabel}
+        >
           {completionItems.length > 0 ? (
             completionItems.map((item, index) => (
               <Button
@@ -1570,17 +1601,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                   completionItemRefs.current[index] = element;
                 }}
                 type="button"
-                variant="ghost"
+                variant={index === completionSelectedIndex ? "secondary" : "ghost"}
                 role="option"
                 aria-selected={index === completionSelectedIndex}
-                className={`composer__completion-item ${index === completionSelectedIndex ? "composer__completion-item--active" : ""}`}
+                data-active={index === completionSelectedIndex ? "" : undefined}
+                className="h-auto min-h-8 w-full shrink-0 justify-between text-left"
                 onMouseDown={(event) => {
                   event.preventDefault();
                   void applyCompletion(item);
                 }}
               >
-                <span className="composer__completion-copy">
-                  <span className="composer__completion-label">
+                <span className="flex min-w-0 items-center">
+                  <span className="min-w-0 truncate font-mono text-xs">
                     {item.kind === "slash"
                       ? item.command.name
                       : item.kind === "skill"
@@ -1589,52 +1621,59 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                           ? `@${item.agent.name} (agent)`
                         : `@${item.mention.path}`}
                     {item.kind === "slash" && item.command.description ? (
-                      <span className="composer__completion-description">
+                      <span className="font-sans font-normal text-muted-foreground">
                         {` (${item.command.description})`}
                       </span>
                     ) : null}
                     {item.kind === "skill" && item.skill.description ? (
-                      <span className="composer__completion-description">
+                      <span className="font-sans font-normal text-muted-foreground">
                         {` (${item.skill.description})`}
                       </span>
                     ) : null}
                   </span>
                 </span>
                 {item.kind === "mention" ? (
-                  <span
-                    className={`composer__completion-kind composer__completion-kind--${item.mention.kind}`}
+                  <Badge
+                    variant={item.mention.kind === "image" ? "secondary" : "outline"}
+                    data-kind={item.mention.kind}
                   >
                     {item.mention.kind}
-                  </span>
+                  </Badge>
                 ) : item.kind === "agent" ? (
-                  <span className="composer__completion-kind composer__completion-kind--agent">
+                  <Badge variant="outline" data-kind="agent">
                     {item.agent.enabled === false ? "disabled agent" : "agent"}
-                  </span>
+                  </Badge>
                 ) : item.kind === "skill" ? (
-                  <span className="composer__completion-kind composer__completion-kind--skill">
+                  <Badge variant="outline" data-kind="skill">
                     {item.skill.enabled === false ? "disabled skill" : "skill"}
-                  </span>
+                  </Badge>
                 ) : item.kind === "slash" ? (
-                  <span
-                    className={cn(
-                      "composer__completion-kind",
+                  <Badge
+                    variant={
                       item.command.kind === "local_command"
-                        ? "composer__completion-kind--built-in"
+                        ? "secondary"
                         : item.command.kind === "command"
-                          ? "composer__completion-kind--project"
-                          : "composer__completion-kind--extension",
-                    )}
+                          ? "outline"
+                          : "warning"
+                    }
+                    data-kind={
+                      item.command.kind === "local_command"
+                        ? "built-in"
+                        : item.command.kind === "command"
+                          ? "project"
+                          : "extension"
+                    }
                   >
                     {slashCommandKindLabel(item.command.kind)}
-                  </span>
+                  </Badge>
                 ) : null}
               </Button>
             ))
           ) : showCompletionEmptyState ? (
-            <div className="composer__completion-empty">{completionEmptyText}</div>
+            <div className="shrink-0 p-3 text-xs text-muted-foreground">{completionEmptyText}</div>
           ) : null}
           {showCompletionStatus ? (
-            <div className="composer__completion-status">
+            <div className="shrink-0 px-3 pb-2 text-xs text-muted-foreground">
                 {completionListStatus}
             </div>
           ) : null}
@@ -1642,17 +1681,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       ) : null}
 
       {followUpChoicesOpen ? (
-        <div className="composer__completions composer__follow-up-menu" role="menu" aria-label="Choose follow-up delivery">
+        <div
+          className={COMPLETIONS_PANEL_CLASS}
+          role="menu"
+          aria-label="Choose follow-up delivery"
+        >
           {FOLLOW_UP_OPTIONS.map((option, index) => (
             <Button
               key={option.timing}
               type="button"
-              variant="ghost"
+              variant={index === followUpSelectedIndex ? "secondary" : "ghost"}
               role="menuitem"
-              className={cn(
-                "composer__completion-item composer__follow-up-choice",
-                index === followUpSelectedIndex && "composer__completion-item--active",
-              )}
+              data-active={index === followUpSelectedIndex ? "" : undefined}
+              className="h-auto min-h-14 w-full shrink-0 items-start justify-between text-left whitespace-normal"
               disabled={!canDraftFollowUp}
               onMouseDown={(event) => {
                 event.preventDefault();
@@ -1662,15 +1703,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 activateFollowUpChoice(option.timing);
               }}
             >
-              <span className="composer__completion-copy">
-                <span className="composer__completion-label">{option.label}</span>
-                <span className="composer__completion-description">
+              <span className="flex min-w-0 flex-col items-start gap-0.5">
+                <span className="text-xs">{option.label}</span>
+                <span className="text-xs font-normal text-muted-foreground">
                   {option.description}
                 </span>
               </span>
-              <span className={cn("composer__completion-kind", option.badgeClassName)}>
+              <Badge variant={option.badgeVariant} data-kind={option.badgeKind}>
                 {option.badge}
-              </span>
+              </Badge>
             </Button>
           ))}
         </div>
@@ -1678,7 +1719,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
       {displayedQueuedFollowUps.length > 0 ? (
         <div
-          className="composer__follow-up-dock"
+          data-follow-up-dock=""
+          className="mt-2 flex flex-col gap-3 rounded-lg border bg-card p-3"
           aria-label={displayedQueuedFollowUps.length === 1 ? "Queued follow-up" : "Queued follow-ups"}
         >
           {displayedQueuedFollowUps.map((item) => {
@@ -1692,9 +1734,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               && !promptEnhancementPending
               && item.kind !== "background_result";
             return (
-              <div key={item.id} className="composer__follow-up-row">
-                <div className="composer__follow-up-copy">
-                  <span className="composer__follow-up-title">
+              <div key={item.id} className="flex w-full flex-wrap items-center justify-between gap-3">
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-xs font-medium text-muted-foreground">
                     {item.failed
                       ? "Queued follow-up failed"
                       : item.kind === "background_result"
@@ -1705,7 +1747,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                         ? "Queued follow-up · after next checkpoint"
                         : "Queued follow-up · after assistant finishes"}
                   </span>
-                  <span className="composer__follow-up-preview">
+                  <span className="max-w-prose truncate text-xs text-muted-foreground">
                     {item.kind === "background_result"
                       ? (item.text.split("\n").find((line) => line.startsWith("command: ")) ?? "")
                       : item.text}
@@ -1714,12 +1756,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                       : ""}
                   </span>
                   {item.error ? (
-                    <span className="composer__follow-up-error">
+                    <span className="text-xs text-destructive">
                       {item.error}
                     </span>
                   ) : null}
                 </div>
-                <div className="composer__follow-up-actions">
+                <div
+                  data-follow-up-actions=""
+                  className="flex shrink-0 flex-wrap items-center justify-end gap-2"
+                >
                   <Button
                     type="button"
                     variant="ghost"
@@ -1773,7 +1818,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       ) : null}
 
       {replySnippets.length > 0 ? (
-        <div className="composer__reply-snippets" aria-label="Reply snippets">
+        <div
+          className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3"
+          aria-label="Reply snippets"
+        >
           {replySnippets.map((snippet) => (
             <ReplySnippetCard
               key={snippet.id}
@@ -1790,32 +1838,37 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       ) : null}
 
       {pendingImages.length > 0 ? (
-        <div className="composer__attachments" aria-label="Pending image attachments">
+        <div
+          className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4"
+          aria-label="Pending image attachments"
+        >
           {pendingImages.map((image) => (
-            <div key={image.id} className="composer__attachment-card">
+            <div
+              key={image.id}
+              className="flex items-center gap-2 rounded-md border bg-card p-2"
+            >
               <img
                 src={image.previewUrl}
                 alt={image.file.name}
-                className="composer__attachment-preview"
+                className="size-13 shrink-0 rounded-sm bg-muted object-contain"
               />
-              <div className="composer__attachment-copy">
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="composer__attachment-name">
+                    <span className="block max-w-full truncate text-xs text-foreground">
                       {image.file.name}
                     </span>
                   </TooltipTrigger>
                   <TooltipContent>{image.file.name}</TooltipContent>
                 </Tooltip>
-                <span className="composer__attachment-meta">
+                <span className="text-xs text-muted-foreground">
                   {Math.max(1, Math.round(image.file.size / 1024))} KB
                 </span>
               </div>
               <Button
                 type="button"
                 variant="ghost"
-                size="icon-sm"
-                className="composer__attachment-remove"
+                size="icon-xs"
                 onClick={() => removePendingImage(image.id)}
                 aria-label={`Remove ${image.file.name}`}
                 disabled={!composerInputAvailable}
@@ -1829,14 +1882,17 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
       {attachmentStatus ? (
         <div
-          className={`composer__attachment-status ${attachmentMessage ? "composer__attachment-status--error" : ""}`}
+          className={cn(
+            "mt-2 px-2 text-xs",
+            attachmentMessage ? "text-destructive" : "text-muted-foreground",
+          )}
         >
           {attachmentStatus}
         </div>
       ) : null}
 
       {composerActions.promptEnhancementError ? (
-        <div className="composer__attachment-status composer__attachment-status--error">
+        <div className="mt-2 px-2 text-xs text-destructive">
           {composerActions.promptEnhancementError}
         </div>
       ) : null}

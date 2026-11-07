@@ -16,7 +16,6 @@ import {
 import { cn } from "../../lib/utils";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 import {
-  InputGroup,
   InputGroupAddon,
   InputGroupButton,
 } from "../ui/input-group";
@@ -271,23 +270,21 @@ export function ComposerActionButtons({
     (dictationState === "idle" && !controller.canStartDictation);
 
   return (
-    <InputGroup className="composer__send-group">
       <InputGroupAddon align="inline-end">
         {showStopButton ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="composer__input-tooltip-trigger">
+              <span data-input-tooltip-trigger="" className="inline-flex shrink-0">
                 <InputGroupButton
                   type="button"
                   aria-label="Interrupt current run"
-                  className="composer__stop"
+                  variant="destructive"
                   disabled={isInterrupting}
                   onClick={onInterrupt}
                   size="icon-sm"
                 >
                   <SquareIcon
                     aria-hidden="true"
-                    className="composer__stop-icon"
                     fill="currentColor"
                     strokeWidth={0}
                   />
@@ -301,18 +298,16 @@ export function ComposerActionButtons({
         ) : controller.showDictationAction ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="composer__input-tooltip-trigger">
+              <span data-input-tooltip-trigger="" className="inline-flex shrink-0">
                 <InputGroupButton
                   type="button"
                   aria-label={dictationButtonLabel}
                   aria-keyshortcuts="Control+Space"
                   aria-pressed={dictationState === "recording"}
+                  variant={dictationState === "recording" ? "destructive" : "default"}
+                  data-state={dictationState}
                   className={cn(
-                    "composer__dictation",
-                    dictationState === "recording" &&
-                      "composer__dictation--recording",
-                    dictationState === "transcribing" &&
-                      "composer__dictation--transcribing",
+                    dictationState === "transcribing" && "cursor-progress",
                   )}
                   disabled={dictationButtonDisabled}
                   onClick={toggleDictation}
@@ -333,7 +328,7 @@ export function ComposerActionButtons({
             {controller.showEnhancePromptAction ? (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="composer__input-tooltip-trigger">
+                  <span data-input-tooltip-trigger="" className="inline-flex shrink-0">
                     <InputGroupButton
                       type="button"
                       aria-label={
@@ -342,10 +337,9 @@ export function ComposerActionButtons({
                           : "Enhance prompt"
                       }
                       aria-keyshortcuts="Control+Space"
+                      variant="secondary"
                       className={cn(
-                        "composer__enhance",
-                        controller.promptEnhancementPending &&
-                          "composer__enhance--loading",
+                        controller.promptEnhancementPending && "cursor-progress",
                       )}
                       disabled={!controller.canEnhancePrompt}
                       onClick={() => {
@@ -370,11 +364,11 @@ export function ComposerActionButtons({
             ) : null}
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="composer__input-tooltip-trigger">
+                <span data-input-tooltip-trigger="" className="inline-flex shrink-0">
                   <InputGroupButton
                     type="submit"
                     aria-label={isShellMode ? "Run command" : "Send message"}
-                    className="composer__send"
+                    variant="default"
                     disabled={!controller.canSubmit}
                     size="icon-sm"
                   >
@@ -389,6 +383,5 @@ export function ComposerActionButtons({
           </>
         )}
       </InputGroupAddon>
-    </InputGroup>
   );
 }

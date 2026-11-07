@@ -57,6 +57,6 @@ describe("StageColumn", () => {
     expect(screen.queryByText("auto-start")).not.toBeInTheDocument();
     expect(screen.queryByText("command:some-command")).not.toBeInTheDocument();
     expect(screen.queryByText("profile:some-profile")).not.toBeInTheDocument();
-    expect(container.querySelector(".board-column__meta")).toBeNull();
+    expect(container.querySelector('[data-slot="card-description"]')).toBeNull();
   });
 });

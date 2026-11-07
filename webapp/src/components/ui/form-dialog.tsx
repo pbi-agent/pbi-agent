@@ -3,6 +3,7 @@ import type { VariantProps } from "class-variance-authority";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { FieldGroup } from "@/components/ui/field";
 import {
   Dialog,
   DialogClose,
@@ -71,14 +72,14 @@ export function FormDialog({
 }: FormDialogProps) {
   const body = (
     <>
-      <div className="task-form__body">{children}</div>
+      <FieldGroup data-form-dialog-body="" className="min-h-0 flex-1 overflow-y-auto">{children}</FieldGroup>
       {error ? (
-        <Alert variant="destructive" className="task-form__error">
+        <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
       {primaryAction ? (
-        <DialogFooter className="app-action-row app-action-row--end">
+        <DialogFooter>
           {onCancel ? (
             <Button
               type="button"
@@ -110,13 +111,13 @@ export function FormDialog({
         data-size={size}
         showCloseButton={showCloseButton}
         className={cn(
-          "task-form-dialog flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden",
+          "flex max-h-dvh flex-col overflow-hidden",
           sizeClassName[size],
           contentClassName,
         )}
       >
         <DialogHeader className="pr-10">
-          {icon ? <div className="modal-icon-shell">{icon}</div> : null}
+          {icon ? <div className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">{icon}</div> : null}
           <DialogTitle>{title}</DialogTitle>
           {description ? (
             <DialogDescription asChild>
@@ -127,11 +128,11 @@ export function FormDialog({
         </DialogHeader>
 
         {onSubmit ? (
-          <form className="task-form" onSubmit={onSubmit}>
+          <form className="flex min-h-0 flex-1 flex-col gap-4" onSubmit={onSubmit}>
             {body}
           </form>
         ) : (
-          <div className="task-form">{body}</div>
+          <div className="flex min-h-0 flex-1 flex-col gap-4">{body}</div>
         )}
       </DialogContent>
     </Dialog>

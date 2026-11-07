@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import type { MaintenanceConfig } from "../../types";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from "../ui/field";
 import { Input } from "../ui/input";
+import { SettingsNote, SettingsPanel, SettingsSection } from "./settings-layout";
 
 export function MaintenanceSettingsSection({
   maintenance,
@@ -39,53 +39,47 @@ export function MaintenanceSettingsSection({
   }
 
   return (
-    <section className="settings-section settings-section--active">
-      <Alert className="settings-inline-note">
-        <AlertDescription>
-          Daily startup maintenance purges old sessions, logs, transient web state, and unreferenced web uploads.
-        </AlertDescription>
-      </Alert>
-      <Card className="settings-panel">
-        <CardHeader className="settings-panel__header">
-          <div>
-            <CardTitle className="settings-panel__title">Maintenance</CardTitle>
-            <div className="settings-panel__subtitle">Retention and cleanup policy</div>
-          </div>
-        </CardHeader>
-        <CardContent className="settings-panel__body maintenance-settings-panel__body">
-          <FieldGroup>
-            <Field className="maintenance-settings-field">
-              <FieldContent>
-                <FieldLabel htmlFor="maintenance-retention-days">Retention days</FieldLabel>
-                <FieldDescription>
-                  Data older than this many days is removed during the first startup each UTC day.
-                </FieldDescription>
-              </FieldContent>
-              <Input
-                id="maintenance-retention-days"
-                type="number"
-                min={1}
-                className="task-form__input maintenance-settings-field__input"
-                value={retentionDays}
-                onChange={(event) => setRetentionDays(event.target.value)}
-              />
-            </Field>
-          </FieldGroup>
-          {error && <p className="settings-form-error">{error}</p>}
-          <div className="settings-panel__actions">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="settings-action-button"
-              onClick={() => void handleSave()}
-              disabled={saving}
-            >
-              {saving ? "Saving…" : "Save Changes"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </section>
+    <SettingsSection>
+      <SettingsNote>
+        Daily startup maintenance purges old sessions, logs, transient web state, and unreferenced web uploads.
+      </SettingsNote>
+      <SettingsPanel title="Maintenance" description="Retention and cleanup policy">
+        <FieldGroup>
+          <Field>
+            <FieldContent>
+              <FieldLabel htmlFor="maintenance-retention-days">Retention days</FieldLabel>
+              <FieldDescription>
+                Data older than this many days is removed during the first startup each UTC day.
+              </FieldDescription>
+            </FieldContent>
+            <Input
+              id="maintenance-retention-days"
+              type="number"
+              min={1}
+              className="max-w-40"
+              value={retentionDays}
+              onChange={(event) => setRetentionDays(event.target.value)}
+            />
+          </Field>
+        </FieldGroup>
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            data-settings-action-button
+            onClick={() => void handleSave()}
+            disabled={saving}
+          >
+            {saving ? "Saving…" : "Save Changes"}
+          </Button>
+        </div>
+      </SettingsPanel>
+    </SettingsSection>
   );
 }

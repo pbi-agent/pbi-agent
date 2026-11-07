@@ -19,20 +19,20 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <Empty className="empty-state">
+    <Empty>
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <InboxIcon />
         </EmptyMedia>
-        <EmptyTitle className="empty-state__title">{title}</EmptyTitle>
+        <EmptyTitle>{title}</EmptyTitle>
         {description ? (
-          <EmptyDescription className="empty-state__description">
+          <EmptyDescription>
             {description}
           </EmptyDescription>
         ) : null}
       </EmptyHeader>
       {action ? (
-        <EmptyContent className="empty-state__action">{action}</EmptyContent>
+        <EmptyContent>{action}</EmptyContent>
       ) : null}
     </Empty>
   );

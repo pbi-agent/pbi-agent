@@ -151,11 +151,11 @@ export function ProviderAuthFlowModal({
       }}
       title={`Connect ${authModeLabel}`}
     >
-      <div className="provider-auth-flow-modal">
+      <div className="flex min-w-0 flex-col gap-4">
           <p className="sr-only">
             Authorize {provider.name} with your {accountLabel}.
           </p>
-          <Alert className="settings-inline-note provider-auth-inline-note">
+          <Alert>
             <AlertDescription>
               Sign in with {accountLabel} for <strong>{provider.name}</strong>.
             </AlertDescription>
@@ -170,7 +170,7 @@ export function ProviderAuthFlowModal({
                 onValueChange={(value) => {
                   if (value === "browser" || value === "device") setMethod(value);
                 }}
-                className="secret-mode-tabs provider-auth-mode-tabs"
+                data-settings-auth-mode-tabs=""
                 spacing={1}
                 variant="outline"
               >
@@ -190,7 +190,7 @@ export function ProviderAuthFlowModal({
           {!flow && (
             <Button
               type="button"
-              className="task-form__submit provider-auth-primary-action"
+              className="self-start"
               onClick={() => {
                   void handleStart(method);
                 }}
@@ -205,8 +205,8 @@ export function ProviderAuthFlowModal({
           )}
 
           {flow && (
-            <div className="provider-auth-flow-panel">
-              <div className="settings-item__meta">
+            <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-border p-3">
+              <div className="flex flex-wrap gap-1">
                 <Badge size="meta" variant="secondary">
                   {flow.method === "browser" ? "Browser flow" : "Device code"}
                 </Badge>
@@ -228,44 +228,43 @@ export function ProviderAuthFlowModal({
               </div>
 
               {flow.method === "browser" && flow.authorization_url && flow.status === "pending" && (
-                <div className="provider-auth-flow-block">
-                  <div className="provider-auth-flow-label">Authorization URL</div>
+                <div className="flex min-w-0 flex-col gap-2">
+                  <div className="text-xs font-medium text-muted-foreground">Authorization URL</div>
                   <a
                     href={flow.authorization_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="provider-auth-flow-link"
+                    className="inline-flex items-center gap-1 text-sm break-all text-primary underline-offset-4 hover:underline"
                   >
                     <ExternalLinkIcon aria-hidden="true" />
                     Open authorization
                   </a>
-                  <div className="task-form__hint">
+                  <div className="text-xs text-muted-foreground">
                     Complete the sign-in in the opened tab, then return here.
                   </div>
                 </div>
               )}
 
               {flow.method === "device" && flow.status === "pending" && (
-                <div className="provider-auth-flow-block">
-                  <div className="provider-auth-flow-label">Verification</div>
+                <div className="flex min-w-0 flex-col gap-2">
+                  <div className="text-xs font-medium text-muted-foreground">Verification</div>
                   {flow.verification_url && (
                     <a
                       href={flow.verification_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="provider-auth-flow-link"
+                      className="inline-flex items-center gap-1 text-sm break-all text-primary underline-offset-4 hover:underline"
                     >
                       {flow.verification_url}
                     </a>
                   )}
                   {flow.user_code && (
-                    <div className="provider-auth-code-row">
-                      <code className="provider-auth-code">{flow.user_code}</code>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <code className="rounded-md bg-muted px-2 py-1 font-mono text-base font-semibold tracking-widest">{flow.user_code}</code>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="provider-auth-secondary-action"
                         onClick={() => {
                           void copyDeviceCode();
                         }}
@@ -276,13 +275,13 @@ export function ProviderAuthFlowModal({
                     </div>
                   )}
                   {copyFeedback && (
-                    <div className="task-form__hint">{copyFeedback}</div>
+                    <div className="text-xs text-muted-foreground">{copyFeedback}</div>
                   )}
                 </div>
               )}
 
               {flow.status === "pending" && (
-                <Alert className="settings-inline-note provider-auth-inline-note">
+                <Alert>
                   <AlertDescription>
                   Waiting for authorization… The page will update automatically.
                   </AlertDescription>
@@ -290,13 +289,13 @@ export function ProviderAuthFlowModal({
               )}
 
               {flow.status === "failed" && flow.error_message && (
-                <Alert variant="destructive" className="task-form__error">
+                <Alert variant="destructive">
                   <AlertDescription>{flow.error_message}</AlertDescription>
                 </Alert>
               )}
 
               {flow.status === "completed" && (
-                <Alert className="settings-inline-note provider-auth-inline-note">
+                <Alert>
                   <CheckCircle2Icon />
                   <AlertDescription>
                   Connected
@@ -307,13 +306,12 @@ export function ProviderAuthFlowModal({
                 </Alert>
               )}
 
-              <div className="provider-auth-actions-row">
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 {flow.status === "pending" && (
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="provider-auth-secondary-action"
                     onClick={() => {
                       const next =
                         flow.method === "browser"
@@ -334,7 +332,6 @@ export function ProviderAuthFlowModal({
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="provider-auth-secondary-action"
                     onClick={() => {
                       void handleStart(method);
                     }}
@@ -347,7 +344,6 @@ export function ProviderAuthFlowModal({
                 <Button
                   type="button"
                   size="sm"
-                  className="provider-auth-primary-action"
                   onClick={onClose}
                   disabled={isStarting}
                 >
@@ -358,7 +354,7 @@ export function ProviderAuthFlowModal({
           )}
 
           {error && (
-            <Alert variant="destructive" className="task-form__error">
+            <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}

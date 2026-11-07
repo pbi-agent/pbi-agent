@@ -12,7 +12,6 @@ import type { ConfigOptions, ProviderAuthStatus, ProviderView } from "../../type
 import { EmptyState } from "../shared/EmptyState";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
+import { SettingsList, SettingsPanel, SettingsSection } from "./settings-layout";
 
 function providerKindLabel(providerKind: string, options: ConfigOptions): string {
   return options.provider_metadata[providerKind]?.label ?? providerKind;
@@ -104,16 +104,19 @@ function ProviderCard({
   }
 
   return (
-    <Card className="settings-item settings-item--provider provider-card">
-      <div className="provider-card__info">
-        <span className="settings-item__name">{provider.name}</span>
+    <div
+      data-settings-provider-card=""
+      className="flex min-w-0 items-start justify-between gap-3 rounded-lg border border-border p-3"
+    >
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="truncate text-sm font-medium">{provider.name}</span>
         {subtitleParts.length > 0 && (
-          <div className="provider-card__subtitle">
+          <div className="truncate text-xs text-muted-foreground">
             {subtitleParts.join(" · ")}
           </div>
         )}
         {capabilityBadges.length > 0 && (
-          <div className="settings-item__meta">
+          <div className="flex flex-wrap gap-1">
             {capabilityBadges.map((badge) => (
               <Badge key={badge.label} size="meta" variant={badge.variant}>
                 {badge.label}
@@ -122,14 +125,13 @@ function ProviderCard({
           </div>
         )}
       </div>
-      <div className="provider-card__actions">
+      <div className="flex shrink-0 items-center">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
-              className="settings-action-button"
               aria-label={`Open actions for ${provider.name} provider`}
             >
               <MoreHorizontalIcon />
@@ -182,7 +184,7 @@ function ProviderCard({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -210,23 +212,22 @@ export function ProvidersSettingsSection({
   onShowUsage: (provider: ProviderView) => void;
 }) {
   return (
-    <section className="settings-section settings-section--active">
-      <Card className="settings-panel">
-        <CardHeader className="settings-panel__header">
-          <div>
-            <CardTitle className="settings-panel__title">Providers</CardTitle>
-            <div className="settings-panel__subtitle">Model and speech provider connections and credentials</div>
-          </div>
-          <Button type="button" variant="ghost" size="sm" className="settings-action-button" onClick={onCreate}>
+    <SettingsSection>
+      <SettingsPanel
+        title="Providers"
+        description="Model and speech provider connections and credentials"
+        actions={
+          <Button type="button" variant="ghost" size="sm" onClick={onCreate}>
             <PlusIcon data-icon="inline-start" />
             Add Provider
           </Button>
-        </CardHeader>
-        <CardContent className="settings-panel__body">
-          {providers.length === 0 ? (
-            <EmptyState title="No providers configured" description="Add a provider to start using model profiles." />
-          ) : (
-            providers.map((provider) => (
+        }
+      >
+        {providers.length === 0 ? (
+          <EmptyState title="No providers configured" description="Add a provider to start using model profiles." />
+        ) : (
+          <SettingsList>
+            {providers.map((provider) => (
               <ProviderCard
                 key={provider.id}
                 provider={provider}
@@ -239,10 +240,10 @@ export function ProvidersSettingsSection({
                 onDisconnect={() => onDisconnect(provider.id)}
                 onShowUsage={() => onShowUsage(provider)}
               />
-            ))
-          )}
-        </CardContent>
-      </Card>
-    </section>
+            ))}
+          </SettingsList>
+        )}
+      </SettingsPanel>
+    </SettingsSection>
   );
 }

@@ -75,7 +75,7 @@ export function WorkspaceSwitcherDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="task-form-dialog workspace-switcher-dialog">
+      <DialogContent className="flex max-h-dvh flex-col sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Switch workspace</DialogTitle>
           <DialogDescription>
@@ -88,9 +88,9 @@ export function WorkspaceSwitcherDialog({
             <AlertDescription>{mutationError}</AlertDescription>
           </Alert>
         ) : null}
-        <div className="workspace-switcher-dialog__list">
+        <div className="flex max-h-80 min-h-0 flex-col gap-1 overflow-y-auto">
           {recentQuery.isLoading ? (
-            <div className="workspace-switcher-dialog__empty">
+            <div className="px-3 py-6 text-center text-sm text-muted-foreground">
               Loading recent workspaces…
             </div>
           ) : recentQuery.data?.workspaces.length ? (
@@ -101,9 +101,8 @@ export function WorkspaceSwitcherDialog({
                 aria-current={workspace.is_current ? "page" : undefined}
                 data-current={workspace.is_current ? "true" : undefined}
                 className={cn(
-                  "workspace-switcher-dialog__workspace",
-                  workspace.is_current &&
-                    "workspace-switcher-dialog__workspace--current",
+                  "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50",
+                  workspace.is_current && "bg-muted",
                 )}
                 disabled={switchMutation.isPending}
                 onClick={() => {
@@ -112,11 +111,11 @@ export function WorkspaceSwitcherDialog({
                   }
                 }}
               >
-                <div className="workspace-switcher-dialog__workspace-text">
-                  <div className="workspace-switcher-dialog__workspace-name">
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <div className="truncate text-sm font-medium text-foreground">
                     {workspace.display_path}
                   </div>
-                  <div className="workspace-switcher-dialog__workspace-path">
+                  <div className="truncate font-mono text-xs text-muted-foreground">
                     {workspace.is_sandbox ? "Sandbox · " : ""}
                     {workspace.root_path}
                   </div>
@@ -127,7 +126,7 @@ export function WorkspaceSwitcherDialog({
               </button>
             ))
           ) : (
-            <div className="workspace-switcher-dialog__empty">
+            <div className="px-3 py-6 text-center text-sm text-muted-foreground">
               No recent workspaces yet.
             </div>
           )}
@@ -139,7 +138,7 @@ export function WorkspaceSwitcherDialog({
           type="button"
           variant="outline"
           size="lg"
-          className="workspace-switcher-dialog__pick-button"
+          className="w-full"
           onClick={() => pickMutation.mutate()}
           disabled={pickMutation.isPending}
         >
@@ -147,7 +146,7 @@ export function WorkspaceSwitcherDialog({
           Choose folder…
         </Button>
         {pickerUnavailableMessage ? (
-          <Alert className="workspace-switcher-dialog__warning">
+          <Alert data-workspace-picker-warning="">
             <AlertTriangleIcon />
             <AlertDescription>{pickerUnavailableMessage}</AlertDescription>
           </Alert>

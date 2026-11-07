@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ChevronRightIcon, SquareIcon, XIcon } from "lucide-react";
 import { getBackgroundTaskOutput } from "../../api";
 import type { BackgroundTask, BackgroundTaskOutput } from "../../types";
+import { cn } from "../../lib/utils";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
@@ -13,6 +14,9 @@ type Props = {
   onKill?: (taskId: string) => Promise<void> | void;
   onClose?: () => void;
 };
+
+const PRE_CLASS_NAME =
+  "m-0 max-h-80 overflow-auto rounded-sm border border-border bg-muted px-3 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap text-foreground";
 
 const STATUS_VARIANT = {
   running: "running",
@@ -99,20 +103,19 @@ export function BackgroundTasksPanel({ sessionId, tasks, onKill, onClose }: Prop
   return (
     <aside
       id="background-tasks-panel"
-      className="workspace-file-panel"
+      className="flex size-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"
       aria-label="Background tasks"
     >
-      <header className="workspace-file-panel__header">
-        <div className="workspace-file-panel__heading">
-          <h2>Background tasks</h2>
-          <p>{summary}</p>
+      <header data-panel-header="" className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-sidebar px-3">
+        <div className="flex min-w-0 flex-col">
+          <h2 className="truncate text-sm font-semibold">Background tasks</h2>
+          <p className="truncate text-xs text-muted-foreground">{summary}</p>
         </div>
-        <div className="workspace-file-panel__actions">
+        <div className="flex shrink-0 items-center gap-1">
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="app-close-icon-button"
             aria-label="Close background tasks panel"
             onClick={onClose}
           >
@@ -120,8 +123,8 @@ export function BackgroundTasksPanel({ sessionId, tasks, onKill, onClose }: Prop
           </Button>
         </div>
       </header>
-      <div className="background-tasks-panel__scroll">
-        <div className="background-tasks-panel__list">
+      <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
+        <div className="flex min-w-0 flex-col gap-2 px-4 py-3">
           {tasks.length === 0 ? (
             <Empty>
               <EmptyHeader>
@@ -140,22 +143,22 @@ export function BackgroundTasksPanel({ sessionId, tasks, onKill, onClose }: Prop
                 key={task.task_id}
                 open={isOpen}
                 onOpenChange={(next) => toggle(task.task_id, next)}
-                className="background-tasks-panel__item"
               >
-                <div className="background-tasks-panel__row">
+               <div className="min-w-0 overflow-hidden rounded-md border border-border bg-card">
+                <div className="flex items-center gap-2 px-3 py-2">
                   <CollapsibleTrigger asChild>
                     <button
                       type="button"
-                      className="background-tasks-panel__trigger"
+                      className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       aria-label={`Toggle output for ${task.intent || task.task_id}`}
                     >
                       <ChevronRightIcon
                         aria-hidden="true"
-                        className="background-tasks-panel__chevron"
+                        className="mt-1 size-3.5 shrink-0 text-muted-foreground transition-transform data-[open=true]:rotate-90"
                         data-open={isOpen ? "true" : "false"}
                       />
-                      <span className="background-tasks-panel__copy">
-                        <span className="background-tasks-panel__title">
+                      <span className="flex min-w-0 flex-1 flex-col gap-1">
+                        <span className="flex min-w-0 items-center gap-2">
                           <Badge variant={STATUS_VARIANT[task.status]} size="meta">
                             {STATUS_LABEL[task.status]}
                             {task.exit_code !== null &&
@@ -164,16 +167,16 @@ export function BackgroundTasksPanel({ sessionId, tasks, onKill, onClose }: Prop
                               ? ` · exit ${task.exit_code}`
                               : ""}
                           </Badge>
-                          <span className="background-tasks-panel__meta">
+                          <span className="text-xs text-muted-foreground">
                             {task.task_id} · {formatElapsed(elapsedFor(task))}
                           </span>
                         </span>
                         {task.intent ? (
-                          <span className="background-tasks-panel__intent" title={task.command}>
+                          <span className="truncate text-sm" title={task.command}>
                             {task.intent}
                           </span>
                         ) : (
-                          <code className="background-tasks-panel__command" title={task.command}>
+                          <code className="truncate font-mono text-xs text-muted-foreground" title={task.command}>
                             {task.command}
                           </code>
                         )}
@@ -185,7 +188,6 @@ export function BackgroundTasksPanel({ sessionId, tasks, onKill, onClose }: Prop
                       type="button"
                       variant="destructive"
                       size="sm"
-                      className="tool-result-card__interrupt-button"
                       disabled={!onKill}
                       aria-label={`Kill background task ${task.intent || task.task_id}`}
                       onClick={() => void onKill?.(task.task_id)}
@@ -195,29 +197,32 @@ export function BackgroundTasksPanel({ sessionId, tasks, onKill, onClose }: Prop
                     </Button>
                   ) : null}
                 </div>
-                <CollapsibleContent className="background-tasks-panel__output">
+                <CollapsibleContent>
+                 <div className="flex min-w-0 flex-col gap-2 border-t border-border px-3 pt-2 pb-3">
                   {errors[task.task_id] ? (
-                    <span className="composer__follow-up-error">{errors[task.task_id]}</span>
+                    <span role="alert" className="text-xs text-destructive">{errors[task.task_id]}</span>
                   ) : output ? (
                     <>
-                      <span className="background-tasks-panel__label">Input</span>
-                      <pre className="background-tasks-panel__pre" data-stream="input">
+                      <span className="text-xs font-medium text-muted-foreground">Input</span>
+                      <pre className={cn(PRE_CLASS_NAME, "max-h-40")} data-stream="input">
                         {task.command}
                       </pre>
-                      <span className="background-tasks-panel__label">Output</span>
-                      <pre className="background-tasks-panel__pre">
+                      <span className="text-xs font-medium text-muted-foreground">Output</span>
+                      <pre className={PRE_CLASS_NAME}>
                         {output.stdout || "(no stdout)"}
                       </pre>
                       {output.stderr ? (
-                        <pre className="background-tasks-panel__pre" data-stream="stderr">
+                        <pre className={cn(PRE_CLASS_NAME, "text-destructive")} data-stream="stderr">
                           {output.stderr}
                         </pre>
                       ) : null}
                     </>
                   ) : (
-                    <span className="background-tasks-panel__meta">Loading output…</span>
+                    <span className="text-xs text-muted-foreground">Loading output…</span>
                   )}
+                 </div>
                 </CollapsibleContent>
+               </div>
               </Collapsible>
             );
           })}

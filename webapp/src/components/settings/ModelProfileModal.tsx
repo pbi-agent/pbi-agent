@@ -311,7 +311,7 @@ function SelectOrCustomValueControl({
             onChange(fromSelectValue(nextValue))
           }
         >
-          <SelectTrigger aria-label={label} className="task-form__select">
+          <SelectTrigger aria-label={label} data-settings-select>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -342,7 +342,7 @@ function SelectOrCustomValueControl({
       <FieldLabel>{label}</FieldLabel>
       <Input
         name={name}
-        className="task-form__input"
+        data-settings-input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
@@ -673,7 +673,7 @@ export function ModelProfileModal({
                 <FieldLabel>Name</FieldLabel>
                 <Input
                   name="profile-name"
-                  className="task-form__input"
+                  data-settings-input
                   value={form.name}
                   onChange={(e) => set({ name: e.target.value })}
                   required
@@ -687,7 +687,7 @@ export function ModelProfileModal({
                   <FieldLabel>ID (optional)</FieldLabel>
                   <Input
                     name="profile-id"
-                    className="task-form__input"
+                    data-settings-input
                     value={form.id}
                     onChange={(e) => set({ id: e.target.value })}
                     placeholder="Auto-generated from name"
@@ -708,7 +708,7 @@ export function ModelProfileModal({
                 >
                   <SelectTrigger
                     aria-label="Provider"
-                    className="task-form__select"
+                    data-settings-select
                   >
                     <SelectValue />
                   </SelectTrigger>
@@ -727,7 +727,7 @@ export function ModelProfileModal({
                 </Select>
               </Field>
 
-              <div className="task-form__row">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field>
                   <SelectOrCustomValueControl
                     label="Model"
@@ -768,9 +768,6 @@ export function ModelProfileModal({
               {(providerModelsPending || discoveryMessage) && (
                 <Alert
                   variant={discoveryMessage ? "destructive" : "default"}
-                  className={
-                    discoveryMessage ? "task-form__error" : "task-form__hint"
-                  }
                 >
                   <AlertDescription>
                     {providerModelsPending
@@ -780,7 +777,7 @@ export function ModelProfileModal({
                 </Alert>
               )}
 
-              <div className="task-form__row">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field>
                   <SelectOrCustomValueControl
                     label="Reasoning effort"
@@ -802,7 +799,7 @@ export function ModelProfileModal({
                   <FieldLabel>Max tokens</FieldLabel>
                   <Input
                     name="max-tokens"
-                    className="task-form__input"
+                    data-settings-input
                     type="number"
                     min="0"
                     value={form.max_tokens}
@@ -823,7 +820,7 @@ export function ModelProfileModal({
                   >
                     <SelectTrigger
                       aria-label="Reasoning mode"
-                      className="task-form__select"
+                      data-settings-select
                     >
                       <SelectValue />
                     </SelectTrigger>
@@ -856,7 +853,7 @@ export function ModelProfileModal({
                   >
                     <SelectTrigger
                       aria-label="Service tier"
-                      className="task-form__select"
+                      data-settings-select
                     >
                       <SelectValue />
                     </SelectTrigger>
@@ -901,12 +898,12 @@ export function ModelProfileModal({
                 </FieldGroup>
               </FieldSet>
 
-              <div className="task-form__row">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field>
                   <FieldLabel>Max tool workers</FieldLabel>
                   <Input
                     name="max-tool-workers"
-                    className="task-form__input"
+                    data-settings-input
                     type="number"
                     min="0"
                     value={form.max_tool_workers}
@@ -918,7 +915,7 @@ export function ModelProfileModal({
                   <FieldLabel>Max retries</FieldLabel>
                   <Input
                     name="max-retries"
-                    className="task-form__input"
+                    data-settings-input
                     type="number"
                     min="0"
                     value={form.max_retries}
@@ -932,7 +929,7 @@ export function ModelProfileModal({
                 <FieldLabel>Compact threshold</FieldLabel>
                 <Input
                   name="compact-threshold"
-                  className="task-form__input"
+                  data-settings-input
                   type="number"
                   min="0"
                   value={form.compact_threshold}

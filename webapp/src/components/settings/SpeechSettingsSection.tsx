@@ -4,7 +4,6 @@ import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue } from "../../lib/se
 import { EmptyState } from "../shared/EmptyState";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Badge } from "../ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import {
   Select,
   SelectContent,
@@ -12,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
+import { SettingsPanel, SettingsSection } from "./settings-layout";
 
 function providerKindLabel(providerKind: string, options: ConfigOptions): string {
   return options.provider_metadata[providerKind]?.label ?? providerKind;
@@ -96,27 +96,23 @@ export function SpeechSettingsSection({
   }
 
   return (
-    <section className="settings-section settings-section--active">
-      <Card className="settings-panel">
-        <CardHeader className="settings-panel__header">
-          <div>
-            <CardTitle className="settings-panel__title">
-              Speech-to-text
-            </CardTitle>
-            <div className="settings-panel__subtitle">
-              Choose the saved provider used for future dictation and
-              transcription.
-            </div>
-          </div>
+    <SettingsSection>
+      <SettingsPanel
+        title="Speech-to-text"
+        description="Choose the saved provider used for future dictation and transcription."
+        actions={
           <Badge variant="info" size="meta">
             STT
           </Badge>
-        </CardHeader>
-        <CardContent className="settings-panel__body">
+        }
+      >
           {showSelector ? (
             <>
-              <div className="active-profile-control">
-                <span className="active-profile-control__label">
+              <div
+                data-settings-active-control=""
+                className="flex flex-wrap items-center gap-3"
+              >
+                <span className="text-sm font-medium">
                   Active default
                 </span>
                 <Select
@@ -129,7 +125,8 @@ export function SpeechSettingsSection({
                   <SelectTrigger
                     id="stt-provider"
                     aria-label="Speech-to-text provider"
-                    className="active-profile-control__select"
+                    data-settings-active-select=""
+                    className="min-w-0 flex-1"
                   >
                     <SelectValue />
                   </SelectTrigger>
@@ -154,7 +151,7 @@ export function SpeechSettingsSection({
               </div>
 
               {activeProviderUnavailable && (
-                <Alert className="settings-inline-note">
+                <Alert>
                   <AlertDescription>
                     The selected speech provider is not ready. Add credentials
                     or clear the selection.
@@ -170,7 +167,7 @@ export function SpeechSettingsSection({
           )}
 
           {missingCredentialProviders.length > 0 && (
-            <Alert className="settings-inline-note">
+            <Alert>
               <AlertDescription>
                 These speech-capable providers need credentials before
                 selection:{" "}
@@ -183,12 +180,11 @@ export function SpeechSettingsSection({
           )}
 
           {error && (
-            <Alert variant="destructive" className="settings-error-banner">
+            <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-        </CardContent>
-      </Card>
-    </section>
+      </SettingsPanel>
+    </SettingsSection>
   );
 }

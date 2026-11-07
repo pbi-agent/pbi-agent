@@ -156,7 +156,7 @@ function AlertDialogAction({
     <Button variant={variant} size={size} asChild>
       <AlertDialogPrimitive.Action
         data-slot="alert-dialog-action"
-        className={cn("alert-dialog__button", className)}
+        className={cn(className)}
         {...props}
       />
     </Button>
@@ -174,7 +174,7 @@ function AlertDialogCancel({
     <Button variant={variant} size={size} asChild>
       <AlertDialogPrimitive.Cancel
         data-slot="alert-dialog-cancel"
-        className={cn("alert-dialog__button", className)}
+        className={cn(className)}
         {...props}
       />
     </Button>

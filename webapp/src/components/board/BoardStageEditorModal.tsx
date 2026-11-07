@@ -151,7 +151,7 @@ export function BoardStageEditorModal({
       onCancel={onClose}
       size="wide"
     >
-      <div className="board-stage-editor">
+      <div className="flex flex-col gap-3">
         {items.map((item, index) => {
           const fixedStage = isFixedStage(item.id);
           const fixedStageLabel = item.id === BACKLOG_STAGE_ID
@@ -161,13 +161,12 @@ export function BoardStageEditorModal({
               : null;
 
           return (
-            <div key={`${item.id || "new"}-${index}`} className="board-stage-editor__row">
-              <div className="board-stage-editor__ordering">
+            <div key={`${item.id || "new"}-${index}`} data-stage-row={item.id || "new"} className="flex flex-col items-start gap-4 rounded-lg border border-border bg-muted/50 p-4 md:flex-row">
+              <div className="flex gap-1 md:flex-col">
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  className="board-stage-editor__icon-button"
                   onClick={() => moveItem(index, -1)}
                   disabled={index === 0 || isSaving || fixedStage}
                 >
@@ -177,7 +176,6 @@ export function BoardStageEditorModal({
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  className="board-stage-editor__icon-button"
                   onClick={() => moveItem(index, 1)}
                   disabled={index === items.length - 1 || isSaving || fixedStage}
                 >
@@ -185,11 +183,10 @@ export function BoardStageEditorModal({
                 </Button>
               </div>
 
-              <FieldGroup className="board-stage-editor__fields">
+              <FieldGroup className="min-w-0 flex-1">
                 <Field>
                   <FieldLabel>Name</FieldLabel>
                   <Input
-                    className="task-form__input"
                     value={item.name}
                     onChange={(event) => updateItem(index, { name: event.target.value })}
                     required
@@ -200,7 +197,7 @@ export function BoardStageEditorModal({
                   <FieldDescription>{fixedStageLabel}</FieldDescription>
                 ) : null}
 
-                <div className="task-form__row">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Field>
                     <FieldLabel>Profile</FieldLabel>
                     <Select
@@ -212,7 +209,6 @@ export function BoardStageEditorModal({
                     >
                       <SelectTrigger
                         aria-label="Profile"
-                        className="task-form__select"
                       >
                         <SelectValue />
                       </SelectTrigger>
@@ -238,7 +234,6 @@ export function BoardStageEditorModal({
                     >
                       <SelectTrigger
                         aria-label="Command"
-                        className="task-form__select"
                       >
                         <SelectValue />
                       </SelectTrigger>
@@ -254,9 +249,8 @@ export function BoardStageEditorModal({
                   </Field>
                 </div>
 
-                <Field orientation="horizontal" className="board-stage-editor__toggle">
+                <Field orientation="horizontal">
                   <Checkbox
-                    className="board-stage-editor__checkbox"
                     checked={item.auto_start}
                     onCheckedChange={(checked) => updateItem(index, { auto_start: checked === true })}
                     disabled={fixedStage}
@@ -269,7 +263,6 @@ export function BoardStageEditorModal({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="board-stage-editor__remove-button"
                 onClick={() => removeStage(index)}
                 disabled={isSaving || items.length === 1 || fixedStage}
               >
@@ -281,12 +274,11 @@ export function BoardStageEditorModal({
         })}
       </div>
 
-      <div className="board-stage-editor__toolbar app-action-row app-action-row--compact">
+      <div className="flex items-center gap-2">
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="board-stage-editor__add-button"
           onClick={addStage}
           disabled={isSaving}
         >

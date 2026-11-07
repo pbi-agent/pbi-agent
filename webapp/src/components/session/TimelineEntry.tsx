@@ -16,6 +16,30 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { isApplyPatchToolMetadata } from "./GitDiffResult";
 import { ToolResult } from "./ToolResult";
 import { useSkillCatalog } from "../../hooks/useSkillCatalog";
+import { Spinner } from "../ui/spinner";
+import { cn } from "@/lib/utils";
+
+type RoleClass = "user" | "error" | "notice" | "debug" | "assistant";
+
+const ENTRY_ROLE_CLASSES: Record<RoleClass, string> = {
+  user: "max-w-3/4 self-end",
+  assistant: "",
+  error: "",
+  notice: "self-center",
+  debug: "",
+};
+
+const CONTENT_ROLE_CLASSES: Record<RoleClass, string> = {
+  user: "rounded-lg rounded-br-sm border border-primary/30 bg-primary/10 px-5 py-3 text-sm leading-relaxed",
+  assistant:
+    "overflow-x-auto rounded-lg rounded-tl-sm border border-border bg-card px-5 py-4 text-sm leading-relaxed text-card-foreground",
+  error: "rounded-sm border-l-4 border-destructive bg-destructive/10 px-4 py-3 text-sm text-destructive",
+  notice: "px-3 py-1 text-center text-xs text-muted-foreground",
+  debug: "rounded-sm bg-muted px-3 py-2 font-mono text-xs text-muted-foreground",
+};
+
+const THINKING_BODY_CLASSES =
+  "rounded-sm bg-muted/50 px-5 py-4 text-sm leading-relaxed text-muted-foreground";
 
 const SPECIAL_TAG_BOUNDARY_PATTERN = /[\s()[\]{}'"`,;]/;
 const USER_TEXT_COLLAPSE_CHARACTER_THRESHOLD = 700;
@@ -104,7 +128,13 @@ function renderUserTextNodes(
     nodes.push(
       <span
         key={`special-tag-${partIndex}`}
-        className={`timeline-entry__special-tag timeline-entry__${nextMatch.kind}-tag`}
+        className={cn(
+          "mx-0.5 inline-flex items-center rounded-full border px-2 py-px align-baseline font-mono text-xs",
+          nextMatch.kind === "file"
+            ? "border-primary/30 bg-primary/10 text-primary"
+            : "border-border bg-secondary text-secondary-foreground",
+        )}
+        data-special-tag={nextMatch.kind}
       >
         {nextMatch.text}
       </span>,
@@ -147,22 +177,22 @@ function UserMessageContent({
   return (
     <>
       {imageAttachments && imageAttachments.length > 0 ? (
-        <div className="timeline-entry__attachments">
+        <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {imageAttachments.map((attachment) => (
             <Tooltip key={attachment.upload_id}>
               <TooltipTrigger asChild>
                 <a
-                  className="timeline-entry__attachment"
+                  className="flex min-w-0 flex-col gap-2 rounded-md border border-primary/30 bg-background p-2 text-inherit"
                   href={attachment.preview_url}
                   target="_blank"
                   rel="noreferrer"
                 >
                   <img
-                    className="timeline-entry__attachment-preview"
+                    className="block max-h-96 w-full rounded-sm bg-muted object-contain"
                     src={attachment.preview_url}
                     alt={attachment.name}
                   />
-                  <span className="timeline-entry__attachment-name">{attachment.name}</span>
+                  <span className="block max-w-full truncate text-xs text-muted-foreground">{attachment.name}</span>
                 </a>
               </TooltipTrigger>
               <TooltipContent>{attachment.name}</TooltipContent>
@@ -171,7 +201,7 @@ function UserMessageContent({
         </div>
       ) : null}
       {parsedReply.snippets.length > 0 ? (
-        <div className="timeline-entry__reply-snippets">
+        <div className="mb-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {parsedReply.snippets.map((snippet, index) => (
             <ReplySnippetCard key={index} quote={snippet.quote} comment={snippet.comment} />
           ))}
@@ -180,18 +210,22 @@ function UserMessageContent({
       {hasText ? (
         <p
           id={canCollapse ? textId : undefined}
-          className={`timeline-entry__user-text${canCollapse && !expanded ? " timeline-entry__user-text--collapsed" : ""}`}
+          className={cn(
+            "m-0 wrap-anywhere whitespace-pre-wrap",
+            canCollapse && !expanded && "max-h-48 overflow-hidden mask-b-from-60%",
+          )}
+          data-user-text
+          data-collapsed={canCollapse && !expanded ? "true" : undefined}
         >
           {nodes}
         </p>
       ) : null}
       {canCollapse ? (
-        <div className="timeline-entry__user-toggle-row">
+        <div className="mt-2 flex justify-end">
           <Button
             type="button"
             variant="ghost"
             size="xs"
-            className="timeline-entry__user-toggle"
             aria-controls={textId}
             aria-expanded={expanded}
             aria-label={expanded ? "Collapse user input" : "Show full user input"}
@@ -267,8 +301,14 @@ export function TimelineEntry({
   const subAgentName = subAgentHeaderName(subAgentTitle);
   const subAgentBanner =
     subAgentName || subAgentStatus ? (
-      <div className="timeline-entry__subagent">
-        <span className={`indicator-dot indicator-dot--${subAgentStatus === "running" ? "connecting" : "connected"}`} />
+      <div className="mb-1 flex items-center gap-2 font-mono text-xs text-muted-foreground">
+        <span
+          className={cn(
+            "size-1.5 shrink-0 rounded-full",
+            subAgentStatus === "running" ? "animate-pulse bg-primary" : "bg-muted-foreground",
+          )}
+          data-subagent-status={subAgentStatus === "running" ? "running" : "done"}
+        />
         <span>{subAgentName ?? "sub_agent"}</span>
       </div>
     ) : null;
@@ -277,16 +317,17 @@ export function TimelineEntry({
     if (item.role === "assistant" && item.content.trim() === "[compacted context]") {
       return (
         <div
-          className="timeline-entry timeline-entry--compaction"
+          className="flex w-full animate-in flex-col items-center gap-1 fade-in"
+          data-timeline-entry="compaction"
           data-timeline-item-id={item.itemId}
         >
           <Separator />
-          <span className="timeline-entry__compaction-label">compacted context</span>
+          <span className="text-xs text-muted-foreground" data-compaction-label>compacted context</span>
         </div>
       );
     }
 
-    const roleClass =
+    const roleClass: RoleClass =
       item.role === "user" ? "user"
       : item.role === "error" ? "error"
       : item.role === "notice" ? "notice"
@@ -303,7 +344,6 @@ export function TimelineEntry({
       <CopyShortcut
         text={item.content}
         ariaLabel="Copy turn"
-        className="timeline-entry__action-button timeline-entry__copy-button"
       />
     ) : null;
     const forkAction = canFork ? (
@@ -313,7 +353,6 @@ export function TimelineEntry({
             type="button"
             variant="outline"
             size="icon-sm"
-            className="timeline-entry__action-button timeline-entry__fork-button"
             aria-label="Fork conversation"
             onClick={() => onForkMessage(item.messageId!)}
           >
@@ -324,7 +363,13 @@ export function TimelineEntry({
       </Tooltip>
     ) : null;
     const turnActions = turnCopyAction || forkAction ? (
-      <div className="timeline-entry__actions">
+      <div
+        className={cn(
+          "pointer-events-none mt-1 flex gap-1 opacity-0 transition-opacity group-focus-within/entry:pointer-events-auto group-focus-within/entry:opacity-100 group-hover/entry:pointer-events-auto group-hover/entry:opacity-100",
+          roleClass === "user" ? "justify-end" : "justify-start",
+        )}
+        data-timeline-actions
+      >
         {turnCopyAction}
         {forkAction}
       </div>
@@ -332,11 +377,12 @@ export function TimelineEntry({
 
     const entry = (
       <div
-        className={`timeline-entry timeline-entry--${roleClass}`}
+        className={cn("group/entry animate-in fade-in", ENTRY_ROLE_CLASSES[roleClass])}
+        data-timeline-entry={roleClass}
         data-timeline-item-id={item.itemId}
       >
         {subAgentBanner}
-        <div className="timeline-entry__content">
+        <div className={CONTENT_ROLE_CLASSES[roleClass]} data-timeline-content>
           {item.markdown && roleClass !== "user" ? (
             <MarkdownContent content={item.content} copyable={item.role === "assistant"} />
           ) : (
@@ -357,7 +403,7 @@ export function TimelineEntry({
       return (
         <>
           {entry}
-          <div className="timeline-entry timeline-entry--compaction-summary-end">
+          <div className="flex w-full flex-col items-center" data-timeline-entry="compaction-summary-end">
             <Separator />
           </div>
         </>
@@ -371,12 +417,14 @@ export function TimelineEntry({
     if (bare) {
       return (
         <div
-          className="timeline-entry timeline-entry--thinking timeline-entry--bare"
+          className="m-0 animate-in fade-in"
+          data-timeline-entry="thinking"
+          data-bare="true"
           data-timeline-item-id={item.itemId}
         >
           {subAgentBanner}
-          <div className="timeline-entry__bare-title">{item.title}</div>
-          <div className="timeline-entry__body">
+          <div className="mb-1 text-xs font-medium text-muted-foreground">{item.title}</div>
+          <div className={THINKING_BODY_CLASSES}>
             <MarkdownContent content={item.content} />
           </div>
         </div>
@@ -385,7 +433,8 @@ export function TimelineEntry({
 
     return (
       <div
-        className="timeline-entry timeline-entry--thinking"
+        className="animate-in fade-in"
+        data-timeline-entry="thinking"
         data-timeline-item-id={item.itemId}
       >
         {subAgentBanner}
@@ -393,17 +442,21 @@ export function TimelineEntry({
           type="button"
           variant="ghost"
           size="sm"
-          className="timeline-entry__header"
+          className="w-full justify-start"
+          aria-expanded={!thinkingCollapsed}
           onClick={() => setThinkingCollapsedState({
             collapsed: !thinkingCollapsed,
             closeSignal,
           })}
         >
-          <ChevronRightIcon className={`timeline-entry__chevron ${thinkingCollapsed ? "" : "timeline-entry__chevron--open"}`} />
+          <ChevronRightIcon
+            data-icon="inline-start"
+            className={cn("transition-transform", !thinkingCollapsed && "rotate-90")}
+          />
           <span>{item.title}</span>
         </Button>
         {!thinkingCollapsed ? (
-          <div className="timeline-entry__body">
+          <div className={cn("mt-1", THINKING_BODY_CLASSES)}>
             <MarkdownContent content={item.content} />
           </div>
         ) : null}
@@ -415,11 +468,13 @@ export function TimelineEntry({
   if (bare) {
     return (
       <div
-        className="timeline-entry timeline-entry--tool timeline-entry--bare"
+        className="m-0 animate-in fade-in"
+        data-timeline-entry="tool"
+        data-bare="true"
         data-timeline-item-id={item.itemId}
       >
         {subAgentBanner}
-        <div className="timeline-entry__body">
+        <div className="flex flex-col gap-2">
           {item.items.map((toolItem, index) => {
             const status = toolItemStatus(toolItem);
             return (
@@ -438,7 +493,8 @@ export function TimelineEntry({
 
   return (
     <div
-      className="timeline-entry timeline-entry--tool"
+      className="animate-in fade-in"
+      data-timeline-entry="tool"
       data-timeline-item-id={item.itemId}
     >
       {subAgentBanner}
@@ -451,17 +507,20 @@ export function TimelineEntry({
             type="button"
             variant="ghost"
             size="sm"
-            className="timeline-entry__header"
+            className="group/tool-trigger w-full justify-start"
           >
-            <ChevronRightIcon className="timeline-entry__chevron" />
+            <ChevronRightIcon
+              data-icon="inline-start"
+              className="transition-transform group-data-[state=open]/tool-trigger:rotate-90"
+            />
             <span>{item.label}</span>
             {item.status === "running" ? (
-              <span className="timeline-entry__running" aria-label="running" />
+              <Spinner className="ml-auto" aria-label="running" />
             ) : null}
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="timeline-entry__body">
+          <div className="mt-1 flex flex-col gap-2">
             {item.items.map((toolItem, index) => {
               const status = toolItemStatus(toolItem);
               return (
