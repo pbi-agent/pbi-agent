@@ -63,6 +63,7 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.manager = manager
+    app.state.sse_shutdown_event = asyncio.Event()
     app.state.public_url = public_url
     app.state.debug = debug
 

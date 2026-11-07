@@ -4006,6 +4006,7 @@ def test_live_sse_last_event_id_takes_precedence_over_since_for_gap_detection(
         requested_since=None,
         replay_events=None,
         log_context=None,
+        shutdown_event=None,
     ):
         captured["since"] = since
         captured["requested_since"] = requested_since
@@ -13262,6 +13263,7 @@ def test_saved_session_sse_replays_latest_web_run_when_prior_cursor_is_high(
         requested_since=None,
         replay_events=None,
         log_context=None,
+        shutdown_event=None,
     ):
         captured["since"] = since
         captured["requested_since"] = requested_since
@@ -13376,6 +13378,7 @@ def test_saved_session_sse_replays_latest_web_run_when_prior_cursor_is_low(
         requested_since=None,
         replay_events=None,
         log_context=None,
+        shutdown_event=None,
     ):
         captured["since"] = since
         captured["requested_since"] = requested_since
@@ -13462,6 +13465,7 @@ def test_saved_session_sse_continues_when_cursor_matches_current_run(
         requested_since=None,
         replay_events=None,
         log_context=None,
+        shutdown_event=None,
     ):
         captured["since"] = since
         captured["requested_since"] = requested_since
@@ -13544,6 +13548,7 @@ def test_saved_session_sse_last_event_id_overrides_stale_since_for_new_run(
         requested_since=None,
         replay_events=None,
         log_context=None,
+        shutdown_event=None,
     ):
         captured["since"] = since
         captured["requested_since"] = requested_since
@@ -13841,3 +13846,27 @@ def test_background_task_result_wakes_idle_session(monkeypatch, tmp_path) -> Non
     assert received[0] == "Start"
     assert received[1].startswith(f'<background_task_result task_id="{task_ids[0]}"')
     assert "bg-done" in received[1]
+
+
+def test_sse_iterator_stops_when_server_shutdown_event_is_set() -> None:
+    app = create_app(_settings())
+    stream = app.state.manager.get_event_stream("app")
+
+    async def run() -> list[str]:
+        shutdown_event = asyncio.Event()
+        iterator = _iter_sse_events(stream, since=0, shutdown_event=shutdown_event)
+        chunks = [await anext(iterator)]
+        next_chunk = asyncio.ensure_future(anext(iterator))
+        await asyncio.sleep(0)
+        shutdown_event.set()
+        try:
+            chunks.append(await asyncio.wait_for(next_chunk, timeout=2))
+        except StopAsyncIteration:
+            pass
+        async for chunk in iterator:
+            chunks.append(chunk)
+        return chunks
+
+    chunks = asyncio.run(run())
+    assert "server.connected" in chunks[0]
+    assert stream.subscriber_count() == 0
