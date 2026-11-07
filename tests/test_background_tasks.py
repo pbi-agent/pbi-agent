@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from pbi_agent.tools import background_task as background_task_tool
 from pbi_agent.tools import shell as shell_tool
 from pbi_agent.tools.background_tasks import (
     BackgroundTask,
@@ -109,13 +110,8 @@ def test_shell_run_in_background_returns_task_id(tmp_path: Path) -> None:
     assert result["background"] is True
     assert result["status"] == "running"
     assert done.wait(timeout=5)
-    output = shell_tool.handle(
-        {
-            "intent": "Run test command",
-            "command": "",
-            "background_action": "output",
-            "task_id": result["task_id"],
-        },
+    output = background_task_tool.handle(
+        {"action": "output", "task_id": result["task_id"]},
         _context(tmp_path, manager),
     )
     assert output["stdout"].strip() == "hi"
@@ -162,19 +158,6 @@ def test_shell_background_rejected_for_sub_agents_and_unsupported(
             },
             "positive",
         ),
-        (
-            {"intent": "Run test command", "command": "", "background_action": "kill"},
-            "task_id",
-        ),
-        (
-            {
-                "intent": "Run test command",
-                "command": "",
-                "background_action": "status",
-                "task_id": "bg-x",
-            },
-            "Unknown",
-        ),
     ],
 )
 def test_shell_background_argument_validation(
@@ -183,3 +166,63 @@ def test_shell_background_argument_validation(
     manager, _finished, _done = _collecting_manager()
     result = shell_tool.handle(arguments, _context(tmp_path, manager))
     assert message in result["error"]
+
+
+def test_shell_has_no_background_management_fields() -> None:
+    properties = shell_tool.SPEC.parameters_schema["properties"]
+    assert "background_action" not in properties
+    assert "task_id" not in properties
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        ({}, "'action'"),
+        ({"action": "run"}, "'action'"),
+        ({"action": "kill"}, "'task_id' is required"),
+        ({"action": "status", "task_id": "  "}, "'task_id' is required"),
+        ({"action": "output", "task_id": "bg-x"}, "Unknown"),
+    ],
+)
+def test_background_task_argument_validation(
+    tmp_path: Path, arguments: dict[str, Any], message: str
+) -> None:
+    manager, _finished, _done = _collecting_manager()
+    result = background_task_tool.handle(arguments, _context(tmp_path, manager))
+    assert message in result["error"]
+
+
+def test_background_task_list_status_and_kill(tmp_path: Path) -> None:
+    manager, _finished, done = _collecting_manager()
+    context = _context(tmp_path, manager)
+    assert background_task_tool.handle({"action": "list"}, context) == {"tasks": []}
+    started = shell_tool.handle(
+        {"intent": "Sleep", "command": "sleep 30", "run_in_background": True},
+        context,
+    )
+    task_id = started["task_id"]
+    listed = background_task_tool.handle({"action": "list"}, context)
+    assert [task["task_id"] for task in listed["tasks"]] == [task_id]
+    status = background_task_tool.handle(
+        {"action": "status", "task_id": task_id}, context
+    )
+    assert status["status"] == "running"
+    killed = background_task_tool.handle(
+        {"action": "kill", "task_id": task_id}, context
+    )
+    assert killed["kill_requested"] is True
+    assert done.wait(timeout=10)
+
+
+def test_background_task_rejected_for_sub_agents_and_unsupported(
+    tmp_path: Path,
+) -> None:
+    manager, _finished, _done = _collecting_manager()
+    sub = background_task_tool.handle(
+        {"action": "list"}, _context(tmp_path, manager, depth=1)
+    )
+    assert "sub-agents" in sub["error"]
+    unsupported = background_task_tool.handle(
+        {"action": "list"}, _context(tmp_path, None)
+    )
+    assert "not supported" in unsupported["error"]

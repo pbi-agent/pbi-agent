@@ -24,6 +24,7 @@ class _ProviderContextStub:
 def test_registry_exposes_expected_built_in_tools() -> None:
     expected = {
         "shell",
+        "background_task",
         "apply_patch",
         "replace_in_file",
         "write_file",

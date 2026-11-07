@@ -39,7 +39,8 @@ SPEC = ToolSpec(
         "Use `shell` for command execution, including git commands; byte-cap "
         "commands with unknown or potentially large output. Set "
         "`run_in_background` for long-running commands; the result arrives "
-        "automatically later, so do not poll with sleep."
+        "automatically later, so do not poll with sleep. Use "
+        "`background_task` to list, inspect, or kill background tasks."
     ),
     parameters_schema={
         "type": "object",
@@ -85,18 +86,6 @@ SPEC = ToolSpec(
                     "1 800 000 (30 minutes), maximum 7 200 000 (2 hours)."
                 ),
             },
-            "background_action": {
-                "type": "string",
-                "enum": ["status", "output", "kill"],
-                "description": (
-                    "Inspect or stop an existing background task given by "
-                    "`task_id`; `command` is ignored (pass an empty string)."
-                ),
-            },
-            "task_id": {
-                "type": "string",
-                "description": "Background task id for `background_action`.",
-            },
             "compression": {
                 "type": "boolean",
                 "description": (
@@ -124,9 +113,8 @@ def _intent_error(arguments: dict[str, Any]) -> str | None:
 
 def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     """Execute a single shell command and return structured output."""
-    background_action = arguments.get("background_action")
-    run_in_background = arguments.get("run_in_background", False)
-    if background_action is not None or run_in_background is not False:
+    run_in_background = arguments.get("run_in_background")
+    if run_in_background is not None and run_in_background is not False:
         return _handle_background(arguments, context)
     intent_error = _intent_error(arguments)
     if intent_error is not None:
@@ -226,31 +214,6 @@ def _handle_background(
                 "Run the command in the foreground."
             )
         }
-    action = arguments.get("background_action")
-    if action is not None:
-        task_id = arguments.get("task_id")
-        if not isinstance(task_id, str) or not task_id:
-            return {"error": "'task_id' is required for 'background_action'."}
-        if action not in {"status", "output", "kill"}:
-            return {"error": "'background_action' must be status, output, or kill."}
-        try:
-            if action == "kill":
-                return {**manager.kill(task_id).summary(), "kill_requested": True}
-            if action == "status":
-                task = manager.get(task_id)
-                if task is None:
-                    raise KeyError(task_id)
-                return task.summary()
-            data = manager.output(task_id)
-        except KeyError:
-            return {"error": f"Unknown background task: {task_id}"}
-        bounded = _build_output_payload(
-            stdout=data.pop("stdout"),
-            stderr=data.pop("stderr"),
-            compression=False,
-        )
-        return {**data, **bounded}
-
     if not isinstance(arguments.get("run_in_background"), bool):
         return {"error": "'run_in_background' must be a boolean."}
     intent_error = _intent_error(arguments)

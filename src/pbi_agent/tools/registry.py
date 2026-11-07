@@ -16,6 +16,8 @@ from pbi_agent.tools.apply_patch import SPEC as _ap_spec
 from pbi_agent.tools.apply_patch import handle as _ap_handle
 from pbi_agent.tools.ask_user import SPEC as _au_spec
 from pbi_agent.tools.ask_user import handle as _au_handle
+from pbi_agent.tools.background_task import SPEC as _bt_spec
+from pbi_agent.tools.background_task import handle as _bt_handle
 from pbi_agent.tools.explore_workspace import SPEC as _ew_spec
 from pbi_agent.tools.explore_workspace import handle as _ew_handle
 from pbi_agent.tools.read_web_url import SPEC as _rwu_spec
@@ -32,6 +34,7 @@ from pbi_agent.tools.write_file import SPEC as _wf_spec
 from pbi_agent.tools.write_file import handle as _wf_handle
 
 _REGISTRY[_sh_spec.name] = (_sh_spec, _sh_handle)
+_REGISTRY[_bt_spec.name] = (_bt_spec, _bt_handle)
 _REGISTRY[_ap_spec.name] = (_ap_spec, _ap_handle)
 _REGISTRY[_rif_spec.name] = (_rif_spec, _rif_handle)
 _REGISTRY[_wf_spec.name] = (_wf_spec, _wf_handle)
