@@ -40,11 +40,11 @@ AGENTS_TEMPLATE = """# AGENTS.md
 
 ## Memory
 
-- `MEMORY.md` sections: `Metadata`, `Long-Term Memory`, `Detailed Task Events`.
-- Use preloaded `<workspace_memory>`; read the file only if absent or before editing it.
-- `Long-Term Memory`: compact durable facts, edited in place, no duplicates.
-- `Detailed Task Events`: one `## YYYY-MM-DD` heading per day; after each task append one short entry (change, validation, next context).
-- New day: promote durable outcomes/open follow-ups from prior days, then delete their dated sections.
+- Memory holds what a future session cannot recover from the repo or config: decisions and why, tested rules, traps, current focus, open follow-ups.
+- `MEMORY.md` is a short index preloaded into the agent (first 200 lines / 25 KB); put topic detail in `.agents/memory/<topic>.md` and link it.
+- Write when asked or clearly worth remembering; edit in place, delete stale entries; tag `[verified YYYY-MM-DD]` or `[unverified]`.
+- Check relevant memory before acting; re-check unverified or old entries. Only the main agent edits memory; sub-agents report candidate notes.
+- Past sessions: SQLite `~/.pbi-agent/sessions.db` (`PBI_AGENT_SESSION_DB_PATH` overrides). Query read-only (`python3`, `sqlite3.connect("file:<path>?mode=ro", uri=True)`); never write. `sessions(session_id, directory, title, updated_at)` with `directory` = lowercased absolute workspace path; `messages(session_id, role, content, created_at)`; `observability_events(session_id, event_type, tool_name, tool_input_json, tool_output_json, error_message)` (large). Use `?` params, narrow columns, `substr`, `LIMIT`.
 
 ## TODO
 

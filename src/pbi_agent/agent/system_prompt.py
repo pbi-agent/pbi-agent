@@ -34,6 +34,8 @@ _SUB_AGENT_PROMPT = """
 """.strip()
 
 _MAX_FILE_BYTES = 1_000_000  # 1 MB
+_MEMORY_MAX_LINES = 200
+_MEMORY_MAX_BYTES = 25_000
 
 
 def _warn(message: str) -> None:
@@ -208,11 +210,31 @@ def _append_user_profile(base_prompt: str) -> str:
     return f"{base_prompt}\n\n{profile_section}"
 
 
+def cap_workspace_memory(memory: str) -> str:
+    """Limit injected memory to the first 200 lines / 25 KB (index-sized)."""
+    lines = memory.splitlines()
+    capped_lines = lines[:_MEMORY_MAX_LINES]
+    capped = "\n".join(capped_lines)
+    encoded = capped.encode("utf-8")
+    if len(encoded) > _MEMORY_MAX_BYTES:
+        capped = encoded[:_MEMORY_MAX_BYTES].decode("utf-8", errors="ignore")
+        capped = capped.rsplit("\n", 1)[0] if "\n" in capped else capped
+    if capped == memory:
+        return memory
+    return (
+        f"{capped.rstrip()}\n\n"
+        "[MEMORY.md truncated: only the first "
+        f"{_MEMORY_MAX_LINES} lines / {_MEMORY_MAX_BYTES // 1000} KB are preloaded. "
+        "Read the file for the rest.]"
+    )
+
+
 def _append_workspace_memory(base_prompt: str, cwd: Path | None = None) -> str:
-    """Append ``<workspace_memory>`` section if ``MEMORY.md`` is present."""
+    """Append capped ``<workspace_memory>`` section if ``MEMORY.md`` is present."""
     memory = load_workspace_memory(cwd)
     if memory is None:
         return base_prompt
+    memory = cap_workspace_memory(memory)
     return f"{base_prompt}\n\n<workspace_memory>\n{memory}\n</workspace_memory>"
 
 

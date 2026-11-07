@@ -11,6 +11,7 @@ import pytest
 from pbi_agent.agent.session.shared import _turn_instructions
 from pbi_agent.agent.system_prompt import (
     _MAX_FILE_BYTES,
+    cap_workspace_memory,
     get_sub_agent_system_prompt,
     get_system_prompt,
     load_instructions,
@@ -931,3 +932,47 @@ def test_get_system_prompt_appends_active_command_instructions(tmp_path, monkeyp
     prompt = get_system_prompt(active_command_instructions="Plan before coding.")
 
     assert "<active_command>\nPlan before coding.\n</active_command>" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Injected MEMORY.md cap
+# ---------------------------------------------------------------------------
+
+
+def test_cap_workspace_memory_keeps_small_memory_unchanged():
+    assert cap_workspace_memory("- one\n- two") == "- one\n- two"
+
+
+def test_cap_workspace_memory_limits_lines():
+    memory = "\n".join(f"- line {index}" for index in range(250))
+
+    capped = cap_workspace_memory(memory)
+
+    assert "- line 199" in capped
+    assert "- line 200" not in capped
+    assert "[MEMORY.md truncated" in capped
+
+
+def test_cap_workspace_memory_limits_bytes():
+    memory = "\n".join("x" * 1_000 for _ in range(100))
+
+    capped = cap_workspace_memory(memory)
+
+    body = capped.split("\n\n[MEMORY.md truncated")[0]
+    assert len(body.encode("utf-8")) <= 25_000
+    assert "[MEMORY.md truncated" in capped
+
+
+@pytest.mark.parametrize("builder", ["main", "sub_agent"])
+def test_system_prompts_cap_injected_memory(tmp_path, builder):
+    memory = "\n".join(f"- fact {index}" for index in range(300))
+    (tmp_path / "MEMORY.md").write_text(memory, encoding="utf-8")
+
+    if builder == "main":
+        prompt = get_system_prompt(cwd=tmp_path)
+    else:
+        prompt = get_sub_agent_system_prompt(cwd=tmp_path)
+
+    assert "- fact 199" in prompt
+    assert "- fact 200" not in prompt
+    assert "[MEMORY.md truncated" in prompt

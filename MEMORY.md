@@ -1,59 +1,28 @@
 # MEMORY.md
 
-## Metadata
-- Last compacted: 2026-11-06
-- Scope: durable repo memory + active-day task events.
-- Format: only `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
+Index of durable project memory, preloaded into every main-agent session (first 200 lines / 25 KB only). Keep it short: goal, top rules, open follow-ups, links. Details live in `.agents/memory/*.md`. Conventions already in `AGENTS.md` or config are not repeated here.
 
-## Long-Term Memory
-- Memory: durable rules/decisions/validation/open follow-ups only. New day: promote prior outcomes, then delete detail; active-day events append-only.
-- Workflow: no commit/push/merge/PR unless asked. Session-only `TODO.md` task lists. Shell at repo root; `python3`; cap output.
-- Validation: Python = Ruff lint/format, basedpyright, pytest. Frontend = `bun run test:web`, `bun run lint`, `bun run typecheck`, `bun run web:build`. Docs = `bun run docs:build`. Report skipped/hung/broken checks.
-- Ruff: rules `E4/E7/E9/F`,`I`,`UP`,`B`,`RUF`,`PLW1510`; ignore B009/B010 (deliberate dynamic getattr/setattr). Use explicit `check=False`, targeted noqa only. Ruff Markdown formatting on.
-- Tooling pins: Bun 1.4.4 (workflows/`packageManager`/`test_workflows`); `web:build` = `bun --bun vite build` (Node-run Vite gives different chunk hashes → CI static-asset drift). Deps: mcp 2.x (httpx2; streamable_http yields 2-tuple; timeout sends `notifications/cancelled`), pytest 9.2 (coordinator `__delattr__` forwards for monkeypatch undo).
-- Constraints: no migrations/backcompat. Provider/tool HTTP = `urllib.request`; internal data = `~/.pbi-agent/`. `pbi-agent web` uses saved settings/profile; provider/model flags apply to `run`.
-- API contracts: align FastAPI routes/schemas/session manager, `webapp/src/api.ts`, `webapp/src/types.ts`, generated types/static bundle. Generate `bun run web:api-types` (`scripts/generate_api_types.py`); enforced by `test_api_types_codegen.py`. JSON helpers `ApiOperationResponses`/`ApiJsonRequestBodies`, `apiRequest()`, `jsonBody()`. Non-GCP views keep nullable GCP fields.
-- Tools: `explore_workspace` wraps `codetool-explore==0.7.1`, sole read tool. Targets content/path/read/list; regex default true; root arrays except read/list; root = base not boundary; workspace-confined. `read_web_url` group = `web`.
-- Explore recovery: missing `list` basename/stem → literal basename `path` search in same dir root; exact listings win. Exclude read/file roots/cursors/explicit regex/malformed. Keep filters/ignores/limits/confinement. Persist `ToolOutput.trace_metadata` separate from display metadata.
-- Shell: required `intent` (3-8 words) on fg/bg start (bg actions exempt); shown in shell card title, work-step subtitle, bg panel, bg-result label. `codetool-shell` compresses streams before 12k/stream bounds; `compression=false` bypasses; non-bool rejected. Interruptible process groups/bounded cleanup; Stop keeps history; model interrupt targets sub-agent owner + provider call id.
-- Background shell: `run_in_background`/`background_timeout_ms` (default 30m, max 2h)/`background_action` status|output|kill + `task_id`; `tools/background_tasks.py` `BackgroundTaskManager` (4 concurrent, 64k tails). Web-only (`WebDisplay.background_task_manager`); sub-agents rejected; CLI unsupported. Finish → `QueuedFollowUpInput(kind="background_result")` steer or idle auto-wake, cap 5 consecutive wakes (reset on user input). Session end kills; not persisted across restart. UI: right `BackgroundTasksPanel` (topbar toggle, shares `sidePanel` with explorer, main sessions only), `<background_task_result>` rows coalesce as "Background task" work steps; output dialog `task-form-dialog`.
-- `allowed_tools`: groups `read`, `write`, `web`, `sub-agent`, `shell`; CLI `--allowed-tools`, frontmatter `allowed_tools`. Native search requires `web`; empty list disables configurable built-ins. Command-only `ask-user` → runtime `ask_user`; stripped from sub-agents.
-- Prompts: `ToolSpec.prompt_usage`/settings/exclusions drive guidance; omit disabled skills/sub-agents. Persona preamble + `<tool_usage_rules>`; `AGENTS.md` → `<project_rules>`; `MEMORY.md` last as `<workspace_memory>`. Global `user_profile` → `<user_profile>`; new session or `/reload` applies.
-- Patching: OpenAI/ChatGPT `apply_patch` = Codex freeform V4A `custom_tool_call`, exact Lark grammar + local validation; reject empty `Update File`/move-only hunks. Other providers use `replace_in_file`/`write_file`.
-- Catalogs: `skills`, `commands`, `agents`; public `pbi-agent/{skills,commands,agents}`; install `.agents/...`, force-replace supported. Disabled skills in workspace `sessions.db`; disabled `$skill` mentions inject per-turn guidance. `.agents/agents/*.md`: `name`, `description`, `model_profile_id`, `allowed_tools`.
-- Sub-agents: defaults = active profile/CLI + `sub_agent_model`; parent CLI/command tool overrides reach children; caps 400 requests/1800s/no recursion.
-- Commands: `plan` no questions; `plan-interactive` uses `ask_user`; `review`/`code-quality-review` (explicit paths = full-file scope); `fix-review` stops on `No findings.` / `No code-quality findings.`; `/new` fresh session; `refine-task` clarifies only; `orchestrate` planner→worker/review gates; profiles `worker-mini`, `planner`, `reviewer`, `worker`, `worker-pro`. Kanban `/create-task` via `pbi-agent kanban create`.
-- Releases: latest v0.45.0. Plain `/release` authorizes minor push/merge/publish unless narrowed; post-PR history rewrite needs approval. Use `release-writing`, `docs/changelog/index.md`, `docs/changelog/v<version>.md`. `release.yml` publishes PyPI + GitHub Release; retry `gh workflow run release.yml --ref master -f version=<current-version>`; manual dispatch after merge-push publish skips unchanged version (expected). Never rerun old-SHA release. Workflow copies VitePress frontmatter into GitHub notes → strip after publish. PyPI CDN lags (JSON ~5 min+); verify, don't republish.
-- Upgrade: `pbi-agent upgrade`/`update`; `self_update.py` detects uv tool/pipx/venv pip, refuses PEP 610 source installs; `--check` exits 0/100/1. Windows path unit-tested only.
-- Branding: token-efficient local coding agent; browser UI primary, CLI for scripts. Preserve `pbi-agent`, `pbi_agent`, `PBI_AGENT_*`, `~/.pbi-agent`, logo `src/pbi_agent/web/static/logo.jpg`.
-- Providers: shared `src/pbi_agent/providers/{transport,auth_strategies,endpoints,tool_execution,runtime}.py` + `protocols/`. Chat Completions: cached/cache-write tokens → `TokenUsage`; omit empty `tools`/`tool_choice`; parse `reasoning`, `reasoning_content`, `reasoning_details`, `<think>`; replay raw reasoning separately.
-- GitHub Copilot: no `previous_response_id` (replay local history). Claude bare `422` = public-code content filter on output (nondeterministic), not payload bug; mapped to actionable error. Never replay `reasoning_text`+`reasoning_opaque` on tool-call messages (causes 422).
-- xAI: API key or `xai_account` OAuth (PKCE via `urllib.request`, fixed `http://127.0.0.1:56121/callback`, HTTPS `x.ai` validation, refresh on 401). Merge OAuth-only `grok-composer-2.5-fast`. xAI account lacks STT/usage limits.
-- Models: longest case-insensitive exact/prefix match; `gpt-5.6` aliases Sol. `gpt-6-astra` $/MTok: input 10, cached 1, writes 12.50, output 50; context unspecified. Omit undocumented context windows; keep Fable/Mythos 5.1, Opus 5.5 aliases. Responses `cache_write_tokens` → write bucket.
-- Reasoning: discovery advertises efforts; fallback `low`/`medium`/`high`/`xhigh`; forward arbitrary non-empty values; Anthropic `xhigh`→`max`. Enrich classic OpenAI `/v1/models` via GPT-5/o-series/Codex patterns.
-- OpenAI/ChatGPT: Responses `instructions` + `previous_response_id`, include `reasoning.encrypted_content`. OpenAI-only `reasoning.mode` (`standard`/`pro`) for GPT-5.6, never to ChatGPT subscription. `CHATGPT_CODEX_VERSION` drives UA + discovery `client_version`; bump with upstream originator/UA/websocket beta check; tests derive from constant. WebSocket-only; caps 30s/30s/1s; `store=false`, stable cache key.
-- ChatGPT continuation: child spawn releases parent socket (clear IDs/turn-state, keep replay buffer); first post-child request full ID-less replay. Exact 400 `Invalid \`previous_response_id\`.` → one-shot ID-less replay without rerunning tools. Open: live-unverified recovered-ID reuse, delayed/encrypted-reasoning recovery, proactive replay.
-- Saved replay: incompatible traces → canonical messages; persist final assistant output only. Failed/unfinished turns keep user rows + tool-result pairs regardless of `include_tool_history`. Checkpoints group by traced run; dedupe HTTP retries; support Google steps, attachments, compaction. Stop ≠ discard.
-- Local shell: `messages.is_local_command` excluded via `agent/conversation_context.py::model_context_messages`; never infer from `!`. Migration only via `scripts/migrate_messages_is_local_command.py` with explicit DB path + approval.
-- Google Interactions: stateless replay uses steps, not role/content turns.
-- `google_gcp`: Vertex handlers for Gemini/Chat Completions/Responses/xAI/Anthropic; client history; no native search. Saved/CLI project/location before env. API-key-like tokens → `x-goog-api-key` + `v1beta1`, retry once via OAuth/ADC. ADC timeout `PBI_AGENT_GOOGLE_GCP_ACCESS_TOKEN_TIMEOUT` (30s), cached bearer. Strip `google/` prefix; drop `oneOf` for Responses.
-- Web sessions: session-scoped APIs; no `/api/live-sessions/*`. `session_manager.py` facade → `src/pbi_agent/web/session/` (patch globals in `workers`/`provider_auth`). `WebDisplay` input state uses RLock, publishes under lock, stays disabled while input queue non-empty.
-- Channels: Telegram `urllib.request` polling, token leases, per-source queues; Markdown `src/pbi_agent/channels/telegram_markdown.py`. `pbi-agent channels` show/configure/restart.
-- Events/workspaces: SSE `/api/events/{stream}`, `/api/events/sessions/{session_id}` with heartbeat/`Last-Event-ID`; no event WebSockets. Explicit workspace key everywhere; `workspace_switched` clears state. `/api/sessions?q=` literal search.
-- Timeline: stable `msg-<messages.id>` ids, `message_rekeyed`; `history_items` canonical; `run_sessions` projection; startup orphans → `stale`.
-- Compaction/fork: `POST /api/sessions/{session_id}/fork` copies through target, resets usage/previous_id. Direct shell disables input via `begin_direct_command()`/`finish_direct_command()`.
-- Notifications: finished once per AFK working→ready edge; ended on terminated/errored; ask-user prompts.
-- UI: shadcn primitives/semantic tokens, `cn()`, `lucide-react`; no raw colors/dark overrides/custom z-index/space utilities. Edge floats clamp both axes. Unlayered `webapp/src/styles/reset.css` beats Tailwind v4/shadcn styles → scoped fixes in `webapp/src/styles/overlays.css` (explicit padding/border/hover). Radix `ScrollArea` lets width grow; use overflow-x hidden + min-width:0 for truncation. Destructive small buttons reuse `tool-result-card__interrupt-button`.
-- Composer: `@file`/`$skill` highlights; Ctrl+Space dictation/enhancement; `web.prompt_enhancement_profile_id`; history arrows. Reply-to-selection: `ReplySelectionPopover` → `ComposerHandle.addReplySnippet` → `<reply_snippet>` XML (`lib/replySnippets.ts`), parsed back into cards; frontend-only.
-- Follow-ups: checkpoint steering via `steer_user_input` at tool boundaries; FIFO after-finish fallback. Open bug: post-delivery interrupt removes accepted live user item; should keep accepted steers.
-- Work UI: coalesce thinking/tools; ended turns collapse behind `Intermediate results`; collapsed header shows `WorkingIntentTicker` (last main-run tool intent, `lastWorkIntent` in `SessionTimeline.tsx`, `.working-intent*`). Expansion preserves auto-follow.
-- Mentions/explorer/diff: coalesced in-memory index; dependency-free tree, `webapp/src/lib/workspaceFileIcons.ts`; `/api/files/tree`, `/api/files/diff`; stdlib `.gitignore` fallback.
-- Observability/maintenance: persist usage from canonical `TokenUsage`; `run_startup_maintenance()` once/UTC day, `maintenance.retention_days` default 30. PyPI update warning only.
-- Hooks: `src/pbi_agent/hooks/`; `~/.pbi-agent/hooks.json`, `<repo>/.agents/hooks.json`; trust state `~/.pbi-agent/hooks_state.json`; untrusted skipped. Bypass `--dangerously-bypass-hook-trust` / `PBI_AGENT_DANGEROUSLY_BYPASS_HOOK_TRUST=1` never enables disabled hooks; JSON can't self-declare managed trust.
-- Sandbox/init/extensions: `pbi-agent sandbox [web|run]` bundled Dockerfile, name `pbi-agent-{normalized-workspace-folder}`. `pbi-agent init`/`/init` starter compact `AGENTS.md` + default commands/agents; `--force`/`--overwrite`. Extensions require `/`, reserve built-in names.
-- Test hygiene: uploads in `tmp_path / "web_uploads"`; gate worker drain with explicit events, no sleep polling. Vitest 4 mocks need concrete `Mock`/`MockInstance` types. Browser UI testing works via headless Playwright + apt-extracted nss/nspr/asound libs on local build.
-- Security: open packaging follow-up — transitive security minima are lock-only, not enforced in published runtime metadata.
-- MCP lifecycle: SDK HTTP client owned by AsyncExitStack (`http_client=`); per-connection owner tasks; thread worker uses asyncio.Queue + call_soon_threadsafe (never blocking queue.get in executor).
-- Linux browser open: stdlib `webbrowser.open` in `-I` child, DEVNULL stdio, bounded wait; Snap Brave GPU/AppArmor logs are browser noise. GUI launch unverified.
+Entry shape: rule/fact — why/evidence — `[verified YYYY-MM-DD]` or `[unverified]`. Untagged entries predate this convention (migrated 2026-11-07).
 
-## Detailed Task Events
+## Current Focus
+- Memory redesign (2026-11-07): index + topic pages, capped injection; memory rules and session-DB query guidance live only in `AGENTS.md`, never in the system prompt code (user decision). [verified 2026-11-07]
+
+## Top Rules
+- No migrations or backward-compat shims unless asked.
+- Report skipped, hung, or broken checks instead of claiming green.
+- `web:build` must run `bun --bun vite build`; Node-run Vite changes chunk hashes → CI static-asset drift. See `tooling.md`.
+- Never rerun an old-SHA release; PyPI CDN lags, verify instead of republishing. See `tooling.md`.
+- ChatGPT/Copilot: never replay `reasoning_text`+`reasoning_opaque` on tool-call messages (422). See `providers.md`.
+
+## Open Follow-Ups
+- Follow-ups: post-delivery interrupt removes the accepted live user item; accepted steers should stay. (`web.md`)
+- ChatGPT continuation: live-unverified recovered-ID reuse, delayed/encrypted-reasoning recovery, proactive replay. (`providers.md`)
+- Packaging: transitive security minima are lock-only, not in published runtime metadata. (`tooling.md`)
+- Unverified on real hosts: Windows self-update path; Linux GUI browser launch. (`tooling.md`)
+
+## Topic Pages
+- `.agents/memory/tooling.md`: Ruff exceptions, tool pins, test hygiene, releases, upgrade, security.
+- `.agents/memory/providers.md`: provider internals, Copilot, xAI, models/pricing, reasoning, OpenAI/ChatGPT, Google.
+- `.agents/memory/tools.md`: explore, shell, background shell, `allowed_tools`, patching, MCP.
+- `.agents/memory/runtime.md`: prompt assembly, catalogs, sub-agents, commands, replay, hooks, sandbox/init, branding.
+- `.agents/memory/web.md`: API contracts, web sessions, channels, events, timeline, UI quirks, composer, follow-ups.

@@ -103,11 +103,11 @@ Compressed:
 
 ## MEMORY.md Mode
 
-When target is `MEMORY.md`, compression means memory curation, not only prose shortening.
+When target is `MEMORY.md` or a `.agents/memory/*.md` topic page, compression means memory curation, not only prose shortening. `MEMORY.md` is a short index (current focus, top rules, open follow-ups, topic links); move detail into topic pages instead of keeping it in the index.
 
-For `Long-Term Memory`:
+For memory entries:
 - Keep only durable decisions, stable repo conventions, reusable validation patterns, and active follow-ups.
-- Drop completed task logs, detailed histories, branch names, commit hashes, PR/run IDs, workflow IDs, validation transcripts, and implementation step lists unless still actionable.
+- Drop facts already stated in `AGENTS.md` or config, completed task logs, detailed histories, branch names, commit hashes, PR/run IDs, workflow IDs, validation transcripts, and implementation step lists unless still actionable.
 - Prefer outcome-only bullets. Example: a detailed shipped-release log can become `v0.1.0 shipped.`
 - If a bullet is only proof that past work happened, delete or collapse it.
 - If a bullet tells future agents how to act, keep it compact.
@@ -117,6 +117,7 @@ For `Long-Term Memory`:
 - Preserve technical strings only when they are needed for future decisions or workflows.
 
 Acceptance check for `MEMORY.md`:
-- `Long-Term Memory` should read like decisions/follow-ups, not changelog/docs.
+- `MEMORY.md` stays well under 200 lines; entries keep `[verified YYYY-MM-DD]`/`[unverified]` tags.
+- Memory entries should read like decisions/follow-ups, not changelog/docs.
 - No completed-task bullet should contain a full chain of PR + branch + commit + workflow + validation details.
 - Report compression by durable-memory impact, not by all removed details.
