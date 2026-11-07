@@ -48,6 +48,7 @@ type WorkItem = TimelineMessageItem | TimelineThinkingItem | TimelineToolGroupIt
 type SubAgentSummary = {
   title: string;
   status: string;
+  intent?: string | null;
   turnElapsedSeconds?: number | null;
 };
 
@@ -1170,6 +1171,8 @@ function SubAgentCard({
   const agent = subAgents[group.subAgentId];
   const status = agent?.status ?? (group.running ? "running" : "completed");
   const name = subAgentDisplayName(agent?.title, group.subAgentId);
+  const intent = agent?.intent?.trim() || null;
+  const label = intent ?? name;
   const statusModifier = subAgentStatusModifier(status);
   const subAgentIsActive = status === "running" || status === "starting";
   const summaryItems = useMemo(() => workRunCountItems(subAgentItems, false), [subAgentItems]);
@@ -1193,7 +1196,8 @@ function SubAgentCard({
       type="button"
       className="flex min-h-8 w-full cursor-pointer items-center justify-start gap-2 rounded-sm border border-border bg-card px-3 py-2 text-left text-xs text-muted-foreground hover:bg-muted disabled:cursor-default disabled:opacity-70 *:[svg]:size-3.5 *:[svg]:flex-none"
       data-sub-agent-card
-      aria-label={`Open ${name} agent session${ariaDetail ? `, ${ariaDetail}` : ""}`}
+      title={intent ? `${name} · ${intent}` : undefined}
+      aria-label={`Open ${label} agent session${ariaDetail ? `, ${ariaDetail}` : ""}`}
       onClick={() => {
         if (parentSessionId) {
           void navigate(`/sessions/${encodeURIComponent(parentSessionId)}/sub-agents/${encodeURIComponent(group.subAgentId)}`);
@@ -1203,7 +1207,7 @@ function SubAgentCard({
     >
       <BotIcon aria-hidden="true" />
       <span className="flex min-w-0 flex-auto items-baseline gap-2">
-        <span className="min-w-0 flex-initial truncate font-medium text-foreground">{name}</span>
+        <span className="min-w-0 flex-initial truncate font-medium text-foreground" data-sub-agent-label>{label}</span>
         <WorkingSummary
           items={summaryItems}
           durationSeconds={summaryDurationSeconds}

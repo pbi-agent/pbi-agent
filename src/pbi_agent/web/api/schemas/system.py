@@ -285,6 +285,10 @@ class UsageSnapshotModel(BaseModel):
 class SubAgentSnapshotModel(BaseModel):
     title: str
     status: str
+    intent: str | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
     wait_message: str | None = Field(
         default=None,
         exclude_if=lambda value: value is None,
@@ -322,6 +326,8 @@ class BackgroundTaskModel(BaseModel):
     task_id: str
     command: str
     intent: str = ""
+    kind: Literal["shell", "sub_agent"] = "shell"
+    sub_agent_id: str | None = None
     working_directory: str
     tool_call_id: str | None = None
     status: Literal["running", "completed", "failed", "killed", "timed_out"]

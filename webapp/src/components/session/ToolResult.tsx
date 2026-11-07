@@ -319,7 +319,7 @@ function WebSearchToolResult({ metadata, text, running }: ToolResultProps) {
 function SubAgentToolResult({ metadata, text, running }: ToolResultProps) {
   const result = objectValue(metadata?.result);
   const args = objectValue(metadata?.arguments);
-  const task = stringValue(args?.task_instruction) ?? "Delegated task";
+  const task = stringValue(args?.intent)?.trim() || stringValue(args?.task_instruction) || "Delegated task";
   const agentType = stringValue(args?.agent_type) ?? "default";
   const output = stringValue(result?.output) ?? stringValue(result?.message) ?? stringValue(result?.summary);
   return (

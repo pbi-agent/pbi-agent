@@ -510,6 +510,8 @@ class EventsMixin:
                     "status": str(payload.get("status") or "running"),
                 }
             )
+            if isinstance(payload.get("intent"), str) and payload["intent"]:
+                sub_agent["intent"] = payload["intent"]
             if sub_agent["status"] not in {"running", "starting"}:
                 sub_agent.pop("wait_message", None)
                 sub_agent.pop("processing", None)

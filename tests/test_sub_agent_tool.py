@@ -23,8 +23,9 @@ class _ChildDisplay:
         task_instruction: str,
         reasoning_effort: str | None = None,
         name: str = "sub_agent",
+        intent: str | None = None,
     ) -> _ChildDisplay:
-        del task_instruction, reasoning_effort, name
+        del task_instruction, reasoning_effort, name, intent
         return self
 
     def finish_sub_agent(self, *, status: str) -> None:
@@ -117,6 +118,7 @@ class _ParentDisplay:
         task_instruction: str,
         reasoning_effort: str | None = None,
         name: str = "sub_agent",
+        intent: str | None = None,
     ) -> _ChildDisplay:
         self.sub_agent_calls.append(
             {
@@ -261,6 +263,7 @@ def test_sub_agent_tool_allows_scoped_nested_project_agent(
         parent_tracer=None,
         workspace_root=None,
         workspace_directory_key=None,
+        **_kwargs: object,
     ) -> dict[str, object]:
         del (
             settings,
@@ -355,6 +358,7 @@ def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
         parent_tracer=None,
         workspace_root=None,
         workspace_directory_key=None,
+        **_kwargs: object,
     ) -> dict[str, object]:
         del (
             settings,
@@ -433,6 +437,7 @@ def test_sub_agent_tool_maps_default_agent_type_to_generalist(monkeypatch) -> No
         parent_tracer=None,
         workspace_root=None,
         workspace_directory_key=None,
+        **_kwargs: object,
     ) -> dict[str, object]:
         del (
             task_instruction,
@@ -1074,3 +1079,90 @@ def test_run_sub_agent_task_rejects_unknown_agent_type() -> None:
 
     assert result["status"] == "failed"
     assert result["error"]["type"] == "unknown_agent_type"
+
+
+def test_sub_agent_spec_requires_intent_and_exposes_background() -> None:
+    schema = sub_agent_tool.build_spec(agent_type_values=("default",)).parameters_schema
+    assert "intent" in schema["required"]
+    assert schema["properties"]["run_in_background"]["type"] == "boolean"
+
+
+def test_sub_agent_background_starts_task_and_forwards_intent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import threading
+
+    from pbi_agent.tools.background_tasks import (
+        BackgroundTaskManager,
+        render_background_result,
+    )
+
+    captured: dict[str, object] = {}
+    done = threading.Event()
+    finished: list[object] = []
+
+    def fake_run_sub_agent_task(task_instruction, *args, **kwargs):  # type: ignore[no-untyped-def]
+        del args
+        captured.update(kwargs)
+        kwargs["on_started"]("subagent-7")
+        return {"status": "completed", "final_output": "all good"}
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.run_sub_agent_task", fake_run_sub_agent_task
+    )
+    manager = BackgroundTaskManager(
+        on_finished=lambda task: (finished.append(task), done.set())
+    )
+    display = _ChildDisplay()
+    display.background_task_manager = manager  # type: ignore[attr-defined]
+    context = ToolContext(
+        settings=Settings(api_key="k", provider="openai"),
+        display=display,  # type: ignore[arg-type]
+        session_usage=TokenUsage(),
+        turn_usage=TokenUsage(),
+        tool_call_id="call-9",
+    )
+    result = sub_agent_tool.handle(
+        {
+            "intent": "Audit auth module",
+            "task_instruction": "Check auth",
+            "run_in_background": True,
+        },
+        context,
+    )
+    assert result["background"] is True
+    assert done.wait(timeout=5)
+    task = finished[0]
+    assert captured["intent"] == "Audit auth module"
+    assert task.kind == "sub_agent"  # type: ignore[attr-defined]
+    assert task.sub_agent_id == "subagent-7"  # type: ignore[attr-defined]
+    assert task.status == "completed"  # type: ignore[attr-defined]
+    rendered = render_background_result(task)  # type: ignore[arg-type]
+    assert "intent: Audit auth module" in rendered
+    assert "all good" in rendered
+
+
+def test_background_sub_agent_kill_sets_cancel_event() -> None:
+    import threading
+
+    from pbi_agent.tools.background_tasks import BackgroundTaskManager
+
+    done = threading.Event()
+    manager = BackgroundTaskManager(on_finished=lambda task: done.set())
+
+    def run(cancel_event, on_started):  # type: ignore[no-untyped-def]
+        on_started(None)
+        cancel_event.wait(5)
+        return {"status": "failed", "error": {"message": "interrupted"}}
+
+    task = manager.start_sub_agent(
+        run,
+        task_instruction="x",
+        intent="Long job",
+        working_directory=".",
+        timeout_ms=10_000,
+        tool_call_id=None,
+    )
+    manager.kill(task.task_id)
+    assert done.wait(timeout=5)
+    assert task.status == "killed"

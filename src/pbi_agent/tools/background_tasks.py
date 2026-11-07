@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
 BackgroundTaskStatus = Literal["running", "completed", "failed", "killed", "timed_out"]
+BackgroundTaskKind = Literal["shell", "sub_agent"]
 
 DEFAULT_BACKGROUND_TIMEOUT_MS = 30 * 60 * 1000
 MAX_BACKGROUND_TIMEOUT_MS = 2 * 60 * 60 * 1000
@@ -35,6 +36,12 @@ class _StreamTail:
     def append(self, text: str) -> None:
         if not text:
             return
+        if len(text) > TAIL_MAX_CHARS:
+            # Keep the tail of an oversized chunk instead of discarding it whole.
+            text = text[-TAIL_MAX_CHARS:]
+            self.chunks.clear()
+            self.size = 0
+            self.dropped = True
         self.chunks.append(text)
         self.size += len(text)
         while self.size > TAIL_MAX_CHARS and self.chunks:
@@ -63,6 +70,9 @@ class BackgroundTask:
     stderr: _StreamTail = field(default_factory=_StreamTail, repr=False)
     kill_reason: BackgroundTaskStatus | None = None
     intent: str = ""
+    kind: BackgroundTaskKind = "shell"
+    sub_agent_id: str | None = None
+    cancel_event: threading.Event | None = field(default=None, repr=False)
 
     def summary(self) -> dict[str, Any]:
         end = self.ended_at if self.ended_at is not None else time.time()
@@ -70,6 +80,8 @@ class BackgroundTask:
             "task_id": self.task_id,
             "command": self.command,
             "intent": self.intent,
+            "kind": self.kind,
+            "sub_agent_id": self.sub_agent_id,
             "working_directory": self.working_directory,
             "tool_call_id": self.tool_call_id,
             "status": self.status,
@@ -81,6 +93,9 @@ class BackgroundTask:
 
 
 FinishedCallback = Callable[[BackgroundTask], None]
+SubAgentRunner = Callable[
+    [threading.Event, Callable[[str | None], None]], dict[str, Any]
+]
 ChangedCallback = Callable[[], None]
 
 
@@ -165,6 +180,48 @@ class BackgroundTaskManager:
         self._notify_changed()
         return task
 
+    def start_sub_agent(
+        self,
+        run: SubAgentRunner,
+        *,
+        task_instruction: str,
+        intent: str,
+        working_directory: str,
+        timeout_ms: int,
+        tool_call_id: str | None,
+    ) -> BackgroundTask:
+        """Run a sub-agent callable in a background thread."""
+        with self._lock:
+            if self._closed:
+                raise RuntimeError("Background tasks are no longer accepted.")
+            running = sum(1 for t in self._tasks.values() if t.status == "running")
+            if running >= self._max_concurrent:
+                raise RuntimeError(
+                    f"Too many background tasks running ({running}/"
+                    f"{self._max_concurrent}). Kill or wait for one first."
+                )
+            task = BackgroundTask(
+                task_id=f"bg-{uuid.uuid4().hex[:8]}",
+                command=task_instruction,
+                intent=intent,
+                working_directory=working_directory,
+                tool_call_id=tool_call_id,
+                timeout_ms=timeout_ms,
+                compression=False,
+                started_at=time.time(),
+                kind="sub_agent",
+                cancel_event=threading.Event(),
+            )
+            self._tasks[task.task_id] = task
+        threading.Thread(
+            target=self._watch_sub_agent,
+            args=(task, run),
+            daemon=True,
+            name=f"pbi-agent-bg-{task.task_id}",
+        ).start()
+        self._notify_changed()
+        return task
+
     def kill(self, task_id: str) -> BackgroundTask:
         task = self.get(task_id)
         if task is None:
@@ -212,6 +269,11 @@ class BackgroundTaskManager:
     def _terminate(self, task: BackgroundTask, *, reason: BackgroundTaskStatus) -> None:
         from pbi_agent.tools.shell import _kill_process_tree
 
+        if task.kind == "sub_agent":
+            if task.status == "running" and task.cancel_event is not None:
+                task.kill_reason = reason
+                task.cancel_event.set()
+            return
         process = task.process
         if task.status != "running" or process is None or process.poll() is not None:
             return
@@ -263,6 +325,52 @@ class BackgroundTaskManager:
             except Exception:
                 pass
 
+    def _watch_sub_agent(self, task: BackgroundTask, run: SubAgentRunner) -> None:
+        assert task.cancel_event is not None
+        cancel_event = task.cancel_event
+        timer = threading.Timer(
+            task.timeout_ms / 1000.0,
+            lambda: self._terminate(task, reason="timed_out"),
+        )
+        timer.daemon = True
+        timer.start()
+
+        def on_started(sub_agent_id: str | None) -> None:
+            if sub_agent_id:
+                task.sub_agent_id = sub_agent_id
+                self._notify_changed()
+
+        try:
+            result = run(cancel_event, on_started)
+        except Exception as exc:  # pragma: no cover - defensive
+            result = {
+                "status": "failed",
+                "error": {"type": "sub_agent_failed", "message": str(exc)},
+            }
+        finally:
+            timer.cancel()
+        final_output = result.get("final_output")
+        if isinstance(final_output, str):
+            task.stdout.append(final_output)
+        error = result.get("error")
+        if isinstance(error, dict) and error.get("message"):
+            task.stderr.append(str(error["message"]))
+        with self._lock:
+            task.ended_at = time.time()
+            if task.kill_reason is not None:
+                task.status = task.kill_reason
+            else:
+                task.status = (
+                    "completed" if result.get("status") == "completed" else "failed"
+                )
+            closed = self._closed
+        self._notify_changed()
+        if self._on_finished is not None and not closed:
+            try:
+                self._on_finished(task)
+            except Exception:
+                pass
+
     def _notify_changed(self) -> None:
         if self._on_changed is None:
             return
@@ -298,6 +406,8 @@ def _pump(stream: Any, tail: _StreamTail) -> None:
 
 def render_background_result(task: BackgroundTask) -> str:
     """Render a finished task as a model-facing synthetic user input."""
+    if task.kind == "sub_agent":
+        return _render_sub_agent_result(task)
     from pbi_agent.tools.shell import _build_output_payload
 
     payload = _build_output_payload(
@@ -324,6 +434,26 @@ def render_background_result(task: BackgroundTask) -> str:
     lines.append("</background_task_result>")
     lines.append(
         "This background shell task you started has finished. Continue the task "
+        "using this result."
+    )
+    return "\n".join(lines)
+
+
+def _render_sub_agent_result(task: BackgroundTask) -> str:
+    duration = task.summary()["elapsed_seconds"]
+    lines = [
+        f'<background_task_result task_id="{task.task_id}" status="{task.status}" '
+        f'exit_code="none" kind="sub_agent" duration_seconds="{duration}">',
+        *([f"intent: {task.intent}"] if task.intent else []),
+        "final_output:",
+        task.stdout.text() or "(no output)",
+    ]
+    if task.stderr.text():
+        lines.append("error:")
+        lines.append(task.stderr.text())
+    lines.append("</background_task_result>")
+    lines.append(
+        "This background sub-agent you started has finished. Continue the task "
         "using this result."
     )
     return "\n".join(lines)

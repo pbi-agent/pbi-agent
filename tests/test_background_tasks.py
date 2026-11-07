@@ -226,3 +226,34 @@ def test_background_task_rejected_for_sub_agents_and_unsupported(
         {"action": "list"}, _context(tmp_path, None)
     )
     assert "not supported" in unsupported["error"]
+
+
+def test_stream_tail_keeps_tail_of_oversized_chunk() -> None:
+    from pbi_agent.tools.background_tasks import TAIL_MAX_CHARS, _StreamTail
+
+    tail = _StreamTail()
+    tail.append("a" * 10 + "b" * TAIL_MAX_CHARS)
+    assert tail.text() == "b" * TAIL_MAX_CHARS
+    assert tail.dropped is True
+
+
+def test_cancellable_display_propagates_to_nested_sub_agents() -> None:
+    import threading
+
+    from pbi_agent.agent.session.runtime import _CancellableDisplay
+
+    class _Inner:
+        def interrupt_requested(self) -> bool:
+            return False
+
+        def begin_sub_agent(self, **_kwargs: object) -> _Inner:
+            return _Inner()
+
+    event = threading.Event()
+    proxy = _CancellableDisplay(_Inner(), event)  # type: ignore[arg-type]
+    nested = proxy.begin_sub_agent(task_instruction="x")
+    grandchild = nested.begin_sub_agent(task_instruction="y")
+    assert not nested.interrupt_requested()
+    event.set()
+    assert nested.interrupt_requested()
+    assert grandchild.interrupt_requested()

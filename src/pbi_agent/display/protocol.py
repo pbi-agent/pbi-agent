@@ -194,6 +194,7 @@ class DisplayProtocol(Protocol):
         task_instruction: str,
         reasoning_effort: str | None = None,
         name: str = "sub_agent",
+        intent: str | None = None,
     ) -> DisplayProtocol: ...
 
     def finish_sub_agent(self, *, status: str) -> None: ...

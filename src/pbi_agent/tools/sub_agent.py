@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -56,7 +58,7 @@ def build_spec(
             directory_key=directory_key,
             visible_agent_names=visible_agent_names,
         )
-    required = ["task_instruction"]
+    required = ["intent", "task_instruction"]
     if visible_agent_names is not None:
         required.append("agent_type")
     agent_type_description = (
@@ -70,7 +72,9 @@ def build_spec(
         name="sub_agent",
         description=(
             "Delegate a scoped task to a child agent with the same tools. "
-            "Set `include_context` to inherit the parent conversation context."
+            "Set `include_context` to inherit the parent conversation context. "
+            "Set `run_in_background` to run it detached; the result arrives "
+            "automatically later, so do not poll."
         ),
         prompt_usage=(
             "Use `sub_agent` only when the user requests delegation or a task "
@@ -79,6 +83,13 @@ def build_spec(
         parameters_schema={
             "type": "object",
             "properties": {
+                "intent": {
+                    "type": "string",
+                    "description": (
+                        "Short 3-8 word summary of the delegated task, shown to "
+                        "the user (e.g. 'Audit auth module for bugs')."
+                    ),
+                },
                 "task_instruction": {
                     "type": "string",
                     "description": "The delegated task and any context the child agent needs.",
@@ -94,6 +105,14 @@ def build_spec(
                     "type": "string",
                     "enum": list(agent_type_values),
                     "description": agent_type_description,
+                },
+                "run_in_background": {
+                    "type": "boolean",
+                    "description": (
+                        "Start the sub-agent in the background and return a "
+                        "task_id immediately. The result is delivered to you "
+                        "automatically when it finishes; do not poll."
+                    ),
                 },
             },
             "required": required,
@@ -113,6 +132,27 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             "error": {
                 "type": "invalid_arguments",
                 "message": "'task_instruction' must be a non-empty string.",
+            },
+        }
+
+    raw_intent = arguments.get("intent")
+    if raw_intent is not None and not isinstance(raw_intent, str):
+        return {
+            "status": "failed",
+            "error": {
+                "type": "invalid_arguments",
+                "message": "'intent' must be a string briefly describing the task.",
+            },
+        }
+    intent = raw_intent.strip() if isinstance(raw_intent, str) else ""
+
+    run_in_background = arguments.get("run_in_background", False)
+    if not isinstance(run_in_background, bool):
+        return {
+            "status": "failed",
+            "error": {
+                "type": "invalid_arguments",
+                "message": "'run_in_background' must be a boolean when provided.",
             },
         }
 
@@ -228,19 +268,78 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
 
     from pbi_agent.agent.session import run_sub_agent_task
 
-    return run_sub_agent_task(
-        task_instruction.strip(),
-        settings,
-        display,
-        parent_session_usage=session_usage,
-        parent_turn_usage=turn_usage,
-        sub_agent_depth=sub_agent_depth,
-        tool_catalog=tool_catalog,
-        agent_type=agent_type,
-        include_context=include_context,
-        parent_tool_availability_overridden=context.tool_availability_overridden,
-        parent_context=parent_context,
-        parent_tracer=parent_tracer,
-        workspace_root=context.workspace_root,
-        workspace_directory_key=context.workspace_directory_key,
-    )
+    def run(
+        cancel_event: threading.Event | None = None,
+        on_started: Callable[[str | None], None] | None = None,
+    ) -> dict[str, Any]:
+        return run_sub_agent_task(
+            task_instruction.strip(),
+            settings,
+            display,
+            parent_session_usage=session_usage,
+            parent_turn_usage=turn_usage,
+            sub_agent_depth=sub_agent_depth,
+            tool_catalog=tool_catalog,
+            agent_type=agent_type,
+            include_context=include_context,
+            parent_tool_availability_overridden=context.tool_availability_overridden,
+            parent_context=parent_context,
+            parent_tracer=parent_tracer,
+            workspace_root=context.workspace_root,
+            workspace_directory_key=context.workspace_directory_key,
+            intent=intent or None,
+            cancel_event=cancel_event,
+            on_started=on_started,
+        )
+
+    if not run_in_background:
+        return run()
+    return _start_background(run, task_instruction.strip(), intent, context)
+
+
+def _start_background(
+    run: Callable[..., dict[str, Any]],
+    task_instruction: str,
+    intent: str,
+    context: ToolContext,
+) -> dict[str, Any]:
+    from pbi_agent.tools.background_tasks import DEFAULT_BACKGROUND_TIMEOUT_MS
+
+    def failed(message: str) -> dict[str, Any]:
+        return {
+            "status": "failed",
+            "error": {"type": "background_unavailable", "message": message},
+        }
+
+    if context.sub_agent_depth > 0:
+        return failed("Background sub-agents are not available to sub-agents.")
+    display = context.display
+    manager = getattr(display, "background_task_manager", None) if display else None
+    if manager is None:
+        return failed(
+            "Background sub-agents are not supported in this mode. "
+            "Run the sub-agent in the foreground."
+        )
+    root = (
+        context.workspace_root if context.workspace_root is not None else Path.cwd()
+    ).resolve()
+    try:
+        task = manager.start_sub_agent(
+            lambda cancel_event, on_started: run(cancel_event, on_started),
+            task_instruction=task_instruction,
+            intent=intent,
+            working_directory=str(root),
+            timeout_ms=DEFAULT_BACKGROUND_TIMEOUT_MS,
+            tool_call_id=context.tool_call_id,
+        )
+    except Exception as exc:
+        return failed(f"Failed to start background sub-agent: {exc}")
+    return {
+        "background": True,
+        "task_id": task.task_id,
+        "status": "running",
+        "message": (
+            "Sub-agent started in background. The result will be delivered "
+            "automatically when it finishes; do not poll."
+        ),
+    }

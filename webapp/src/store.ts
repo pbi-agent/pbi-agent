@@ -33,6 +33,7 @@ export type ConnectionState =
 export type SubAgentState = {
   title: string;
   status: string;
+  intent?: string | null;
   waitMessage?: string | null;
   processing?: ProcessingState | null;
   sessionUsage?: UsagePayload | null;
@@ -601,6 +602,7 @@ function normalizeSnapshotSubAgents(
         {
           title: readString(record.title, subAgentId),
           status: readString(record.status, "completed"),
+          ...(typeof record.intent === "string" && record.intent ? { intent: record.intent } : {}),
           ...(waitMessage ? { waitMessage } : {}),
           ...(record.processing ? { processing: readProcessingState(record.processing) } : {}),
           ...(sessionUsage ? { sessionUsage } : {}),
@@ -913,6 +915,7 @@ export function reduceSessionEvent(
       patch.subAgents = updateSubAgentState(current.subAgents, subAgentId, {
         title: payload.title,
         status: payload.status,
+        ...(payload.intent ? { intent: payload.intent } : {}),
       });
       break;
     }

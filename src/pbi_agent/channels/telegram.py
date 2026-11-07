@@ -242,6 +242,7 @@ class TelegramDisplay:
         task_instruction: str,
         reasoning_effort: str | None = None,
         name: str = "sub_agent",
+        intent: str | None = None,
     ) -> TelegramDisplay:
         return TelegramDisplay()
 
