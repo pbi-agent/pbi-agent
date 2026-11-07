@@ -292,8 +292,15 @@ def _append_memory_rules(
     base_prompt: str,
     active_names: set[str],
     workspace_directory_key: str | None,
+    cwd: Path | None = None,
 ) -> str:
-    """Append memory purpose rules and session-history query guidance."""
+    """Append memory rules and session-history guidance for opted-in workspaces.
+
+    Memory is opt-in: the guidance is added only when the workspace has an
+    ``AGENTS.md`` (created by ``pbi-agent init`` or by the user).
+    """
+    if load_project_rules(cwd) is None:
+        return base_prompt
     prompt = base_prompt
     if active_names & _WRITE_TOOL_NAMES:
         prompt = f"{prompt}\n\n{_MEMORY_RULES}"
@@ -519,7 +526,7 @@ def get_system_prompt(
             workspace_directory_key=workspace_directory_key,
         )
     prompt = _append_active_command(prompt, active_command_instructions)
-    prompt = _append_memory_rules(prompt, active_names, workspace_directory_key)
+    prompt = _append_memory_rules(prompt, active_names, workspace_directory_key, cwd)
     return _append_workspace_memory(prompt, cwd)
 
 

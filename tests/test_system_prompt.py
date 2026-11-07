@@ -217,7 +217,9 @@ def test_get_system_prompt_without_agents_md(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     prompt = get_system_prompt()
     _assert_builtin_prompt_base(prompt)
-    assert prompt.endswith("</session_history>")
+    assert prompt.endswith("</tool_usage_rules>")
+    assert "<memory_rules>" not in prompt
+    assert "<session_history>" not in prompt
     assert "<project_rules>" not in prompt
     assert "<workspace_memory>" not in prompt
     assert "<available_skills>" not in prompt
@@ -983,6 +985,7 @@ def test_get_system_prompt_includes_memory_rules_and_session_history(
 ):
     db_path = tmp_path / "db" / "sessions.db"
     monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(db_path))
+    (tmp_path / "AGENTS.md").write_text("Project rules.", encoding="utf-8")
 
     prompt = get_system_prompt(cwd=tmp_path, workspace_directory_key="/repo/x")
 
@@ -996,6 +999,7 @@ def test_get_system_prompt_includes_memory_rules_and_session_history(
 
 def test_get_system_prompt_omits_session_history_in_sandbox(tmp_path, monkeypatch):
     monkeypatch.setenv("PBI_AGENT_SANDBOX", "1")
+    (tmp_path / "AGENTS.md").write_text("Project rules.", encoding="utf-8")
 
     prompt = get_system_prompt(cwd=tmp_path)
 
@@ -1003,10 +1007,21 @@ def test_get_system_prompt_omits_session_history_in_sandbox(tmp_path, monkeypatc
 
 
 def test_get_system_prompt_omits_memory_sections_without_tools(tmp_path):
+    (tmp_path / "AGENTS.md").write_text("Project rules.", encoding="utf-8")
     prompt = get_system_prompt(
         cwd=tmp_path,
         excluded_tools={"shell", "apply_patch", "replace_in_file", "write_file"},
     )
 
+    assert "<memory_rules>" not in prompt
+    assert "<session_history>" not in prompt
+
+
+def test_get_system_prompt_memory_is_opt_in_via_agents_md(tmp_path):
+    (tmp_path / "MEMORY.md").write_text("Remember this.", encoding="utf-8")
+
+    prompt = get_system_prompt(cwd=tmp_path)
+
+    assert "<workspace_memory>\nRemember this.\n</workspace_memory>" in prompt
     assert "<memory_rules>" not in prompt
     assert "<session_history>" not in prompt
