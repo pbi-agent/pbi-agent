@@ -163,4 +163,5 @@ def test_generated_api_unknown_responses_are_limited_to_streams_and_files() -> N
         '"GET /api/events/sessions/{session_id}"',
         '"GET /api/events/{stream_id}"',
         '"GET /api/uploads/{upload_id}"',
+        '"GET /api/files/image"',
     }

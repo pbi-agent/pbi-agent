@@ -482,6 +482,7 @@ export type ApiOperationResponses = {
   "GET /api/events/sessions/{session_id}": unknown;
   "GET /api/events/{stream_id}": unknown;
   "GET /api/files/diff": WorkspaceFileDiffResponse;
+  "GET /api/files/image": unknown;
   "GET /api/files/preview": WorkspaceFilePreviewResponse;
   "GET /api/files/search": FileMentionSearchResponse;
   "GET /api/files/tree": WorkspaceFileTreeResponse;
@@ -632,6 +633,7 @@ export type ApiOperationQueryParams = {
   "GET /api/events/sessions/{session_id}": { since?: number; live_session_id?: string | null };
   "GET /api/events/{stream_id}": { since?: number };
   "GET /api/files/diff": { path: string };
+  "GET /api/files/image": { path: string };
   "GET /api/files/preview": { path: string };
   "GET /api/files/search": { q?: string; limit?: number; refresh?: boolean; exact?: boolean };
   "GET /api/mentions/search": { q?: string; limit?: number; refresh?: boolean };

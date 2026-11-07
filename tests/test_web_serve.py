@@ -13870,3 +13870,25 @@ def test_sse_iterator_stops_when_server_shutdown_event_is_set() -> None:
     chunks = asyncio.run(run())
     assert "server.connected" in chunks[0]
     assert stream.subscriber_count() == 0
+
+
+def test_workspace_image_endpoint(monkeypatch, tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    png = b"\x89PNG\r\n\x1a\n" + b"\0" * 32
+    (workspace / "shot.png").write_bytes(png)
+    (workspace / "notes.txt").write_text("hi")
+    (tmp_path / "outside.png").write_bytes(png)
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        ok = client.get("/api/files/image", params={"path": "shot.png"})
+        assert ok.status_code == 200
+        assert ok.headers["content-type"] == "image/png"
+        assert ok.content == png
+        for bad in ("../outside.png", "notes.txt", "missing.png"):
+            assert (
+                client.get("/api/files/image", params={"path": bad}).status_code == 404
+            )

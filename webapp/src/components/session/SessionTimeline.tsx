@@ -24,6 +24,7 @@ import {
 import { Badge } from "../ui/badge";
 import { MarkdownContent } from "../shared/MarkdownContent";
 import { ToolResult } from "./ToolResult";
+import { ToolImageGallery, type ToolImage } from "./ToolImageGallery";
 import { TimelineEntry } from "./TimelineEntry";
 import { SessionWelcome } from "./SessionWelcome";
 import {
@@ -1061,6 +1062,23 @@ function baseName(value: string) {
   return parts[parts.length - 1] || trimmed;
 }
 
+function inspectedImages(items: WorkItem[]): ToolImage[] {
+  const images: ToolImage[] = [];
+  for (const item of items) {
+    if (item.kind !== "tool_group") continue;
+    for (const entry of toolEntriesForGroup(item)) {
+      const name = normalizeToolNameCandidate(entry.label);
+      if (name !== "explore_workspace" && name !== "read_image") continue;
+      if (entry.entry.metadata?.success === false) continue;
+      const result = objectValue(entry.entry.metadata?.result);
+      const path = stringValue(result?.path);
+      if (!path || !stringValue(result?.mime_type)) continue;
+      images.push({ key: entry.key, path });
+    }
+  }
+  return images;
+}
+
 export type LastWorkIntent = { text: string; isShell: boolean };
 
 function lastWorkIntent(items: WorkItem[]): LastWorkIntent | null {
@@ -1701,6 +1719,7 @@ function WorkRun({
   showSubAgentCards,
   durationSeconds,
   subAgentItems,
+  showImageGallery = true,
 }: {
   unit: Extract<RenderUnit, { kind: "work_run" }>;
   subAgents: Record<string, SubAgentSummary>;
@@ -1717,6 +1736,7 @@ function WorkRun({
   showSubAgentCards?: boolean;
   durationSeconds?: number | null;
   subAgentItems: Record<string, WorkItem[]>;
+  showImageGallery?: boolean;
 }) {
   const hasItems = unit.items.length > 0;
   const lastItemId = hasItems ? unit.items[unit.items.length - 1].itemId : undefined;
@@ -1746,6 +1766,7 @@ function WorkRun({
   );
   const hasVisibleSummary = workRunSummary.length > 0;
   const workIntent = useMemo(() => lastWorkIntent(unit.items), [unit.items]);
+  const images = useMemo(() => inspectedImages(unit.items), [unit.items]);
   const isVisiblyActive =
     active || hasRunningSubAgentCard || (!sessionIsActive && unit.running);
   const showPlaceholderSummary = active && !hasVisibleSummary;
@@ -1881,6 +1902,7 @@ function WorkRun({
           </CollapsibleContent>
         ) : null}
       </Collapsible>
+      {showImageGallery && images.length > 0 ? <ToolImageGallery images={images} className="mt-1 ml-3.5" /> : null}
     </div>
   );
 }
@@ -1922,6 +1944,7 @@ function IntermediateResults({
   const assistantCount = unit.units.filter((innerUnit) =>
     innerUnit.kind === "message" && innerUnit.item.role === "assistant",
   ).length;
+  const images = useMemo(() => inspectedImages(workItems), [workItems]);
   const summaryText = workingSummaryText(summaryItems);
   const countText = [
     assistantCount > 0
@@ -1988,12 +2011,14 @@ function IntermediateResults({
                   showSubAgentCards={showSubAgentCards}
                   durationSeconds={workRunDurations.get(innerUnit.key) ?? null}
                   subAgentItems={subAgentItems}
+                  showImageGallery={false}
                 />
               );
             })}
           </div>
         </CollapsibleContent>
       </Collapsible>
+      {images.length > 0 ? <ToolImageGallery images={images} className="mt-1 ml-3.5" /> : null}
     </div>
   );
 }

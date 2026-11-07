@@ -1657,3 +1657,7 @@ export async function fetchRunFilterValues(
     `/api/dashboard/run-filter-values${qs}`,
   );
 }
+
+export function workspaceImageUrl(path: string): string {
+  return `/api/files/image?${new URLSearchParams({ path }).toString()}`;
+}
