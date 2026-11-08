@@ -13888,7 +13888,11 @@ def test_workspace_image_endpoint(monkeypatch, tmp_path: Path) -> None:
         assert ok.status_code == 200
         assert ok.headers["content-type"] == "image/png"
         assert ok.content == png
-        for bad in ("../outside.png", "notes.txt", "missing.png"):
+        for allowed in ("../outside.png", str(tmp_path / "outside.png")):
+            res = client.get("/api/files/image", params={"path": allowed})
+            assert res.status_code == 200
+            assert res.content == png
+        for bad in ("notes.txt", "missing.png", str(tmp_path / "missing.png")):
             assert (
                 client.get("/api/files/image", params={"path": bad}).status_code == 404
             )

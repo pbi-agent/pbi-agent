@@ -812,11 +812,10 @@ def get_workspace_image(
 ) -> FileResponse:
     clean_path = path.strip().replace("\\", "/")
     try:
-        relative = Path(clean_path)
-        if relative.is_absolute() or ".." in relative.parts:
-            raise ValueError
-        target = (manager.workspace_root / relative).resolve()
-        target.relative_to(manager.workspace_root.resolve())
+        candidate = Path(clean_path).expanduser()
+        if not candidate.is_absolute():
+            candidate = manager.workspace_root / candidate
+        target = candidate.resolve()
     except (OSError, ValueError) as exc:
         raise not_found("Image not found.") from exc
     if not target.is_file():
