@@ -83,6 +83,7 @@ When user asks to continue, merge, or publish existing release workflow:
 8. Create/switch to `chore/release-v<version>` from the release base that contains the intended local and remote unreleased commits. Prefer `origin/master` when it already contains all release commits; otherwise first reconcile local `master` and `origin/master` safely without including unrelated workspace changes.
 9. Apply release edits:
    - Bump `[project].version` in `pyproject.toml`.
+   - Run `uv lock` and include the resulting `uv.lock` change in the release commit.
    - Create `docs/changelog/v<version>.md` with version and release date.
    - Add new release at top of `docs/changelog/index.md`.
    - Add release page to VitePress changelog sidebar.
@@ -98,7 +99,7 @@ When user asks to continue, merge, or publish existing release workflow:
 12. Stage only release-scoped paths and inspect `git diff --cached`.
 13. Commit `chore: release v<version>`.
 14. Push branch and open release PR against `master`.
-15. Verify PR checks/status, merge, confirm release/tag, update release notes if needed, and report publish status.
+15. Verify PR checks/status, merge, then follow `release-writing` Publish Mode: confirm the single `Release` workflow run (PyPI publish + GitHub Release/tag), strip frontmatter from release notes if needed, and report publish status.
 
 ## PR content
 

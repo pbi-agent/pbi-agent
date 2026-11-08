@@ -26,8 +26,8 @@ Do not commit, push, open PRs, merge, tag, or edit GitHub Releases unless user e
 - Normal work lands through dedicated `feat/*`, `fix/*`, etc. PRs into `master`.
 - Release uses dedicated `chore/release-v<version>` branch and PR.
 - Release PR bumps `[project].version` in `pyproject.toml`, creates release changelog file, updates changelog index.
-- `.github/workflows/release.yml` creates GitHub Release when version bump reaches `master`.
-- `.github/workflows/publish.yml` publishes only when matching `v<version>` release/tag exists.
+- `.github/workflows/release.yml` (workflow name `Release`) runs on version-bump push to `master` (or `workflow_dispatch` with `version`): tests, build, **Publish to PyPI**, then **Publish GitHub release**/tag. There is no separate publish workflow.
+- Release PR includes `uv.lock` refreshed by `uv lock` (project version changes it).
 
 ## Preflight
 
@@ -80,7 +80,7 @@ Omit empty categories. Use active voice, user-facing impact, minimal jargon.
    - Use user-provided version when given.
    - Otherwise infer SemVer conservatively: breaking/API-removal = major; `feat` = minor; fixes/docs/chore = patch. Do not infer major without explicit evidence.
 3. Create `chore/release-v<version>` from `origin/master` only when authorized.
-4. Update `pyproject.toml` version.
+4. Update `pyproject.toml` version, then run `uv lock` and keep the resulting `uv.lock` change.
 5. Create `docs/changelog/v<version>.md` and update `docs/changelog/index.md`:
    - File frontmatter title: `v<version>`.
    - File frontmatter description: `Changelog for pbi-agent v<version>, released on YYYY-MM-DD.`
@@ -95,9 +95,12 @@ Omit empty categories. Use active voice, user-facing impact, minimal jargon.
 7. Validate touched surfaces:
    - `uv run ruff check .`
    - `uv run ruff format --check .`
-   - `uv run pytest`
+   - `uv run basedpyright`
+   - `uv run python scripts/dead_code.py`
+   - `bun run lint`
+   - `uv run pytest -q --tb=short -x`
    - `bun run docs:build`
-8. Stage only release-scoped paths. Re-check `git diff --cached`.
+8. Stage only release-scoped paths (`pyproject.toml`, `uv.lock`, changelog files, VitePress config). Re-check `git diff --cached`.
 9. Commit: `chore: release v<version>`.
 10. Push branch and open PR with `gh pr create --base master --head chore/release-v<version>`.
 
@@ -112,12 +115,12 @@ Only after explicit user approval and clean checks:
    - Body must not start with VitePress frontmatter (`---`).
    - Body should start with `# v<version>` and include the expected release sections.
    - If malformed or generic, update from a frontmatter-stripped changelog draft with `gh release edit v<version> --notes-file <file>` and re-check the body.
-5. Inspect `.github/workflows/publish.yml` or known workflow triggers, then wait for matching Publish workflow run triggered by Release workflow.
-6. Confirm publish job succeeded, including package upload step when visible in logs/status.
+5. Confirm the same `Release` run's **Publish to PyPI** step succeeded (`gh run view <run-id> --json jobs`).
+6. If the run failed, retry with `gh workflow run release.yml --ref master -f version=<version>`; never rerun an old-SHA run. PyPI CDN lags; verify instead of republishing.
 7. Report separate states:
    - PR merged to `master`.
    - GitHub Release/tag created.
-   - package publish workflow completed.
+   - PyPI publish step completed.
 8. Report version, PR URL, release URL, validation, publish status.
 
 ## Writing Rules
