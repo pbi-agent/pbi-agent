@@ -32,3 +32,4 @@ Entry shape: rule/fact — why/evidence — `[verified YYYY-MM-DD]` or `[unverif
 ### 2026-11-09
 - Released v0.49.0 (PR #380); Release run 42593771313 green; release notes frontmatter stripped. Local lint needs `bun install` for `@shadcn/lint`.
 - Sub-agent `include_context` transcript: filters persisted `<background_task_result>` synthetic user msgs (checkpoint steer + auto-wake) and keeps current turn in place before steers (no dup). Tests in `test_sub_agent_tool.py`; full pytest/ruff/basedpyright green. OpenAI/Azure/Google `previous_response_id` inheritance still carries them.
+- Released v0.50.0 (PR #381, sub-agent context fix); Release run 42636442151 green (PyPI + GH Release); notes frontmatter stripped.
