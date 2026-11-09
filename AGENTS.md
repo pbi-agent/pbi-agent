@@ -50,6 +50,7 @@ uv tool install --reinstall .
 
 ## TODO
 
+- Keep a checklist in `TODO.md`. Tick each item when it’s done, and add anything new you find.
 - `TODO.md` is session-only; reset if complete, append if unfinished.
 - Bullets: `- [ ]` pending, `- [>]` in progress, `- [x]` done, `- [!]` blocked, `- [-]` dropped. Keep it updated.
 
