@@ -26,3 +26,8 @@ Entry shape: rule/fact — why/evidence — `[verified YYYY-MM-DD]` or `[unverif
 - `.agents/memory/tools.md`: explore, shell, background shell, `allowed_tools`, patching, MCP.
 - `.agents/memory/runtime.md`: prompt assembly, catalogs, sub-agents, commands, replay, hooks, sandbox/init, branding.
 - `.agents/memory/web.md`: API contracts, web sessions, channels, events, timeline, UI quirks, composer, follow-ups.
+
+## Daily Log
+
+### 2026-11-09
+- Released v0.49.0 (PR #380); Release run 42593771313 green; release notes frontmatter stripped. Local lint needs `bun install` for `@shadcn/lint`.

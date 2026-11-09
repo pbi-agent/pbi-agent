@@ -1,3 +1,1 @@
-- [x] Inspect and identify task-scoped changes
-- [x] Verify validation and stage explicit paths
-- [x] Create local commit and verify working tree
+- [x] Release v0.49.0: PR #380 merged, PyPI + GitHub Release published
