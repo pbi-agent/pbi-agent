@@ -1166,3 +1166,125 @@ def test_background_sub_agent_kill_sets_cancel_event() -> None:
     manager.kill(task.task_id)
     assert done.wait(timeout=5)
     assert task.status == "killed"
+
+
+def _record(message_id: int, role: str, content: str) -> MessageRecord:
+    return MessageRecord(
+        id=message_id,
+        session_id="sess",
+        role=role,
+        content=content,
+        created_at=f"2026-03-27T00:00:{message_id:02d}+00:00",
+    )
+
+
+_BACKGROUND_RESULT = (
+    '<background_task_result task_id="bg-1" status="completed" exit_code="none" '
+    'kind="sub_agent" duration_seconds="3">\n'
+    "final_output:\nChild findings.\n"
+    "</background_task_result>\n"
+    "This background sub-agent you started has finished. Continue the task "
+    "using this result."
+)
+
+
+class _HistoryStoreStub:
+    def __init__(self, messages: list[MessageRecord]) -> None:
+        self._messages = messages
+
+    def list_messages(self, session_id: str) -> list[MessageRecord]:
+        assert session_id == "sess"
+        return list(self._messages)
+
+
+class _SnapshotProviderStub:
+    settings = Settings(api_key="test-key", provider="xai", model="grok-4")
+
+    def get_conversation_checkpoint(self) -> str | None:
+        return None
+
+
+def _snapshot_transcript(
+    messages: list[MessageRecord], current_user_turn_text: str
+) -> str:
+    from pbi_agent.agent.session.subagents import (
+        build_parent_context_snapshot,
+        build_sub_agent_initial_message,
+    )
+
+    snapshot = build_parent_context_snapshot(
+        provider=_SnapshotProviderStub(),  # type: ignore[arg-type]
+        store=_HistoryStoreStub(messages),  # type: ignore[arg-type]
+        session_id="sess",
+        current_user_turn_text=current_user_turn_text,
+    )
+    return build_sub_agent_initial_message(
+        "Do the delegated work",
+        provider_name="xai",
+        include_context=True,
+        parent_context=snapshot,
+    )
+
+
+def test_parent_context_excludes_mid_turn_background_results() -> None:
+    message = _snapshot_transcript(
+        [
+            _record(1, "user", "Earlier question"),
+            _record(2, "assistant", "Earlier answer"),
+            _record(3, "user", "Current request"),
+            _record(4, "user", _BACKGROUND_RESULT),
+        ],
+        "Current request",
+    )
+
+    assert "background_task_result" not in message
+    assert "Continue the task" not in message
+    assert message.count("Current request") == 1
+    assert message.index("Earlier answer") < message.index("Current request")
+
+
+def test_parent_context_excludes_auto_wake_background_turns() -> None:
+    message = _snapshot_transcript(
+        [
+            _record(1, "user", "Start the background audit"),
+            _record(2, "assistant", "Audit started in the background."),
+            _record(3, "user", _BACKGROUND_RESULT),
+        ],
+        _BACKGROUND_RESULT,
+    )
+
+    assert "background_task_result" not in message
+    assert message == (
+        "Use the parent conversation below as context for the delegated task.\n\n"
+        "<parent_conversation>\n"
+        "<user>\nStart the background audit\n</user>\n"
+        "<assistant>\nAudit started in the background.\n</assistant>\n"
+        "</parent_conversation>\n\n"
+        "<delegated_task>\nDo the delegated work\n</delegated_task>"
+    )
+
+
+def test_parent_context_keeps_current_turn_before_user_steers() -> None:
+    message = _snapshot_transcript(
+        [
+            _record(1, "user", "Current request"),
+            _record(2, "user", "Also check the tests"),
+        ],
+        "Current request",
+    )
+
+    assert message.count("Current request") == 1
+    assert message.index("Current request") < message.index("Also check the tests")
+
+
+def test_parent_context_keeps_repeated_prompt_for_current_turn() -> None:
+    message = _snapshot_transcript(
+        [
+            _record(1, "user", "continue"),
+            _record(2, "assistant", "Done with step one."),
+            _record(3, "user", "continue"),
+        ],
+        "continue",
+    )
+
+    assert message.count("<user>\ncontinue\n</user>") == 2
