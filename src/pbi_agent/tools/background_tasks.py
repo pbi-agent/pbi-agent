@@ -404,6 +404,14 @@ def _pump(stream: Any, tail: _StreamTail) -> None:
             pass
 
 
+BACKGROUND_RESULT_TAG = "background_task_result"
+
+
+def is_background_result_text(text: str) -> bool:
+    """Return whether ``text`` is a synthetic background-result user input."""
+    return text.lstrip().startswith(f"<{BACKGROUND_RESULT_TAG} ")
+
+
 def render_background_result(task: BackgroundTask) -> str:
     """Render a finished task as a model-facing synthetic user input."""
     if task.kind == "sub_agent":
@@ -418,7 +426,7 @@ def render_background_result(task: BackgroundTask) -> str:
     duration = task.summary()["elapsed_seconds"]
     exit_code = "none" if task.exit_code is None else str(task.exit_code)
     lines = [
-        f'<background_task_result task_id="{task.task_id}" status="{task.status}" '
+        f'<{BACKGROUND_RESULT_TAG} task_id="{task.task_id}" status="{task.status}" '
         f'exit_code="{exit_code}" duration_seconds="{duration}">',
         *([f"intent: {task.intent}"] if task.intent else []),
         f"command: {task.command}",
@@ -431,7 +439,7 @@ def render_background_result(task: BackgroundTask) -> str:
     if payload["stderr"]:
         lines.append("stderr:")
         lines.append(payload["stderr"])
-    lines.append("</background_task_result>")
+    lines.append(f"</{BACKGROUND_RESULT_TAG}>")
     lines.append(
         "This background shell task you started has finished. Continue the task "
         "using this result."
@@ -442,7 +450,7 @@ def render_background_result(task: BackgroundTask) -> str:
 def _render_sub_agent_result(task: BackgroundTask) -> str:
     duration = task.summary()["elapsed_seconds"]
     lines = [
-        f'<background_task_result task_id="{task.task_id}" status="{task.status}" '
+        f'<{BACKGROUND_RESULT_TAG} task_id="{task.task_id}" status="{task.status}" '
         f'exit_code="none" kind="sub_agent" duration_seconds="{duration}">',
         *([f"intent: {task.intent}"] if task.intent else []),
         "final_output:",
@@ -451,7 +459,7 @@ def _render_sub_agent_result(task: BackgroundTask) -> str:
     if task.stderr.text():
         lines.append("error:")
         lines.append(task.stderr.text())
-    lines.append("</background_task_result>")
+    lines.append(f"</{BACKGROUND_RESULT_TAG}>")
     lines.append(
         "This background sub-agent you started has finished. Continue the task "
         "using this result."
