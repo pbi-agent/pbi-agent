@@ -39,12 +39,15 @@ uv tool install --reinstall .
 
 ## Memory
 
-- Memory is for what a future session cannot recover from the repo, config, or this file: decisions and why, tested rules, traps, current focus, open follow-ups.
-- `MEMORY.md` is a short index (current focus, top rules, open follow-ups, links), preloaded into the agent (first 200 lines / 25 KB only). Topic detail lives in `.agents/memory/<topic>.md`; read the relevant page before work in that area.
-- Write when asked or when something is clearly worth remembering. Edit in place, merge duplicates, delete stale or superseded entries. No per-task changelog; past sessions are queryable from the session DB.
-- Entry shape: rule/fact, why/evidence, `[verified YYYY-MM-DD]` or `[unverified]`. Re-check unverified or old entries before relying on them.
-- Only the main agent edits memory; sub-agents report candidate notes.
-- Past sessions (ground truth for recovering context or checking a note) live in SQLite `~/.pbi-agent/sessions.db` (`PBI_AGENT_SESSION_DB_PATH` overrides). Query read-only with `python3` + `sqlite3.connect("file:<path>?mode=ro", uri=True)`; never write. Tables: `sessions(session_id, directory, title, created_at, updated_at)` where `directory` = lowercased absolute workspace path; `messages(id, session_id, role, content, created_at)`; `observability_events(session_id, event_type, tool_name, tool_input_json, tool_output_json, success, error_message, timestamp)` (large). Bind values as `?` params, select narrow columns, `substr` text, always `LIMIT`.
+- Memory holds what a future session cannot recover from the repo or config: decisions and why, tested rules, traps, current focus, open follow-ups.
+- `MEMORY.md` is a short index preloaded into the agent (first 200 lines / 25 KB); put topic detail in `.agents/memory/<topic>.md` and link it.
+- Write when asked or clearly worth remembering; edit in place, delete stale entries; tag `[verified YYYY-MM-DD]` or `[unverified]`.
+- Check relevant memory before acting; re-check unverified or old entries. Only the main agent edits memory; sub-agents report candidate notes.
+- `MEMORY.md` index: compact, edited in place; durable facts only (stable conventions, key decisions, reusable validation patterns, active follow-ups, artifacts that matter beyond one task).
+- Daily log: a `## Daily Log` section at the end of `MEMORY.md`, append-only within the active day under one `### YYYY-MM-DD` heading. Keep it short; it counts toward the preload cap. After each implementation, append one short entry: what changed, validation, next context if needed.
+- On the first substantive task of a new day, distill the previous day's log: move durable facts into the `MEMORY.md` index sections or `.agents/memory/` topic pages, delete that day's entries, then start the new day's heading.
+- Past sessions: SQLite `~/.pbi-agent/sessions.db` (`PBI_AGENT_SESSION_DB_PATH` overrides). Query read-only (`python3`, `sqlite3.connect("file:<path>?mode=ro", uri=True)`); never write. `sessions(session_id, directory, title, updated_at)` with `directory` = lowercased absolute workspace path; `messages(session_id, role, content, created_at)`; `observability_events(session_id, event_type, tool_name, tool_input_json, tool_output_json, error_message)` (large). Use `?` params, narrow columns, `substr`, `LIMIT`.
+
 
 ## Session TODO Protocol
 
