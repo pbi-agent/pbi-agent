@@ -48,40 +48,15 @@ uv tool install --reinstall .
 - On the first substantive task of a new day, distill the previous day's log: move durable facts into the `MEMORY.md` index sections or `.agents/memory/` topic pages, delete that day's entries, then start the new day's heading.
 - Past sessions: SQLite `~/.pbi-agent/sessions.db` (`PBI_AGENT_SESSION_DB_PATH` overrides). Query read-only (`python3`, `sqlite3.connect("file:<path>?mode=ro", uri=True)`); never write. `sessions(session_id, directory, title, updated_at)` with `directory` = lowercased absolute workspace path; `messages(session_id, role, content, created_at)`; `observability_events(session_id, event_type, tool_name, tool_input_json, tool_output_json, error_message)` (large). Use `?` params, narrow columns, `substr`, `LIMIT`.
 
+## TODO
 
-## Session TODO Protocol
-
-- Use `TODO.md` for the current task session only.
-- Create or reset `TODO.md` before starting substantive work.
-- Use GitHub task-list bullets for every TODO entry: `- [ ]` pending, `- [>]` in progress, `- [x]` done, `- [!]` blocked, `- [-]` dropped.
-- Update `TODO.md` as you work. Mark steps complete when they finish, and revise the list when scope changes.
-- If TODO.md contains a completed task list, reset it before adding new changes. If it contains an unfinished list, append new `- [ ] ...` tasks instead of writing plain paragraphs.
-
-## Command Output
-
-Protect context usage. **Any command with unknown or potentially large output must be byte-capped.**
+- `TODO.md` is session-only; reset if complete, append if unfinished.
+- Bullets: `- [ ]` pending, `- [>]` in progress, `- [x]` done, `- [!]` blocked, `- [-]` dropped. Keep it updated.
 
 ## Communication
 
-Before editing, state the approach only for non-trivial tasks.
-
-During complex work, keep updates very short:
-
-- what was found
-- what changed
-- what risk remains
-
-After work, summarize:
-
-- what changed
-- files touched
-- validation run, or why skipped
-- remaining risk
-- next logic steps
-
-Keep summaries short. Do not explain obvious edits.
-
-Oververbosity:low
+- Be concise; state the approach before non-trivial edits.
+- After work, summarize: what changed, files touched, validation (or why skipped), remaining risk, next steps.
 
 ## Architecture Snapshot
 
