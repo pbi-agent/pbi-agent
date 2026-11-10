@@ -203,6 +203,72 @@ describe("useLiveSessionEvents", () => {
     expect(invalidateQueries).not.toHaveBeenCalled();
   });
 
+  it("refreshes the workspace file tree once per finished file-mutating tool call", () => {
+    const queryClient = new QueryClient();
+    const invalidateQueries = vi
+      .spyOn(queryClient, "invalidateQueries")
+      .mockResolvedValue(undefined);
+    const sessionKey = getSavedSessionKey("session-1");
+
+    renderHook(() => useLiveSessionEvents(sessionKey, "live-1", "session-1"), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const socket = MockEventSource.instances[0];
+    const patchItem = (status: "running" | "completed") => ({
+      text: "apply_patch",
+      metadata: { tool_name: "apply_patch", call_id: "call-patch", status },
+    });
+    const fileTreeInvalidations = () =>
+      invalidateQueries.mock.calls.filter(
+        ([filters]) => filters?.queryKey?.[0] === "workspace-file-tree",
+      ).length;
+
+    emit(socket, {
+      seq: 1,
+      type: "tool_group_added",
+      payload: { session_id: "session-1", item_id: "g1", label: "tools", status: "running", items: [patchItem("running")] },
+    });
+    expect(fileTreeInvalidations()).toBe(0);
+
+    emit(socket, {
+      seq: 2,
+      type: "tool_group_added",
+      payload: { session_id: "session-1", item_id: "g1", label: "tools", status: "running", items: [patchItem("completed")] },
+    });
+    expect(fileTreeInvalidations()).toBe(1);
+
+    // Group updates republish earlier items; read-only tools never refresh.
+    emit(socket, {
+      seq: 3,
+      type: "tool_group_added",
+      payload: {
+        session_id: "session-1",
+        item_id: "g1",
+        label: "tools",
+        status: "completed",
+        items: [
+          patchItem("completed"),
+          { text: "read_image", metadata: { tool_name: "read_image", call_id: "call-img", status: "completed" } },
+        ],
+      },
+    });
+    expect(fileTreeInvalidations()).toBe(1);
+
+    emit(socket, {
+      seq: 4,
+      type: "tool_group_added",
+      payload: {
+        session_id: "session-1",
+        item_id: "g2",
+        label: "tools",
+        status: "completed",
+        items: [{ text: "shell", metadata: { tool_name: "shell", call_id: "call-shell", status: "failed" } }],
+      },
+    });
+    expect(fileTreeInvalidations()).toBe(2);
+  });
+
   it("does not connect saved sessions without an active live run", () => {
     const queryClient = new QueryClient();
     const sessionKey = getSavedSessionKey("session-1");

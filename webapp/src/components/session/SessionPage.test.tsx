@@ -772,6 +772,49 @@ describe("SessionPage", () => {
     );
   });
 
+  it("polls the file tree slowly while the workspace explorer is closed", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderSessionRoute("/sessions/session-1");
+      await screen.findByRole("button", { name: "Open workspace explorer" });
+      await waitFor(() => expect(fetchWorkspaceFileTree).toHaveBeenCalledTimes(1));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(fetchWorkspaceFileTree).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6_000);
+      });
+      expect(fetchWorkspaceFileTree).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("polls the file tree once per interval while the workspace explorer is open", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderSessionRoute("/sessions/session-1");
+      await user.click(await screen.findByRole("button", { name: "Open workspace explorer" }));
+      await screen.findByRole("button", { name: "src" });
+      const callsAfterOpen = vi.mocked(fetchWorkspaceFileTree).mock.calls.length;
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      // SessionPage owns the fast poll while open: ~5 requests in 10s. Guards
+      // against the open explorer silently losing its poller.
+      const pollCount = vi.mocked(fetchWorkspaceFileTree).mock.calls.length - callsAfterOpen;
+      expect(pollCount).toBeGreaterThanOrEqual(4);
+      expect(pollCount).toBeLessThanOrEqual(6);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("shows a workspace explorer shortcut dot for hidden changed files", async () => {
     const user = userEvent.setup();
     vi.mocked(fetchWorkspaceFileTree).mockResolvedValue({

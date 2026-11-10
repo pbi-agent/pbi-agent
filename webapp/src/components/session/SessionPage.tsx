@@ -73,8 +73,8 @@ import { Composer, type ComposerHandle } from "./Composer";
 import { ReplySelectionPopover } from "./ReplySelectionPopover";
 import { WorkspaceFileTreePanel } from "./WorkspaceFileTreePanel";
 import {
-  WORKSPACE_FILE_TREE_REFETCH_INTERVAL_MS,
   WORKSPACE_FILE_TREE_STALE_TIME_MS,
+  workspaceFileTreeRefetchInterval,
   workspaceFileTreeQueryKey,
 } from "./workspaceFileTreeQueries";
 import { WorkspaceBadge } from "../WorkspaceBadge";
@@ -304,7 +304,8 @@ export function SessionPage({
   const workspaceFileTreeSummaryQuery = useQuery({
     queryKey: workspaceFileTreeKey,
     queryFn: fetchWorkspaceFileTree,
-    refetchInterval: WORKSPACE_FILE_TREE_REFETCH_INTERVAL_MS,
+    // Sole poller for this key; WorkspaceFileTreePanel observes without an interval.
+    refetchInterval: workspaceFileTreeRefetchInterval(fileTreeOpen),
     staleTime: WORKSPACE_FILE_TREE_STALE_TIME_MS,
   });
 
