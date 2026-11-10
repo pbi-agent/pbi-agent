@@ -772,6 +772,27 @@ describe("SessionPage", () => {
     );
   });
 
+  it("polls the file tree slowly while the workspace explorer is closed", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderSessionRoute("/sessions/session-1");
+      await screen.findByRole("button", { name: "Open workspace explorer" });
+      await waitFor(() => expect(fetchWorkspaceFileTree).toHaveBeenCalledTimes(1));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(fetchWorkspaceFileTree).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6_000);
+      });
+      expect(fetchWorkspaceFileTree).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("shows a workspace explorer shortcut dot for hidden changed files", async () => {
     const user = userEvent.setup();
     vi.mocked(fetchWorkspaceFileTree).mockResolvedValue({
