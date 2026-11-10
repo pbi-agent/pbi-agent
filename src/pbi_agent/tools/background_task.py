@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from pbi_agent.tools.shell import _background_manager, _build_output_payload
+from pbi_agent.tools.background_tasks import background_output_payload
+from pbi_agent.tools.shell import _background_manager
 from pbi_agent.tools.types import ToolContext, ToolSpec
 
 _ACTIONS = ("list", "status", "output", "kill")
@@ -82,7 +83,19 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
                 "task ids."
             )
         }
-    bounded = _build_output_payload(
-        stdout=data.pop("stdout"), stderr=data.pop("stderr"), compression=False
+    task = manager.get(task_id)
+    if task is None:
+        return {"error": f"Unknown background task: {task_id}."}
+    # manager.output() snapshots status, then text, then dropped flags.
+    stdout_dropped = bool(data.pop("stdout_truncated", False))
+    stderr_dropped = bool(data.pop("stderr_truncated", False))
+    bounded = background_output_payload(
+        task,
+        stdout=data.pop("stdout"),
+        stderr=data.pop("stderr"),
+        stdout_dropped=stdout_dropped,
+        stderr_dropped=stderr_dropped,
+        compression=False,
+        status=data["status"],
     )
     return {**data, **bounded}

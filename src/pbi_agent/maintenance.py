@@ -19,6 +19,7 @@ from pbi_agent.self_update import (
     update_available_message,
 )
 from pbi_agent.session_store import SessionStore
+from pbi_agent.tools.raw_output import RAW_OUTPUT_MAX_AGE, purge_old_raw_output_files
 from pbi_agent.web.uploads import purge_old_unreferenced_uploads
 
 BACKGROUND_CHECK_TIMEOUT_SECONDS = 2
@@ -49,6 +50,7 @@ def run_startup_maintenance(
                 cutoff=cutoff,
                 referenced_upload_ids=referenced_upload_ids,
             )
+            purge_old_raw_output_files(cutoff=datetime.now(UTC) - RAW_OUTPUT_MAX_AGE)
             notice = check_update_notice() if check_updates else None
             if notice and render_notice:
                 render_update_notice(notice)

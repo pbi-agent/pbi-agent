@@ -116,6 +116,10 @@ Execute shell commands within the workspace root by default.
 }
 ```
 
+Stdout and stderr are compressed by default (`compression: false` opts out) and each stream is bounded to 12,000 characters. Compression by `codetool-shell` can be lossy: besides whitespace cleanup it summarizes test-runner output, collapses repeated diagnostics, and omits opaque payloads. When either stream is truncated, or compression summarized or omitted content (ignoring whitespace and ANSI-only changes), the full raw stdout and stderr are written to a unique `shell-output-<id>.log` file under `~/.pbi-agent/shell-output/`. The result then includes `stdout_compressed`/`stderr_compressed` and `stdout_truncated`/`stderr_truncated` flags as applicable, `raw_output_path`, and a `notice` pointing to the file, so the model can read it instead of re-running the command. No file is written when output is returned intact. Files are private to the user (mode `0600`). Files older than 24 hours are deleted by the daily startup maintenance, alongside session-data retention and upload cleanup; shell calls never scan the directory.
+
+Background shell tasks retain only the last 64,000 characters per stream; `stdout_tail_dropped`/`stderr_tail_dropped` mark that earlier output was lost. Their raw file is written once, after the task finishes, and reused for later reads; while a task is still running, reads return a notice instead of a file.
+
 ::: danger
 `shell` is marked destructive because it can run write-capable commands. The implementation confines `working_directory` to the workspace tree, but it does not try to sanitize the command itself.
 :::

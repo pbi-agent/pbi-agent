@@ -12,6 +12,7 @@ from typing import Any, cast
 
 import pytest
 
+from pbi_agent.tools import raw_output
 from pbi_agent.tools import shell as shell_tool
 from pbi_agent.tools.types import ToolContext
 
@@ -344,7 +345,8 @@ def test_shell_handle_compresses_non_empty_streams_by_default(
 
     def fake_compress_text(text: str, *, backend: str) -> str:
         calls.append((text, backend))
-        return f"compressed: {text}"
+        # Whitespace-only rewrite: compression applied but nothing lost.
+        return f"{text}   \n\n\n"
 
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
     monkeypatch.setattr(shell_tool, "compress_text", fake_compress_text)
@@ -354,8 +356,8 @@ def test_shell_handle_compresses_non_empty_streams_by_default(
     )
 
     assert result == {
-        "stdout": "compressed: stdout text",
-        "stderr": "compressed: stderr text",
+        "stdout": "stdout text   \n\n\n",
+        "stderr": "stderr text   \n\n\n",
         "exit_code": 0,
     }
     assert calls == [("stdout text", "auto"), ("stderr text", "auto")]
@@ -493,7 +495,7 @@ def test_shell_handle_compresses_timeout_partial_streams(
     def fake_compress_text(text: str, *, backend: str) -> str:
         assert backend == "auto"
         calls.append(text)
-        return f"compressed: {text}"
+        return f"{text}\n"
 
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
     monkeypatch.setattr(shell_tool, "compress_text", fake_compress_text)
@@ -504,8 +506,8 @@ def test_shell_handle_compresses_timeout_partial_streams(
     )
 
     assert result == {
-        "stdout": "compressed: partial stdout",
-        "stderr": "compressed: partial stderr",
+        "stdout": "partial stdout\n",
+        "stderr": "partial stderr\n",
         "exit_code": None,
         "timed_out": True,
         "error": "Command timed out after 500ms.",
@@ -698,3 +700,239 @@ def test_shell_handle_requires_intent(intent: object) -> None:
     result = shell_tool.handle(arguments, ToolContext())
 
     assert "'intent'" in result["error"]
+
+
+def _fake_completed_run(
+    monkeypatch: pytest.MonkeyPatch, *, stdout: str, stderr: str
+) -> None:
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        del args, kwargs
+        return subprocess.CompletedProcess(
+            args="cmd",
+            returncode=0,
+            stdout=stdout.encode("utf-8"),
+            stderr=stderr.encode("utf-8"),
+        )
+
+    monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
+
+
+@pytest.fixture
+def raw_output_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    raw_dir = tmp_path / "raw-output"
+    monkeypatch.setattr(raw_output, "raw_output_dir", lambda: raw_dir)
+    return raw_dir
+
+
+@pytest.mark.parametrize("compression", [True, False])
+def test_shell_truncated_output_saves_raw_file_with_notice(
+    raw_output_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    compression: bool,
+) -> None:
+    stdout = f"out-start-{'a' * (shell_tool.MAX_STDOUT_CHARS * 2)}-out-end"
+    stderr = "small stderr"
+    _fake_completed_run(monkeypatch, stdout=stdout, stderr=stderr)
+    # Whitespace-only compression: only truncation should be reported.
+    monkeypatch.setattr(
+        shell_tool, "compress_text", lambda text, *, backend: f"{text}\n\n"
+    )
+
+    result = shell_tool.handle(
+        {"intent": "Run test command", "command": "cmd", "compression": compression},
+        ToolContext(),
+    )
+
+    assert result["stdout_truncated"] is True
+    raw_path = Path(result["raw_output_path"])
+    assert raw_path.parent == raw_output_dir
+    assert raw_path.name.startswith(raw_output.RAW_OUTPUT_PREFIX)
+    assert str(raw_path) in result["notice"]
+    assert result["notice"].startswith("Output truncated.")
+    content = raw_path.read_text(encoding="utf-8")
+    # The file holds the original, uncompressed, unbounded output.
+    assert content == (f"===== stdout =====\n{stdout}\n===== stderr =====\n{stderr}\n")
+    assert "stdout_compressed" not in result
+    if os.name != "nt":
+        assert raw_path.stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.parametrize("compression", [True, False])
+def test_shell_untruncated_output_creates_no_raw_file(
+    raw_output_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    compression: bool,
+) -> None:
+    _fake_completed_run(monkeypatch, stdout="short out", stderr="short err")
+    monkeypatch.setattr(shell_tool, "compress_text", lambda text, *, backend: text)
+
+    result = shell_tool.handle(
+        {"intent": "Run test command", "command": "cmd", "compression": compression},
+        ToolContext(),
+    )
+
+    assert "raw_output_path" not in result
+    assert "notice" not in result
+    assert not raw_output_dir.exists()
+
+
+def test_shell_compression_truncation_saves_raw_file(
+    raw_output_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_completed_run(monkeypatch, stdout="raw stdout", stderr="raw stderr")
+    monkeypatch.setattr(
+        shell_tool,
+        "compress_text",
+        lambda text, *, backend: "x" * (shell_tool.MAX_STDERR_CHARS + 1),
+    )
+
+    result = shell_tool.handle(
+        {"intent": "Run test command", "command": "cmd"}, ToolContext()
+    )
+
+    assert result["stderr_truncated"] is True
+    content = Path(result["raw_output_path"]).read_text(encoding="utf-8")
+    assert "raw stdout" in content and "raw stderr" in content
+
+
+def test_shell_raw_output_files_are_unique_per_execution(
+    raw_output_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_completed_run(
+        monkeypatch, stdout="a" * (shell_tool.MAX_STDOUT_CHARS + 1), stderr=""
+    )
+    args = {"intent": "Run test command", "command": "cmd", "compression": False}
+
+    first = shell_tool.handle(args, ToolContext())
+    second = shell_tool.handle(args, ToolContext())
+
+    assert first["raw_output_path"] != second["raw_output_path"]
+    assert len(list(raw_output_dir.iterdir())) == 2
+
+
+def test_shell_raw_output_write_failure_omits_notice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("x")
+    monkeypatch.setattr(raw_output, "raw_output_dir", lambda: blocker / "raw")
+    _fake_completed_run(
+        monkeypatch, stdout="a" * (shell_tool.MAX_STDOUT_CHARS + 1), stderr=""
+    )
+
+    result = shell_tool.handle(
+        {"intent": "Run test command", "command": "cmd", "compression": False},
+        ToolContext(),
+    )
+
+    assert result["stdout_truncated"] is True
+    assert "raw_output_path" not in result
+    assert "notice" not in result
+
+
+def test_shell_lossy_compression_without_truncation_saves_raw_file(
+    raw_output_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raw_stdout = "collected 3 items\ntest_a PASSED\ntest_b PASSED\ntest_c PASSED\n"
+    _fake_completed_run(monkeypatch, stdout=raw_stdout, stderr="warn\n")
+    monkeypatch.setattr(
+        shell_tool,
+        "compress_text",
+        lambda text, *, backend: (
+            "test output: pytest success\n" if text.startswith("collected") else text
+        ),
+    )
+
+    result = shell_tool.handle(
+        {"intent": "Run test command", "command": "cmd"}, ToolContext()
+    )
+
+    assert result["stdout"] == "test output: pytest success\n"
+    assert result["stdout_compressed"] is True
+    assert "stderr_compressed" not in result
+    assert "stdout_truncated" not in result
+    assert result["notice"].startswith(
+        "Output compressed (some content summarized or omitted)."
+    )
+    assert "truncated" not in result["notice"]
+    content = Path(result["raw_output_path"]).read_text(encoding="utf-8")
+    assert content == (
+        f"===== stdout =====\n{raw_stdout}\n===== stderr =====\nwarn\n\n"
+    )
+
+
+def test_shell_lossy_compression_and_truncation_notice(
+    raw_output_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_completed_run(monkeypatch, stdout="raw", stderr="")
+    monkeypatch.setattr(
+        shell_tool,
+        "compress_text",
+        lambda text, *, backend: "y" * (shell_tool.MAX_STDOUT_CHARS + 1),
+    )
+
+    result = shell_tool.handle(
+        {"intent": "Run test command", "command": "cmd"}, ToolContext()
+    )
+
+    assert result["stdout_compressed"] is True
+    assert result["stdout_truncated"] is True
+    assert result["notice"].startswith(
+        "Output compressed (some content summarized or omitted) and truncated."
+    )
+
+
+@pytest.mark.parametrize(
+    ("raw", "compressed", "lossy"),
+    [
+        ("a\nb\n", "a\nb\n", False),
+        ("a\n\n\n\nb\n", "a\n\nb\n", False),
+        ("x   \ny\t\n", "x\ny\n", False),
+        ("\x1b[31mred\x1b[0m\n", "red\n", False),
+        ("line\r\nnext\r\n", "line\nnext\n", False),
+        ("    indented\n", "indented\n", False),
+        ("col1     col2\tcol3\n", "col1 col2 col3\n", False),
+        ("a\na\na\n", "a\n", True),
+        ("collected 2 items\n..\n2 passed\n", "test output: pytest success\n", True),
+        ("payload <html>...</html>\n", "[opaque payload omitted: kind=html]\n", True),
+    ],
+)
+def test_is_lossy_compression_ignores_cosmetic_changes(
+    raw: str, compressed: str, lossy: bool
+) -> None:
+    assert shell_tool._is_lossy_compression(raw, compressed) is lossy
+
+
+def test_cosmetic_compression_with_real_backend_creates_no_raw_file(
+    raw_output_dir: Path,
+) -> None:
+    # Call the payload builder directly: faking ``subprocess.run`` would also
+    # intercept codetool-shell's Rust backend subprocess.
+    result = shell_tool._build_output_payload(
+        stdout="a\n\n\n\nb   \n", stderr="", compression=True
+    )
+
+    assert "stdout_compressed" not in result
+    assert "notice" not in result
+    assert not raw_output_dir.exists()
+
+
+def test_test_runner_summary_with_real_backend_saves_raw_file(
+    raw_output_dir: Path,
+) -> None:
+    raw_stdout = (
+        "============ test session starts ============\n"
+        "platform linux\ncollected 200 items\n\n"
+        f"tests/test_a.py {'.' * 200} [100%]\n\n"
+        "============ 200 passed in 1.2s ============\n"
+    )
+
+    result = shell_tool._build_output_payload(
+        stdout=raw_stdout, stderr="", compression=True
+    )
+
+    assert result["stdout"] != raw_stdout
+    assert result["stdout_compressed"] is True
+    assert "stdout_truncated" not in result
+    assert result["notice"].startswith("Output compressed")
+    assert raw_stdout in Path(result["raw_output_path"]).read_text(encoding="utf-8")

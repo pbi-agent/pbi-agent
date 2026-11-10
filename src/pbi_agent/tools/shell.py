@@ -8,6 +8,7 @@ through the normal tool registry and execution pipeline.
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import signal
 import subprocess
@@ -20,6 +21,7 @@ from codetool_shell import compress_text
 
 from pbi_agent.tools.output import MAX_OUTPUT_CHARS as DEFAULT_MAX_OUTPUT_CHARS
 from pbi_agent.tools.output import bound_output, decode_output
+from pbi_agent.tools.raw_output import raw_output_notice, save_raw_output
 from pbi_agent.tools.types import ToolContext, ToolSpec
 
 DEFAULT_TIMEOUT_MS = 30_000
@@ -31,6 +33,7 @@ INTERRUPT_POLL_SECONDS = 0.1
 PROCESS_STOP_TIMEOUT_SECONDS = 5.0
 SHELL_BOOTSTRAP_ENV = "PBI_AGENT_SHELL_BOOTSTRAP"
 SHELL_EXECUTABLE_ENV = "PBI_AGENT_SHELL_EXECUTABLE"
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 SPEC = ToolSpec(
     name="shell",
@@ -505,14 +508,34 @@ def _compress_output(text: str, *, enabled: bool) -> str:
         return text
 
 
+def _content_signature(text: str) -> str:
+    """Return text with cosmetic differences removed.
+
+    Used to tell lossy compression (summarized or omitted content) apart from
+    whitespace-only cleanup: ANSI escapes and all whitespace are ignored.
+    """
+    return "".join(_ANSI_ESCAPE_RE.sub("", text).split())
+
+
+def _is_lossy_compression(raw: str, compressed: str) -> bool:
+    if raw == compressed:
+        return False
+    return _content_signature(raw) != _content_signature(compressed)
+
+
 def _build_output_payload(
     *,
     stdout: str,
     stderr: str,
     compression: bool,
+    save_raw: bool = True,
 ) -> dict[str, Any]:
+    raw_stdout = stdout
+    raw_stderr = stderr
     stdout = _compress_output(stdout, enabled=compression)
     stderr = _compress_output(stderr, enabled=compression)
+    stdout_compressed = _is_lossy_compression(raw_stdout, stdout)
+    stderr_compressed = _is_lossy_compression(raw_stderr, stderr)
     bounded_stdout, stdout_truncated = bound_output(
         stdout,
         limit=MAX_STDOUT_CHARS,
@@ -525,8 +548,21 @@ def _build_output_payload(
         "stdout": bounded_stdout,
         "stderr": bounded_stderr,
     }
+    if stdout_compressed:
+        payload["stdout_compressed"] = True
+    if stderr_compressed:
+        payload["stderr_compressed"] = True
     if stdout_truncated:
         payload["stdout_truncated"] = True
     if stderr_truncated:
         payload["stderr_truncated"] = True
+    compressed = stdout_compressed or stderr_compressed
+    truncated = stdout_truncated or stderr_truncated
+    if save_raw and (compressed or truncated):
+        raw_path = save_raw_output(stdout=raw_stdout, stderr=raw_stderr)
+        if raw_path is not None:
+            payload["raw_output_path"] = str(raw_path)
+            payload["notice"] = raw_output_notice(
+                raw_path, compressed=compressed, truncated=truncated
+            )
     return payload
