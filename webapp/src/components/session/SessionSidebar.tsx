@@ -17,10 +17,14 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { Input } from "../ui/input";
+import { Kbd } from "../ui/kbd";
 import { Skeleton } from "../ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { EmptyState } from "../shared/EmptyState";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { SidebarSearchField } from "./SidebarSearchField";
+
+const NEW_SESSION_SHORTCUT = "Ctrl+Shift+O";
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -126,15 +130,24 @@ export function SessionSidebar({
     <div className="flex h-full min-h-0 flex-col gap-2 px-3 pt-3" aria-label="Session list">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Sessions</h2>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onNewSession}
-        >
-          <PlusIcon data-icon="inline-start" />
-          New
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onNewSession}
+              aria-keyshortcuts={NEW_SESSION_SHORTCUT}
+            >
+              <PlusIcon data-icon="inline-start" />
+              New
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <span>New session</span>
+            <Kbd>{NEW_SESSION_SHORTCUT}</Kbd>
+          </TooltipContent>
+        </Tooltip>
       </div>
 
       <SidebarSearchField
