@@ -194,20 +194,14 @@ sub_agents: confidence-checker,fixer
 
 ## `pbi-agent init`
 
-Bootstrap a workspace with starter project guidance plus default official catalog items:
-
-- `AGENTS.md`
-- default commands from the official `pbi-agent/commands` catalog
-- default sub-agents from the official `pbi-agent/agents` catalog
+Create a starter `AGENTS.md` with project guidance in the current workspace.
 
 ```bash
 pbi-agent init
 pbi-agent init --force
 ```
 
-By default, existing bootstrap files are skipped. Use `--force` or `--overwrite` to replace existing `AGENTS.md`, default command files under `.agents/commands/`, and default sub-agent files under `.agents/agents/`.
-
-Init reports created, installed, overwritten, skipped, and failed items. Catalog install failures are shown in the summary without hiding successful `AGENTS.md` handling.
+By default, an existing `AGENTS.md` is skipped. Use `--force` or `--overwrite` to replace it. Commands and sub-agents are not installed; add them with `pbi-agent commands add` and `pbi-agent agents add`.
 
 ## `pbi-agent upgrade`
 

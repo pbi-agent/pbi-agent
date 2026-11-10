@@ -13,7 +13,7 @@ from pbi_agent.config import (
 )
 from pbi_agent.hooks.discovery import discover_hooks
 from pbi_agent.hooks.review import format_hook_warning, hooks_requiring_review
-from pbi_agent.init_agents import format_init_bootstrap_result, init_workspace_bootstrap
+from pbi_agent.init_agents import format_init_agents_result, init_agents_file
 from pbi_agent.log_config import configure_logging
 from pbi_agent.maintenance import run_startup_maintenance
 from pbi_agent.workspace_context import current_workspace_context
@@ -70,8 +70,8 @@ def main(argv: list[str] | None = None) -> int:
         return _handle_commands_command(args)
 
     if args.command == "init":
-        result = init_workspace_bootstrap(force=args.force)
-        print(format_init_bootstrap_result(result))
+        result = init_agents_file(force=args.force)
+        print(format_init_agents_result(result))
         return 0
 
     if args.command == "agents":

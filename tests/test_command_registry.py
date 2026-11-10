@@ -26,7 +26,7 @@ def test_search_slash_commands_ranks_matches_by_name_and_keywords() -> None:
         "/agents"
     ]
     assert [command.name for command in search_slash_commands("serv")] == ["/mcp"]
-    assert [command.name for command in search_slash_commands("bootstrap")] == ["/init"]
+    assert [command.name for command in search_slash_commands("setup")] == ["/init"]
     assert [command.name for command in search_slash_commands("refresh")] == ["/reload"]
     assert [command.name for command in search_slash_commands("fresh")] == ["/new"]
     assert [command.name for command in search_slash_commands("trust")] == ["/hooks"]
