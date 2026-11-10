@@ -235,8 +235,11 @@ def _load_project_sub_agent(agent_path: Path) -> ProjectSubAgent | None:
 
     normalized_name = name.strip()
     from pbi_agent.config import ConfigError, parse_csv_setting
+    from pbi_agent.tools.availability import normalize_tool_categories
 
-    allowed_tools = parse_csv_setting(metadata.get("allowed_tools"))
+    allowed_tools = normalize_tool_categories(
+        parse_csv_setting(metadata.get("allowed_tools"))
+    )
     skills = parse_csv_setting(metadata.get("skills"))
     commands = parse_csv_setting(metadata.get("commands"))
     sub_agents = parse_csv_setting(metadata.get("sub_agents"))

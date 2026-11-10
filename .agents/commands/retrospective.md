@@ -2,7 +2,7 @@
 name: retrospective
 description: Retrospective Mode
 model_profile_id: worker
-allowed_tools: read,shell
+allowed_tools: read-image,shell
 ---
 
 # Retrospective Mode

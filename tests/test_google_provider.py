@@ -399,7 +399,7 @@ def test_google_parse_response_extracts_interactions_steps_shape() -> None:
                 {
                     "type": "function_call",
                     "id": "7sxzq8ft",
-                    "name": "explore_workspace",
+                    "name": "read_image",
                     "arguments": {"pattern": "MEMORY.md", "target": "path"},
                 },
             ],
@@ -414,7 +414,7 @@ def test_google_parse_response_extracts_interactions_steps_shape() -> None:
     assert result.function_calls == [
         ToolCall(
             call_id="7sxzq8ft",
-            name="explore_workspace",
+            name="read_image",
             arguments={"pattern": "MEMORY.md", "target": "path"},
         )
     ]
@@ -642,7 +642,7 @@ def test_google_execute_tool_calls_returns_function_results(
             ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
             ToolCall(
                 call_id="call_2",
-                name="explore_workspace",
+                name="read_image",
                 arguments={"pattern": "README.md", "target": "read"},
             ),
         ],
@@ -698,7 +698,7 @@ def test_google_execute_tool_calls_returns_function_results(
         },
         {
             "type": "function_result",
-            "name": "explore_workspace",
+            "name": "read_image",
             "call_id": "call_2",
             "result": (
                 '{"ok": false, "error": {"type": "tool_execution_failed", '
@@ -716,7 +716,7 @@ def test_google_execute_tool_calls_returns_function_results(
             "arguments": {"command": "pwd"},
         },
         {
-            "name": "explore_workspace",
+            "name": "read_image",
             "success": False,
             "call_id": "call_2",
             "arguments": {"pattern": "README.md", "target": "read"},
@@ -1335,7 +1335,7 @@ def test_google_execute_tool_calls_serializes_image_attachments(
         function_calls=[
             ToolCall(
                 call_id="call_1",
-                name="explore_workspace",
+                name="read_image",
                 arguments={"pattern": "chart.png", "target": "read"},
             )
         ],
@@ -1384,7 +1384,7 @@ def test_google_execute_tool_calls_serializes_image_attachments(
     assert tool_result_items == [
         {
             "type": "function_result",
-            "name": "explore_workspace",
+            "name": "read_image",
             "call_id": "call_1",
             "result": [
                 {

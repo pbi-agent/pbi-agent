@@ -7,65 +7,40 @@ from pbi_agent.display.formatting import (
 )
 
 
-def test_explore_workspace_routes_to_dedicated_cli_display() -> None:
+def test_read_image_routes_to_dedicated_cli_display() -> None:
     tool_name, text = route_function_result(
-        "explore_workspace",
+        "read_image",
         status="[green]done[/green]",
-        arguments={
-            "pattern": "UserService",
-            "root": "src",
-            "regex": True,
-            "target": "path",
-            "path_scope": "basename",
-            "mode": "snippets",
-            "context_lines": 1,
-            "glob": ["*.py"],
-            "exclude": "tests/**",
-            "cursor": 20,
-        },
+        arguments={"path": "docs/shot.png"},
         result={
-            "result": "src/service.py\n 12:class UserService:\nsrc/user_service.py"
+            "ok": True,
+            "result": {
+                "path": "docs/shot.png",
+                "mime_type": "image/png",
+                "byte_count": 24,
+            },
         },
     )
 
-    assert tool_name == "explore_workspace"
-    assert tool_group_class("explore_workspace") == "tool-group-explore-workspace"
-    assert tool_item_class("explore_workspace") == "tool-call-explore-workspace"
-    assert "UserService" in text
-    assert "root:" in text
-    assert "src" in text
-    assert "target:" in text
-    assert "path search" in text
-    assert "pattern:" in text
-    assert "regex" in text
-    assert "options:" in text
-    assert "mode=snippets" in text
-    assert "context=1" in text
-    assert "path_scope=basename" in text
-    assert "cursor=20" in text
-    assert "glob:" in text
-    assert "*.py" in text
-    assert "exclude:" in text
-    assert "tests/**" in text
-    assert "output:" in text
-    assert "src/service.py" in text
-    assert "class UserService" in text
-    assert "explore_workspace()" not in text
+    assert tool_name == "read_image"
+    assert tool_group_class("read_image") == "tool-group-read-image"
+    assert tool_item_class("read_image") == "tool-call-read-image"
+    assert "docs/shot.png" in text
+    assert "image/png" in text
+    assert "24 bytes" in text
+    assert "read_image()" not in text
 
 
-def test_explore_workspace_cli_display_shows_error_detail() -> None:
+def test_read_image_cli_display_shows_error_detail() -> None:
     _, text = route_function_result(
-        "explore_workspace",
+        "read_image",
         status="[red]failed[/red]",
-        arguments={"pattern": "[", "regex": True},
-        result={
-            "ok": False,
-            "result": {"error": "unterminated character set at position 0"},
-        },
+        arguments={"path": "notes.txt"},
+        result={"ok": False, "result": {"error": "unsupported image format"}},
     )
 
     assert "error:" in text
-    assert "unterminated character set at position 0" in text
+    assert "unsupported image format" in text
 
 
 def test_web_search_routes_unwrap_wrapped_result_sources() -> None:

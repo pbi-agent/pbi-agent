@@ -319,7 +319,7 @@ def test_combined_timeline_recovers_sub_agent_messages_from_persisted_events() -
                         {
                             "kind": "tool_group",
                             "itemId": "subagent-1-tool-group-2",
-                            "label": "explore_workspace",
+                            "label": "read_image",
                             "items": [],
                             "sub_agent_id": "subagent-1",
                         },
@@ -352,8 +352,8 @@ def test_combined_timeline_recovers_sub_agent_messages_from_persisted_events() -
                     "type": "tool_group_added",
                     "payload": {
                         "item_id": "subagent-1-tool-group-2",
-                        "label": "explore_workspace",
-                        "items": [{"text": "explore_workspace"}],
+                        "label": "read_image",
+                        "items": [{"text": "read_image"}],
                         "status": "completed",
                         "sub_agent_id": "subagent-1",
                     },
@@ -397,8 +397,8 @@ def test_combined_timeline_recovers_sub_agent_messages_from_persisted_events() -
         },
         {
             "item_id": "completed-run:subagent-1-tool-group-2",
-            "label": "explore_workspace",
-            "items": [{"text": "explore_workspace"}],
+            "label": "read_image",
+            "items": [{"text": "read_image"}],
             "status": "completed",
             "sub_agent_id": "completed-run:subagent-1",
             "kind": "tool_group",
@@ -2069,7 +2069,7 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
                 "model": "gpt-5.6-sol",
                 "reasoning_effort": "focused",
                 "reasoning_mode": "pro",
-                "allowed_tools": ["read", "web"],
+                "allowed_tools": ["read-image", "web"],
             },
         )
         assert create_profile_response.status_code == 200
@@ -2092,11 +2092,14 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
             == "focused"
         )
         assert profile_payload["model_profile"]["reasoning_mode"] == "pro"
-        assert profile_payload["model_profile"]["allowed_tools"] == ["read", "web"]
+        assert profile_payload["model_profile"]["allowed_tools"] == [
+            "read-image",
+            "web",
+        ]
         assert profile_payload["model_profile"]["resolved_runtime"][
             "allowed_tools"
         ] == [
-            "read",
+            "read-image",
             "web",
         ]
         revision = profile_payload["config_revision"]
@@ -2401,7 +2404,7 @@ def test_commands_endpoint_exposes_model_profile_id(tmp_path, monkeypatch) -> No
                 "name: Plan",
                 "description: Plan command",
                 "model_profile_id: analysis",
-                "allowed_tools: read,shell",
+                "allowed_tools: read-image,shell",
                 "skills: fastapi,shadcn",
                 "sub_agents: confidence-checker,fixer",
                 "---",
@@ -2419,7 +2422,7 @@ def test_commands_endpoint_exposes_model_profile_id(tmp_path, monkeypatch) -> No
 
     assert response.status_code == 200
     assert response.json()["commands"][0]["model_profile_id"] == "analysis"
-    assert response.json()["commands"][0]["allowed_tools"] == ["read", "shell"]
+    assert response.json()["commands"][0]["allowed_tools"] == ["read-image", "shell"]
     assert response.json()["commands"][0]["skills"] == ["fastapi", "shadcn"]
     assert response.json()["commands"][0]["sub_agents"] == [
         "confidence-checker",
@@ -2798,7 +2801,7 @@ def test_agent_bootstrap_and_list_endpoint_return_installed_project_agents(
         "Review code changes.",
         "You review code changes.",
         model_profile_id="analysis",
-        allowed_tools="read,shell",
+        allowed_tools="read-image,shell",
         skills="fastapi,shadcn",
         commands="review",
         sub_agents="confidence-checker,fixer",
@@ -2817,7 +2820,7 @@ def test_agent_bootstrap_and_list_endpoint_return_installed_project_agents(
                 "instructions": "You review code changes.",
                 "path": ".agents/agents/code-reviewer.md",
                 "model_profile_id": "analysis",
-                "allowed_tools": ["read", "shell"],
+                "allowed_tools": ["read-image", "shell"],
                 "skills": ["fastapi", "shadcn"],
                 "commands": ["review"],
                 "sub_agents": ["confidence-checker", "fixer"],
@@ -8606,7 +8609,7 @@ def test_web_display_interrupts_only_active_shell_tool_call() -> None:
             ),
             PendingToolCall(
                 call_id="call-read",
-                name="explore_workspace",
+                name="read_image",
                 arguments={"pattern": "README"},
             ),
         ]
@@ -11802,7 +11805,7 @@ def test_config_provider_and_profile_list_update_delete_endpoints(
                 "model": "gpt-5.4-2026-03-05",
                 "reasoning_effort": "xhigh",
                 "max_tool_workers": 6,
-                "allowed_tools": ["read", "web"],
+                "allowed_tools": ["read-image", "web"],
             },
         )
         assert create_profile_response.status_code == 200

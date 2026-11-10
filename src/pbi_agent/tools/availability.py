@@ -16,13 +16,33 @@ UI_ONLY_TOOL_CATEGORIES: dict[str, frozenset[str]] = {
     "ask-user": UI_ONLY_TOOL_NAMES,
 }
 BUILTIN_TOOL_CATEGORIES: dict[str, frozenset[str]] = {
-    "read": frozenset({"explore_workspace"}),
+    "read-image": frozenset({"read_image"}),
     "write": frozenset({"apply_patch", "replace_in_file", "write_file"}),
     "web": frozenset({_WEB_FETCH_TOOL, _WEB_SEARCH_TOOL}),
     "sub-agent": frozenset({"sub_agent"}),
     "shell": frozenset({"shell", "background_task"}),
 }
 BUILTIN_TOOL_NAMES = frozenset().union(*BUILTIN_TOOL_CATEGORIES.values())
+# Accepted spellings for built-in tool groups; `read` predates `read-image`.
+BUILTIN_TOOL_CATEGORY_ALIASES: dict[str, str] = {
+    "read": "read-image",
+    "read_image": "read-image",
+}
+
+
+def normalize_tool_categories(
+    allowed_tools: Iterable[str] | None,
+) -> tuple[str, ...] | None:
+    """Map alias tool-group names to canonical names, dropping duplicates."""
+
+    if allowed_tools is None:
+        return None
+    normalized: list[str] = []
+    for category in allowed_tools:
+        canonical = BUILTIN_TOOL_CATEGORY_ALIASES.get(category, category)
+        if canonical not in normalized:
+            normalized.append(canonical)
+    return tuple(normalized)
 
 
 def default_excluded_tool_names(
@@ -67,7 +87,7 @@ def enabled_builtin_tool_names(settings: Settings) -> set[str]:
     if allowed_tools is None:
         return set(BUILTIN_TOOL_NAMES)
     allowed: set[str] = set()
-    for category in allowed_tools:
+    for category in normalize_tool_categories(allowed_tools) or ():
         if category not in BUILTIN_TOOL_CATEGORIES:
             continue
         allowed.update(BUILTIN_TOOL_CATEGORIES[category])

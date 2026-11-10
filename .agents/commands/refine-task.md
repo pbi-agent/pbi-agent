@@ -2,7 +2,7 @@
 name: refine-task
 description: Refine Task Prompt Mode
 model_profile_id: worker-pro
-allowed_tools: read,web,ask-user
+allowed_tools: read-image,web,ask-user
 ---
 
 # Refine Task Prompt Mode

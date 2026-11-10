@@ -2,6 +2,6 @@
 name: code-reviewer
 description: Review code changes for correctness, regressions, and test coverage.
 model_profile_id: worker-pro
-allowed_tools: read,shell
+allowed_tools: read-image,shell
 commands: review
 ---

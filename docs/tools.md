@@ -5,7 +5,7 @@ description: 'The provider-agnostic function tools available to the pbi-agent ru
 
 # Built-in Tools
 
-Most built-in tools are exposed through the shared tool registry across providers. Image files are read through `explore_workspace` with `target: "read"` on providers that support multimodal image input in this build.
+Most built-in tools are exposed through the shared tool registry across providers. Text files are read and searched through `shell` (`cat`, `sed -n`, `rg`, `find`, ...). Image files are attached through `read_image` on providers that support multimodal image input.
 
 Project-local MCP servers are discovered from `.agents/mcp.json` and their tools are merged into the same runtime catalog at startup. Those tools are exposed to the model as ordinary function tools with per-server namespacing, so a tool named `say_hi` from the `echo` server is sent to the model as `echo__say_hi`.
 
@@ -22,7 +22,7 @@ The allow-list accepts these built-in tool groups:
 
 | Tool group | Built-ins |
 | --- | --- |
-| `read` | `explore_workspace` |
+| `read-image` | `read_image` |
 | `write` | `apply_patch`, `replace_in_file`, `write_file` |
 | `web` | `read_web_url`, `web_search` |
 | `sub-agent` | `sub_agent` |
@@ -47,13 +47,13 @@ Examples:
 
 ```bash
 pbi-agent run --prompt "Inspect only" \
-  --allowed-tools read
+  --allowed-tools shell
 
 pbi-agent run --prompt "Fetch docs" \
-  --allowed-tools read,web,shell
+  --allowed-tools read-image,web,shell
 
 pbi-agent config profiles create --name ReadOnly --provider-id openai \
-  --allowed-tools read,web
+  --allowed-tools read-image,web
 ```
 
 Project command or sub-agent frontmatter uses the same comma-separated key.
@@ -63,7 +63,7 @@ Project commands may additionally include `ask-user`:
 ---
 name: review
 description: Review without writing files.
-allowed_tools: read,shell
+allowed_tools: read-image,shell
 ---
 ```
 
@@ -83,7 +83,7 @@ to the same tool visibility rules and the nested depth cap.
 | `shell` | yes | Run a shell command in the workspace and return stdout, stderr, and exit code. |
 | `apply_patch` | yes | Create, update, or delete files through a V4A diff-style file operation. |
 | `sub_agent` | no | Delegate a scoped task to a child agent, optionally selecting a discovered project sub-agent type and inheriting parent context. |
-| `explore_workspace` | no | Search workspace content/paths, read text files, list one directory level, and attach supported image files to the model context. |
+| `read_image` | no | Attach a supported image file to the model context. |
 | `read_web_url` | no | Fetch a public web page through Firecrawl scrape, falling back to markdown.new, and return Markdown. |
 | `web_search` | no | Search the public web through Firecrawl and return source results. |
 
@@ -207,72 +207,21 @@ Runtime behavior:
 See [Project Sub-agents](/customization/sub-agents#sub-agent-tool-visibility)
 for sub-agent `allowed_tools` frontmatter.
 
-## `explore_workspace`
+## `read_image`
 
-Search workspace contents/paths, read one text file, or list one directory level. The tool wraps `codetool-explore` and returns compact text directly to the model, without JSON wrapping on successful non-image calls. Failures are reported as failed tool calls (`ok: false`).
+Attach one image file to the model context. Use `shell` for text files.
 
 | Parameter | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `pattern` | `string` | yes | Search pattern; for `read`/`list`, the file or directory path. |
-| `root` | `string` or `string[]` | no | Workspace-relative file/dir root. Search accepts multiple roots; `read`/`list` require a single root. Defaults to `.`. |
-| `target` | `content`, `path`, `read`, or `list` | no | Operation. Defaults to content search. |
-| `regex` | `boolean` | no | Treat search `pattern` as a regular expression. Defaults to `true`; set `false` for literal search. |
-| `path_scope` | `path` or `basename` | no | For path search, match the full relative path or only file basenames. Defaults to `path`. |
-| `glob` | `string` or `string[]` | no | Include only files matching the glob or globs. |
-| `exclude` | `string` or `string[]` | no | Exclude files matching the glob or globs. |
-| `mode` | `files`, `snippets`, or `count` | no | Search detail level. Defaults to `snippets` when `context_lines > 0`; otherwise `files`. |
-| `context_lines` | `integer` | no | Nearby lines to include before and after each snippet match. Defaults to `0`; capped at `20`. |
-| `limit` | `integer` | no | Maximum matches/list entries/read lines. Defaults to `50`; capped at `1000`. |
-| `cursor` | `integer` or `string` | no | Cursor from a previous truncated search/list result. |
-| `start_line` | `integer` | no | First line for `target: "read"`. Defaults to `1`. |
+| `path` | `string` | yes | Image file path, workspace-relative or absolute. Paths outside the workspace are allowed. |
 
 ```json
 {
-  "pattern": "UserService",
-  "regex": false,
-  "glob": "*.py",
-  "limit": 20
+  "path": "docs/screenshot.png"
 }
 ```
 
-Read a text file:
-
-```json
-{
-  "pattern": "src/app.py",
-  "target": "read",
-  "start_line": 20,
-  "limit": 80
-}
-```
-
-List one directory level:
-
-```json
-{
-  "pattern": "src",
-  "target": "list",
-  "limit": 100
-}
-```
-
-::: tip
-Use `target: "path"` for filename/path discovery and `target: "list"` for one-level directory inspection. Use `mode: "snippets"` with `context_lines` when nearby code is needed. The tool intentionally does not expose mixed `content_or_path`, backend, case, or result-format controls.
-:::
-
-Text output format:
-
-- `No Match` means no result.
-- `-- more: cursor=N` means repeat with that `cursor` for the next page.
-- Search `files` mode returns matching file paths.
-- Search `count` mode returns `path xN`, where `N` is the match count.
-- Search `snippets` mode returns `path:line:text` or groups context under file headings.
-- Read mode returns plain text without line-number prefixes.
-- List mode returns compact one-level entries; directories end with `/`.
-
-Project skill activation also uses `explore_workspace` with `target: "read"` to load discovered `.agents/skills/*/SKILL.md` files.
-
-Supported image formats are `.png`, `.jpg`, `.jpeg`, and `.webp`. For those files, `explore_workspace` read returns compact metadata to the transcript and keeps the image payload in provider-native multimodal content blocks instead of embedding it into plain text.
+Supported formats are PNG, JPEG, WEBP, HEIC, and HEIF (detected from file content, 20 MB limit). The tool returns compact metadata (`path`, `mime_type`, `byte_count`) to the transcript and keeps the image payload in provider-native multimodal content blocks instead of embedding it into plain text.
 
 ## `read_web_url`
 

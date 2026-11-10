@@ -290,7 +290,7 @@ def test_list_command_configs_parses_allowed_tools_frontmatter(
                 "---",
                 "name: review",
                 "description: Review safely.",
-                "allowed_tools: read, web, shell, ask_user",
+                "allowed_tools: read-image, web, shell, ask_user",
                 "---",
                 "",
                 "Review only.",
@@ -300,7 +300,7 @@ def test_list_command_configs_parses_allowed_tools_frontmatter(
 
     command = list_command_configs(tmp_path)[0]
 
-    assert command.allowed_tools == ("read", "web", "shell", "ask-user")
+    assert command.allowed_tools == ("read-image", "web", "shell", "ask-user")
 
 
 def test_list_command_configs_parses_skills_and_sub_agents_frontmatter(
@@ -450,7 +450,7 @@ def test_config_store_roundtrip_and_active_profile_selection(monkeypatch) -> Non
             reasoning_mode="pro",
             max_tokens=4096,
             service_tier="flex",
-            allowed_tools=("read", "web", "shell"),
+            allowed_tools=("read-image", "web", "shell"),
             max_tool_workers=6,
             max_retries=5,
             compact_threshold=123456,
@@ -466,7 +466,7 @@ def test_config_store_roundtrip_and_active_profile_selection(monkeypatch) -> Non
     assert config.providers[0].api_key == "saved-openai-key"
     assert config.model_profiles[0].service_tier == "flex"
     assert config.model_profiles[0].reasoning_mode == "pro"
-    assert config.model_profiles[0].allowed_tools == ("read", "web", "shell")
+    assert config.model_profiles[0].allowed_tools == ("read-image", "web", "shell")
 
 
 def test_stt_only_provider_configs_roundtrip_and_metadata(monkeypatch) -> None:
@@ -921,7 +921,7 @@ def test_resolve_web_runtime_uses_selected_web_profile(monkeypatch) -> None:
             max_tool_workers=6,
             max_retries=5,
             compact_threshold=123456,
-            allowed_tools=("read",),
+            allowed_tools=("read-image",),
         )
     )
     select_active_model_profile("analysis")
@@ -937,7 +937,7 @@ def test_resolve_web_runtime_uses_selected_web_profile(monkeypatch) -> None:
     assert settings.max_tool_workers == 6
     assert settings.max_retries == 5
     assert settings.compact_threshold == 123456
-    assert settings.allowed_tools == ("read",)
+    assert settings.allowed_tools == ("read-image",)
     assert runtime.profile_id == "analysis"
 
 
@@ -1156,7 +1156,7 @@ def test_resolve_runtime_uses_active_profile_for_run_when_no_profile_selector(
             max_tool_workers=6,
             max_retries=5,
             compact_threshold=123456,
-            allowed_tools=("read",),
+            allowed_tools=("read-image",),
         )
     )
     select_active_model_profile("analysis")
@@ -1174,7 +1174,7 @@ def test_resolve_runtime_uses_active_profile_for_run_when_no_profile_selector(
     assert runtime.settings.max_tool_workers == 6
     assert runtime.settings.max_retries == 5
     assert runtime.settings.compact_threshold == 123456
-    assert runtime.settings.allowed_tools == ("read",)
+    assert runtime.settings.allowed_tools == ("read-image",)
 
 
 def test_resolve_runtime_cli_tool_availability_replaces_profile(
@@ -1197,7 +1197,7 @@ def test_resolve_runtime_cli_tool_availability_replaces_profile(
             name="Analysis",
             provider_id="openai-main",
             model="saved-model",
-            allowed_tools=("read", "write"),
+            allowed_tools=("read-image", "write"),
         )
     )
 
@@ -1209,11 +1209,11 @@ def test_resolve_runtime_cli_tool_availability_replaces_profile(
             "--prompt",
             "hi",
             "--allowed-tools",
-            "read,web,shell",
+            "read-image,web,shell",
         )
     )
 
-    assert runtime.settings.allowed_tools == ("read", "web", "shell")
+    assert runtime.settings.allowed_tools == ("read-image", "web", "shell")
 
 
 def test_resolve_runtime_cli_allowed_tools_replaces_profile(
@@ -1236,7 +1236,7 @@ def test_resolve_runtime_cli_allowed_tools_replaces_profile(
             name="Analysis",
             provider_id="openai-main",
             model="saved-model",
-            allowed_tools=("read",),
+            allowed_tools=("read-image",),
         )
     )
 

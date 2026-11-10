@@ -18,7 +18,7 @@ my-project/
 **When `INSTRUCTIONS.md` is present:**
 
 - Its content becomes the agent's system prompt verbatim.
-- Built-in tools such as `shell`, `apply_patch`, `explore_workspace`,
+- Built-in tools such as `shell`, `apply_patch`, `read_image`,
   `read_web_url`, `web_search`, and `sub_agent` remain available unless tool
   visibility is limited by a model profile, command, sub-agent, or
   `pbi-agent run` flag.

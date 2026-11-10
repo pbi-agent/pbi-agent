@@ -1337,7 +1337,7 @@ describe("SettingsPage", () => {
             description: "Review Mode",
             path: ".agents/commands/review.md",
             model_profile_id: "analysis",
-            allowed_tools: ["read", "shell"],
+            allowed_tools: ["read-image", "shell"],
             skills: ["fastapi", "shadcn"],
             sub_agents: ["confidence-checker", "fixer"],
             instructions:
@@ -1360,7 +1360,7 @@ describe("SettingsPage", () => {
     ).toBeGreaterThanOrEqual(1);
     expect(within(commandCard as HTMLElement).queryByText("/review")).not.toBeInTheDocument();
     expect(
-      within(commandCard as HTMLElement).queryByText("Tools: read, shell"),
+      within(commandCard as HTMLElement).queryByText("Tools: read-image, shell"),
     ).not.toBeInTheDocument();
     expect(
       within(commandCard as HTMLElement).queryByText("Skills: fastapi, shadcn"),
@@ -1379,7 +1379,7 @@ describe("SettingsPage", () => {
     const dialog = await screen.findByRole("dialog", { name: "Review" });
     expect(within(dialog).getByText("/review")).toBeInTheDocument();
     expect(within(dialog).getByText("Profile: analysis")).toBeInTheDocument();
-    expect(within(dialog).getByText("Tools: read, shell")).toBeInTheDocument();
+    expect(within(dialog).getByText("Tools: read-image, shell")).toBeInTheDocument();
     expect(within(dialog).getByText("Skills: fastapi, shadcn")).toBeInTheDocument();
     expect(
       within(dialog).getByText("Sub-agents: confidence-checker, fixer"),
@@ -1760,7 +1760,7 @@ describe("SettingsPage", () => {
             instructions: "# Agent Prompt\n\nReview code changes carefully.",
             path: ".agents/agents/code-reviewer.md",
             model_profile_id: "analysis",
-            allowed_tools: ["read", "shell"],
+            allowed_tools: ["read-image", "shell"],
             skills: ["fastapi", "shadcn"],
             commands: ["review"],
             sub_agents: ["confidence-checker", "fixer"],
@@ -1776,7 +1776,7 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByText("code-reviewer")).toBeInTheDocument();
     expect(screen.getByText("Review code changes")).toBeInTheDocument();
-    expect(screen.queryByText("Tools: read, shell")).not.toBeInTheDocument();
+    expect(screen.queryByText("Tools: read-image, shell")).not.toBeInTheDocument();
     expect(screen.queryByText("Skills: fastapi, shadcn")).not.toBeInTheDocument();
     expect(screen.queryByText("Commands: review")).not.toBeInTheDocument();
     expect(
@@ -1788,7 +1788,7 @@ describe("SettingsPage", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "code-reviewer" });
     expect(within(dialog).getByText("Profile: analysis")).toBeInTheDocument();
-    expect(within(dialog).getByText("Tools: read, shell")).toBeInTheDocument();
+    expect(within(dialog).getByText("Tools: read-image, shell")).toBeInTheDocument();
     expect(within(dialog).getByText("Skills: fastapi, shadcn")).toBeInTheDocument();
     expect(within(dialog).getByText("Commands: review")).toBeInTheDocument();
     expect(
@@ -2642,6 +2642,24 @@ describe("SettingsPage", () => {
     expect(badges[0]).toHaveAttribute("data-slot", "badge");
     expect(badges[0]).toHaveAttribute("data-size", "meta");
     expect(badges[0]).toHaveAttribute("data-variant", "secondary");
+  });
+
+  it("labels the read-image tool group on profile cards", async () => {
+    const user = userEvent.setup();
+    const base = makeConfigBootstrap();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue({
+      ...base,
+      model_profiles: base.model_profiles.map((profile) => ({
+        ...profile,
+        allowed_tools: ["read-image", "shell"],
+      })),
+    });
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Model Profiles");
+
+    expect((await screen.findAllByText("Tools: Read image, Shell")).length).toBeGreaterThan(0);
   });
 
   it("opens the usage-limits dialog only for connected subscription providers", async () => {
@@ -3704,7 +3722,7 @@ describe("SettingsPage", () => {
     await waitFor(() =>
       expect(createModelProfile).toHaveBeenCalledWith(
         expect.objectContaining({
-          allowed_tools: ["read", "web", "shell"],
+          allowed_tools: ["read-image", "web", "shell"],
         }),
         "rev-1",
       ),

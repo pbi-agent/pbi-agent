@@ -2,7 +2,7 @@
 name: orchestrate
 description: Run one implementation task through an optional initial planning step, then mandatory sequential worker, reviewer/fixer, and code-quality/fixer loops.
 model_profile_id: worker-pro
-allowed_tools: read,write,shell,sub-agent,web
+allowed_tools: read-image,write,shell,sub-agent,web
 sub_agents: planner,worker,reviewer,code-quality-reviewer,fixer
 ---
 

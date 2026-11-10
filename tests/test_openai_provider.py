@@ -996,7 +996,7 @@ def test_openai_provider_web_allowed_tool_includes_local_web_tools() -> None:
     tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
     assert "read_web_url" in tool_names
     assert "web_search" in tool_names
-    assert "explore_workspace" not in tool_names
+    assert "read_image" not in tool_names
     assert {"type": "web_search"} not in provider._tools
 
 
@@ -1173,7 +1173,7 @@ def test_openai_parse_response_preserves_reasoning_summary_display_blocks() -> N
                 {
                     "arguments": '{"pattern":"LICENSE","target":"read"}',
                     "call_id": "call_2",
-                    "name": "explore_workspace",
+                    "name": "read_image",
                     "type": "function_call",
                 },
             ],
@@ -1801,7 +1801,7 @@ def test_openai_request_turn_replays_chatgpt_turn_state_within_turn(
                             {
                                 "type": "function_call",
                                 "call_id": "call_1",
-                                "name": "explore_workspace",
+                                "name": "read_image",
                                 "arguments": '{"pattern":"README.md","target":"read"}',
                             }
                         ],
@@ -1903,7 +1903,7 @@ def test_openai_request_turn_replays_chatgpt_turn_state_within_turn(
             {
                 "type": "function_call",
                 "call_id": "call_1",
-                "name": "explore_workspace",
+                "name": "read_image",
                 "arguments": '{"pattern":"README.md","target":"read"}',
             },
             {
@@ -1932,7 +1932,7 @@ def test_openai_request_turn_replays_chatgpt_turn_state_within_turn(
     assert requests[1]["body"]["input"][0] == {
         "type": "function_call",
         "call_id": "call_1",
-        "name": "explore_workspace",
+        "name": "read_image",
         "arguments": '{"pattern":"README.md","target":"read"}',
     }
     assert requests[1]["body"]["input"][-1] == {
@@ -2132,7 +2132,7 @@ event: response.function_call_arguments.delta
 data: {"type":"response.function_call_arguments.delta","item_id":"fc_123","delta":"{\\\"pattern\\\":\\\"README.md\\\",\\\"target\\\":\\\"read\\\"}"}
 
 event: response.output_item.done
-data: {"type":"response.output_item.done","output_index":3,"item":{"type":"function_call","id":"fc_123","call_id":"call_1","name":"explore_workspace","status":"completed"}}
+data: {"type":"response.output_item.done","output_index":3,"item":{"type":"function_call","id":"fc_123","call_id":"call_1","name":"read_image","status":"completed"}}
 
 event: response.completed
 data: {"type":"response.completed","response":{"id":"resp_chatgpt","status":"completed","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":2,"output_tokens_details":{"reasoning_tokens":0}}}}
@@ -2146,7 +2146,7 @@ data: {"type":"response.completed","response":{"id":"resp_chatgpt","status":"com
             "id": "fc_123",
             "arguments": '{"pattern":"README.md","target":"read"}',
             "call_id": "call_1",
-            "name": "explore_workspace",
+            "name": "read_image",
             "status": "completed",
         }
     ]
@@ -2228,7 +2228,7 @@ def test_openai_execute_tool_calls_returns_function_call_outputs(
             ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
             ToolCall(
                 call_id="call_2",
-                name="explore_workspace",
+                name="read_image",
                 arguments={"pattern": "README.md", "target": "read"},
             ),
         ],
@@ -2263,7 +2263,7 @@ def test_openai_execute_tool_calls_returns_function_call_outputs(
         on_result(calls[1], batch.results[1])
         assert display_spy.function_results == [
             {
-                "name": "explore_workspace",
+                "name": "read_image",
                 "success": False,
                 "call_id": "call_2",
                 "arguments": {"pattern": "README.md", "target": "read"},
@@ -2304,7 +2304,7 @@ def test_openai_execute_tool_calls_returns_function_call_outputs(
     assert display_spy.function_counts == [2]
     assert display_spy.function_results == [
         {
-            "name": "explore_workspace",
+            "name": "read_image",
             "success": False,
             "call_id": "call_2",
             "arguments": {"pattern": "README.md", "target": "read"},
@@ -2334,7 +2334,7 @@ def test_openai_execute_tool_calls_returns_only_outputs_for_chatgpt_backend(
             ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
             ToolCall(
                 call_id="call_2",
-                name="explore_workspace",
+                name="read_image",
                 arguments={"pattern": "README.md", "target": "read"},
             ),
         ],
@@ -2352,7 +2352,7 @@ def test_openai_execute_tool_calls_returns_only_outputs_for_chatgpt_backend(
                     "type": "function_call",
                     "id": "fc_2",
                     "call_id": "call_2",
-                    "name": "explore_workspace",
+                    "name": "read_image",
                     "arguments": '{"pattern":"README.md","target":"read"}',
                     "status": "completed",
                 },
@@ -2688,7 +2688,7 @@ def test_openai_request_turn_renders_each_reasoning_summary_block(
             {
                 "type": "function_call",
                 "call_id": "call_2",
-                "name": "explore_workspace",
+                "name": "read_image",
                 "arguments": '{"pattern":"LICENSE","target":"read"}',
             },
         ],
@@ -2976,7 +2976,7 @@ def test_openai_chatgpt_websocket_uses_previous_id_for_live_followup(
                                 "type": "function_call",
                                 "id": "fc_1",
                                 "call_id": "call_1",
-                                "name": "explore_workspace",
+                                "name": "read_image",
                                 "status": "completed",
                                 "arguments": '{"pattern":"README.md","target":"read"}',
                             },
@@ -3107,7 +3107,7 @@ def test_openai_chatgpt_replay_collapses_completed_tool_turns(
                                 "type": "function_call",
                                 "id": "fc_1",
                                 "call_id": "call_1",
-                                "name": "explore_workspace",
+                                "name": "read_image",
                                 "status": "completed",
                                 "arguments": '{"pattern":"README.md","target":"read"}',
                             },
@@ -3586,7 +3586,7 @@ def test_openai_chatgpt_previous_response_not_found_replays_active_turn(
                             {
                                 "type": "function_call",
                                 "call_id": "call_1",
-                                "name": "explore_workspace",
+                                "name": "read_image",
                                 "arguments": '{"pattern":"README.md","target":"read"}',
                             }
                         ],
@@ -3691,7 +3691,7 @@ def test_openai_chatgpt_previous_response_not_found_replays_active_turn(
         {
             "type": "function_call",
             "call_id": "call_1",
-            "name": "explore_workspace",
+            "name": "read_image",
             "arguments": '{"pattern":"README.md","target":"read"}',
         },
         {
@@ -4664,7 +4664,7 @@ def test_openai_execute_tool_calls_serializes_image_attachments(
         function_calls=[
             ToolCall(
                 call_id="call_1",
-                name="explore_workspace",
+                name="read_image",
                 arguments={"pattern": "chart.png", "target": "read"},
             )
         ],

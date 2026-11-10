@@ -2108,7 +2108,7 @@ def test_run_sub_agent_task_preserves_parent_tool_availability_for_profiled_agen
         api_key="test-key",
         provider="openai",
         model="parent-model",
-        allowed_tools=("read", "sub-agent"),
+        allowed_tools=("read-image", "sub-agent"),
     )
 
     def _resolve_profile(*_: object, **__: object) -> ResolvedRuntime:
@@ -2149,7 +2149,7 @@ def test_run_sub_agent_task_preserves_parent_tool_availability_for_profiled_agen
 
     assert result["status"] == "completed"
     assert opened_settings[0].model == "profile-model"
-    assert opened_settings[0].allowed_tools == ("read", "sub-agent")
+    assert opened_settings[0].allowed_tools == ("read-image", "sub-agent")
 
 
 def test_run_sub_agent_task_uses_profile_tool_availability_without_parent_override(
@@ -2174,7 +2174,7 @@ def test_run_sub_agent_task_uses_profile_tool_availability_without_parent_overri
         api_key="test-key",
         provider="openai",
         model="parent-model",
-        allowed_tools=("read", "sub-agent"),
+        allowed_tools=("read-image", "sub-agent"),
     )
 
     def _resolve_profile(*_: object, **__: object) -> ResolvedRuntime:
@@ -2240,7 +2240,7 @@ def test_run_sub_agent_task_uses_agent_tool_availability_over_parent_for_profile
         api_key="test-key",
         provider="openai",
         model="parent-model",
-        allowed_tools=("read", "sub-agent"),
+        allowed_tools=("read-image", "sub-agent"),
     )
 
     def _resolve_profile(*_: object, **__: object) -> ResolvedRuntime:
@@ -4005,14 +4005,14 @@ def test_open_runtime_provider_filters_default_prompt_by_tool_availability(
         Settings(
             api_key="test-key",
             provider="openai",
-            allowed_tools=("read",),
+            allowed_tools=("read-image",),
         ),
         excluded_tools=INTERACTIVE_ONLY_TOOLS,
     ):
         pass
 
     system_prompt = captured["system_prompt"]
-    assert "Use `explore_workspace`" in system_prompt
+    assert "Use `read_image`" in system_prompt
     assert "Use `shell`" not in system_prompt
     assert "Use `apply_patch`" not in system_prompt
     assert "Use `sub_agent`" not in system_prompt
@@ -4677,7 +4677,7 @@ def test_run_session_loop_resolves_command_profile_before_tool_settings(
         "name: Command Tools\n"
         "description: Override profile tools.\n"
         "model_profile_id: analysis\n"
-        "allowed_tools: read\n"
+        "allowed_tools: read-image\n"
         "---\n\n"
         "Use command tools.",
     )
@@ -4700,7 +4700,7 @@ def test_run_session_loop_resolves_command_profile_before_tool_settings(
         "profile-model",
     ]
     assert provider.request_settings[0].allowed_tools == ("web", "shell")
-    assert provider.request_settings[1].allowed_tools == ("read",)
+    assert provider.request_settings[1].allowed_tools == ("read-image",)
 
 
 def test_run_session_loop_resets_command_settings_after_prompt_hook_block(
@@ -4838,7 +4838,7 @@ def test_run_single_turn_preserves_cli_tool_overrides_for_command_profile(
             settings=Settings(
                 api_key="cli-key",
                 provider="openai",
-                allowed_tools=("read",),
+                allowed_tools=("read-image",),
             ),
             provider_id=None,
             profile_id=None,
@@ -4850,7 +4850,7 @@ def test_run_single_turn_preserves_cli_tool_overrides_for_command_profile(
     assert outcome.text == "Ack"
     assert [item.model for item in opened_settings] == ["profile-model"]
     assert provider.request_settings[0].api_key == "saved-openai-key"
-    assert provider.request_settings[0].allowed_tools == ("read",)
+    assert provider.request_settings[0].allowed_tools == ("read-image",)
 
 
 def test_run_session_loop_reopens_provider_for_command_profile_backend(
@@ -5535,7 +5535,7 @@ def test_run_session_loop_interruption_resets_provider_to_persisted_history(
                     function_calls=[
                         ToolCall(
                             call_id="call_missing",
-                            name="explore_workspace",
+                            name="read_image",
                             arguments={"pattern": "README.md", "target": "read"},
                         )
                     ],
@@ -6240,7 +6240,7 @@ def test_run_session_loop_interrupted_openai_tool_call_does_not_poison_next_turn
                             "arguments": '{"pattern":"README.md","target":"read"}',
                             "call_id": "call_1",
                             "id": "fc_1",
-                            "name": "explore_workspace",
+                            "name": "read_image",
                             "status": "completed",
                             "type": "function_call",
                         }

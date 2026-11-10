@@ -32,9 +32,9 @@ import { Switch } from "../ui/switch";
 
 const TOOL_VISIBILITY_OPTIONS = [
   {
-    id: "read",
-    label: "Read",
-    description: "Read files and search workspace content.",
+    id: "read-image",
+    label: "Read image",
+    description: "Attach workspace images to the model context.",
   },
   {
     id: "write",

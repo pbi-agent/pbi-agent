@@ -532,7 +532,7 @@ def test_xai_execute_tool_calls_returns_function_call_outputs(
             ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
             ToolCall(
                 call_id="call_2",
-                name="explore_workspace",
+                name="read_image",
                 arguments={"pattern": "README.md", "target": "read"},
             ),
         ],
@@ -603,7 +603,7 @@ def test_xai_execute_tool_calls_returns_function_call_outputs(
             "arguments": {"command": "pwd"},
         },
         {
-            "name": "explore_workspace",
+            "name": "read_image",
             "success": False,
             "call_id": "call_2",
             "arguments": {"pattern": "README.md", "target": "read"},

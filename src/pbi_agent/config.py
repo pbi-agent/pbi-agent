@@ -33,6 +33,7 @@ from pbi_agent.models.capabilities import reasoning_capabilities_for_model
 from pbi_agent.tools.availability import (
     BUILTIN_TOOL_CATEGORIES,
     UI_ONLY_TOOL_CATEGORIES,
+    normalize_tool_categories,
 )
 
 DEFAULT_RESPONSES_URL = "https://api.openai.com/v1/responses"
@@ -275,6 +276,7 @@ class Settings:
         ):
             allowed = ", ".join(OPENAI_SERVICE_TIERS)
             raise ConfigError(f"--service-tier must be one of: {allowed}.")
+        self.allowed_tools = normalize_tool_categories(self.allowed_tools)
         _validate_allowed_tools(self.allowed_tools, error_prefix="--allowed-tools")
 
     def redacted(self) -> dict[str, str | int | bool | list[str] | None]:
@@ -433,6 +435,7 @@ class ModelProfileConfig:
         ):
             allowed = ", ".join(OPENAI_SERVICE_TIERS)
             raise ConfigError(f"--service-tier must be one of: {allowed}.")
+        self.allowed_tools = normalize_tool_categories(self.allowed_tools)
         _validate_allowed_tools(
             self.allowed_tools,
             error_prefix="Model profile tool availability",
@@ -601,7 +604,7 @@ def _normalize_command_allowed_tools(
 ) -> tuple[str, ...] | None:
     if allowed_tools is None:
         return None
-    return tuple(
+    return normalize_tool_categories(
         COMMAND_ALLOWED_TOOL_ALIASES.get(tool_name, tool_name)
         for tool_name in allowed_tools
     )

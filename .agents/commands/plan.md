@@ -2,7 +2,7 @@
 name: plan
 description: Plan Mode (Non-Interactive)
 model_profile_id: worker-pro
-allowed_tools: read,shell,web
+allowed_tools: read-image,shell,web
 ---
 
 # Plan Mode (Non-Interactive)

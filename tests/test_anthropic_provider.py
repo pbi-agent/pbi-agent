@@ -569,7 +569,7 @@ def test_anthropic_execute_tool_calls_returns_tool_result_blocks(
                 {
                     "type": "tool_use",
                     "id": "toolu_2",
-                    "name": "explore_workspace",
+                    "name": "read_image",
                     "input": {"pattern": "README.md", "target": "read"},
                 },
             ]
@@ -642,7 +642,7 @@ def test_anthropic_execute_tool_calls_returns_tool_result_blocks(
             "arguments": {"command": "pwd"},
         },
         {
-            "name": "explore_workspace",
+            "name": "read_image",
             "success": False,
             "call_id": "toolu_2",
             "arguments": {"pattern": "README.md", "target": "read"},
@@ -895,7 +895,7 @@ def test_anthropic_execute_tool_calls_serializes_image_attachments(
                 {
                     "type": "tool_use",
                     "id": "toolu_1",
-                    "name": "explore_workspace",
+                    "name": "read_image",
                     "input": {"pattern": "chart.png", "target": "read"},
                 }
             ]

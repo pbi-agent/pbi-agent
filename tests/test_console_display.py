@@ -99,25 +99,15 @@ def test_patch_result_keeps_apply_patch_group_label_and_diff() -> None:
     assert "+[X] New" in output
 
 
-def test_explore_workspace_read_summary_tolerates_invalid_line_arguments() -> None:
+def test_read_image_summary_shows_path_on_failure() -> None:
     display, stdout, _ = _display()
 
     display.function_start(1)
-    display.function_result(
-        "explore_workspace",
-        False,
-        arguments={
-            "pattern": "notes.txt",
-            "target": "read",
-            "start_line": "oops",
-            "limit": None,
-        },
-    )
+    display.function_result("read_image", False, arguments={"path": "shot.png"})
     display.tool_group_end()
 
     output = stdout.getvalue()
-    assert "notes.txt" in output
-    assert "read" in output
+    assert "shot.png" in output
     assert "FAILED" in output
 
 

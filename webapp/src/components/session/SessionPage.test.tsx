@@ -1701,8 +1701,8 @@ describe("SessionPage", () => {
           {
             kind: "tool_group",
             itemId: "run-1:subagent-25-tool-group-2",
-            label: "explore_workspace",
-            items: [{ text: "explore_workspace" }],
+            label: "read_image",
+            items: [{ text: "read_image" }],
             status: "completed",
             sub_agent_id: "run-1:subagent-25",
           },

@@ -51,7 +51,7 @@ Each command file must include YAML frontmatter with at least `name` and
 name: reviewer
 description: Review implementation and test coverage.
 model_profile_id: reviewer
-allowed_tools: read,shell
+allowed_tools: read-image,shell
 skills: fastapi,shadcn
 sub_agents: confidence-checker,fixer
 ---
@@ -81,7 +81,7 @@ profiles and `pbi-agent run`, plus command-only `ask-user`:
 
 | Tool group | Built-ins |
 | --- | --- |
-| `read` | `explore_workspace` |
+| `read-image` | `read_image` |
 | `write` | `apply_patch`, `replace_in_file`, `write_file` |
 | `web` | `read_web_url`, `web_search` |
 | `sub-agent` | `sub_agent` |
@@ -112,8 +112,8 @@ behavior: all enabled project skills are available, plus explicitly mentioned
 disabled skills when supported by the current context. When `skills` is present,
 only those configured skills are advertised. Missing or disabled configured
 skills are soft references: `pbi-agent` prints a CLI warning and omits them from
-the catalog. Skills are only useful when the command has the `read` tool group,
-because the model must use `explore_workspace` to load each `SKILL.md`.
+the catalog. Skills are only useful when the command has the `shell` tool group,
+because the model must use `shell` to load each `SKILL.md`.
 
 When `sub_agents` is omitted, the command turn keeps the normal delegation
 behavior: the built-in `default` child agent plus enabled project sub-agents are
@@ -131,7 +131,7 @@ profile. For example:
 ---
 name: review-with-checks
 description: Review changes and delegate confidence checks.
-allowed_tools: read,shell,sub-agent
+allowed_tools: read-image,shell,sub-agent
 sub_agents: confidence-checker
 ---
 ```
