@@ -562,6 +562,85 @@ def test_run_sub_agent_task_uses_child_prompt_and_aggregates_usage(
     assert captured["settings"].reasoning_effort == "xhigh"
 
 
+def test_run_sub_agent_task_reports_user_interrupt(monkeypatch) -> None:
+    from pbi_agent.agent.session import SessionTurnInterrupted
+
+    class _InterruptedProvider(_ProviderStub):
+        def request_turn(self, **kwargs):  # type: ignore[override,no-untyped-def]
+            del kwargs
+            raise SessionTurnInterrupted()
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.create_provider",
+        lambda settings, **kwargs: _InterruptedProvider(),
+    )
+    parent_display = _ParentDisplay()
+
+    result = run_sub_agent_task(
+        "Summarize the repo structure",
+        Settings(api_key="test-key", provider="openai", model="gpt-5"),
+        parent_display,
+        parent_session_usage=TokenUsage(model="gpt-5"),
+        parent_turn_usage=TokenUsage(model="gpt-5"),
+        tool_catalog=ToolCatalog.from_builtin_registry(),
+    )
+
+    assert result == {
+        "status": "failed",
+        "error": {"type": "interrupted", "message": "Sub-agent interrupted by user."},
+    }
+    assert parent_display.child_display.finished_statuses == ["interrupted"]
+
+
+def test_run_sub_agent_task_follows_parent_display_interrupt(monkeypatch) -> None:
+    """Child displays that know nothing about interrupts (e.g. Telegram) still
+    stop when the parent turn is interrupted."""
+    from pbi_agent.models.messages import ToolCall
+
+    class _InterruptibleParentDisplay(_ParentDisplay):
+        def __init__(self) -> None:
+            super().__init__()
+            self.interrupted = False
+
+        def interrupt_requested(self) -> bool:
+            return self.interrupted
+
+    parent_display = _InterruptibleParentDisplay()
+
+    class _UserInterruptsProvider(_ProviderStub):
+        def request_turn(self, **kwargs):  # type: ignore[override,no-untyped-def]
+            child_display = kwargs["display"]
+            assert child_display.interrupt_requested() is False
+            parent_display.interrupted = True
+            assert child_display.interrupt_requested() is True
+            return CompletedResponse(
+                response_id="resp_child",
+                text="",
+                function_calls=[ToolCall(call_id="call-1", name="shell", arguments={})],
+            )
+
+        def execute_tool_calls(self, *args, **kwargs):  # type: ignore[override,no-untyped-def]
+            raise AssertionError("Interrupted sub-agent must not run tools.")
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.create_provider",
+        lambda settings, **kwargs: _UserInterruptsProvider(),
+    )
+
+    result = run_sub_agent_task(
+        "Summarize the repo structure",
+        Settings(api_key="test-key", provider="openai", model="gpt-5"),
+        parent_display,
+        parent_session_usage=TokenUsage(model="gpt-5"),
+        parent_turn_usage=TokenUsage(model="gpt-5"),
+        tool_catalog=ToolCatalog.from_builtin_registry(),
+    )
+
+    assert result["status"] == "failed"
+    assert result["error"]["type"] == "interrupted"
+    assert parent_display.child_display.finished_statuses == ["interrupted"]
+
+
 def test_run_sub_agent_task_includes_disabled_explicit_skill(
     tmp_path,
     monkeypatch,

@@ -8712,6 +8712,88 @@ def test_web_display_routes_shell_interrupt_to_sub_agent_display() -> None:
     assert display.tool_interrupt_requested("shared-call-id") is True
 
 
+def test_web_display_discard_interrupted_turn_removes_turn_items() -> None:
+    published: list[tuple[str, dict]] = []
+    display = WebDisplay(
+        publish_event=lambda event_type, payload: published.append(
+            (event_type, payload)
+        )
+    )
+    display.render_markdown("stale before turn")
+    display.assistant_start()
+    display.persisted_message(
+        MessageRecord(
+            id=7,
+            session_id="session-1",
+            role="user",
+            content="follow-up",
+            created_at="2026-01-01T00:00:00Z",
+        )
+    )
+    display.render_markdown("intermediate text")
+    display.render_thinking("thinking", title="Thinking")
+    display.function_start(1)
+    display.function_result("shell", True, call_id="call-1", result={"ok": True})
+    display.tool_group_end()
+    child = display.begin_sub_agent(task_instruction="Work", name="worker")
+    child.render_user_message("sub-agent task")
+    child.render_markdown("sub-agent text")
+    added_ids = list(
+        dict.fromkeys(
+            str(payload["item_id"])
+            for event_type, payload in published
+            if event_type in {"message_added", "thinking_updated", "tool_group_added"}
+            and not payload.get("message_id")
+        )
+    )
+    published.clear()
+
+    display.discard_interrupted_turn()
+
+    removed_ids = [
+        payload["item_id"]
+        for event_type, payload in published
+        if event_type == "message_removed"
+    ]
+    # Items from before the turn and persisted messages stay; everything the
+    # turn produced, including sub-agent items, is removed.
+    assert removed_ids == added_ids[1:]
+    assert len(removed_ids) >= 5
+    published.clear()
+    display.discard_interrupted_turn()
+    assert published == []
+
+
+def test_interrupt_restores_parent_user_message_not_sub_agent_prompt() -> None:
+    from types import SimpleNamespace
+
+    manager = WebSessionManager(_settings())
+    live_session = SimpleNamespace(
+        snapshot=SimpleNamespace(
+            items=[
+                {
+                    "kind": "message",
+                    "role": "user",
+                    "itemId": "message-1",
+                    "content": "parent request",
+                },
+                {
+                    "kind": "message",
+                    "role": "user",
+                    "itemId": "subagent-1-message-1",
+                    "content": "sub-agent task",
+                    "sub_agent_id": "subagent-1",
+                },
+            ]
+        )
+    )
+
+    item = manager._latest_live_user_item(live_session)  # pyright: ignore[reportPrivateUsage,reportArgumentType]
+
+    assert item is not None
+    assert item["content"] == "parent request"
+
+
 def test_saved_session_tool_call_interrupt_endpoint_targets_shell_only(
     tmp_path,
     monkeypatch,

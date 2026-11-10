@@ -5344,6 +5344,10 @@ def test_run_session_loop_interrupt_deletes_user_turn_and_accepts_next_input(
             super().__init__(["first", "second", "exit"])
             self.interrupt = False
             self.clear_interrupt_calls = 0
+            self.discard_interrupted_turn_calls = 0
+
+        def discard_interrupted_turn(self) -> None:
+            self.discard_interrupted_turn_calls += 1
 
         def request_interrupt(
             self, *, item_id: str | None = None, input_text: str | None = None
@@ -5379,6 +5383,150 @@ def test_run_session_loop_interrupt_deletes_user_turn_and_accepts_next_input(
         assert sessions[0].previous_id is None
     assert display.clear_interrupt_calls == 1
     assert display.assistant_stop_calls == 2
+    assert display.discard_interrupted_turn_calls == 1
+
+
+def test_run_session_loop_interrupt_stops_running_sub_agent_and_accepts_next_input(
+    monkeypatch,
+) -> None:
+    """Interrupting while a foreground sub-agent runs ends the whole turn."""
+    from pbi_agent.agent.session import run_sub_agent_task
+    from pbi_agent.tools.catalog import ToolCatalog
+
+    sub_agent_results: list[dict[str, object]] = []
+
+    class _InterruptDisplay(_SessionDisplaySpy):
+        def __init__(self) -> None:
+            super().__init__(["first", "second", "exit"])
+            self.interrupt = False
+            self.discard_interrupted_turn_calls = 0
+            # A plain child display with no interrupt support of its own.
+            self.child = _DisplaySpy()
+
+        def begin_sub_agent(self, **kwargs) -> _DisplaySpy:  # type: ignore[override]
+            del kwargs
+            return self.child
+
+        def request_interrupt(
+            self, *, item_id: str | None = None, input_text: str | None = None
+        ) -> None:
+            del item_id, input_text
+            self.interrupt = True
+
+        def clear_interrupt(self) -> None:
+            self.interrupt = False
+
+        def interrupt_requested(self) -> bool:
+            return self.interrupt
+
+        def discard_interrupted_turn(self) -> None:
+            self.discard_interrupted_turn_calls += 1
+
+    display = _InterruptDisplay()
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+
+    class _BaseProvider:
+        settings = Settings(api_key="test-key", provider="openai")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def reset_conversation(self) -> None:
+            return None
+
+        def set_excluded_tools(self, excluded_tools: set[str]) -> None:
+            del excluded_tools
+
+        def get_conversation_checkpoint(self) -> str | None:
+            return "checkpoint-ok"
+
+    class _ChildProvider(_BaseProvider):
+        def request_turn(self, **kwargs) -> CompletedResponse:
+            del kwargs
+            # The user clicks interrupt while the sub-agent is working.
+            display.request_interrupt()
+            return CompletedResponse(
+                response_id="child-response",
+                text="",
+                function_calls=[
+                    ToolCall(call_id="child-call", name="shell", arguments={})
+                ],
+            )
+
+        def execute_tool_calls(self, *args, **kwargs):
+            raise AssertionError("Interrupted sub-agent must not run tools.")
+
+    class _ParentProvider(_BaseProvider):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def request_turn(
+            self,
+            *,
+            user_input: UserTurnInput | None = None,
+            session_usage: TokenUsage,
+            turn_usage: TokenUsage,
+            **kwargs,
+        ) -> CompletedResponse:
+            del kwargs, session_usage, turn_usage
+            self.calls += 1
+            if self.calls == 1:
+                return CompletedResponse(
+                    response_id="parent-tool-response",
+                    text="Delegating.",
+                    function_calls=[
+                        ToolCall(call_id="call-sub", name="sub_agent", arguments={})
+                    ],
+                )
+            assert user_input is not None
+            return CompletedResponse(
+                response_id="final-response", text=f"Ack {user_input.text}"
+            )
+
+        def execute_tool_calls(
+            self, response, *, display, session_usage, turn_usage, **kwargs
+        ):
+            del response, kwargs
+            sub_agent_results.append(
+                run_sub_agent_task(
+                    "Run a long command",
+                    settings,
+                    display,
+                    parent_session_usage=session_usage,
+                    parent_turn_usage=turn_usage,
+                    tool_catalog=ToolCatalog.from_builtin_registry(),
+                )
+            )
+            return ([], True)
+
+    parent = _ParentProvider()
+    providers = iter([parent, _ChildProvider()])
+
+    @contextmanager
+    def _open_runtime_provider(*args, **kwargs):
+        del args, kwargs
+        yield next(providers, parent)
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider", _open_runtime_provider
+    )
+
+    assert run_session_loop(settings, display) == 0
+
+    assert [result["status"] for result in sub_agent_results] == ["failed"]
+    assert sub_agent_results[0]["error"]["type"] == "interrupted"  # type: ignore[index]
+    assert display.child.sub_agent_finish_statuses == ["interrupted"]
+    assert display.discard_interrupted_turn_calls == 1
+    with SessionStore() as store:
+        sessions = store.list_sessions(os.getcwd(), limit=10)
+        messages = store.list_messages(sessions[0].session_id)
+        assert [(message.role, message.content) for message in messages] == [
+            ("user", "second"),
+            ("assistant", "Ack second"),
+        ]
 
 
 def test_run_session_loop_interruption_resets_provider_to_persisted_history(
