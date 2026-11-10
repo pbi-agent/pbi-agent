@@ -249,6 +249,9 @@ vi.mock("./Composer", async () => {
           >
             Submit New Slash
           </button>
+          <button type="button" onClick={() => { void onSubmit({ text: "/status", images: [] }); }}>
+            Submit Status
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -1929,6 +1932,28 @@ describe("SessionPage", () => {
       include_tool_history: false,
       follow_up_delivery: null,
     });
+  });
+
+  it("opens the status report locally without sending input to the model", async () => {
+    const user = userEvent.setup();
+    renderSessionRoute("/sessions/session-1");
+    await screen.findByText("Timeline 0");
+    await user.click(screen.getByRole("button", { name: "Submit Status" }));
+    expect(await screen.findByRole("dialog", { name: "Session status" })).toBeInTheDocument();
+    expect(sendSessionMessage).not.toHaveBeenCalled();
+    expect(expandSessionInput).not.toHaveBeenCalled();
+    expect(createSession).not.toHaveBeenCalled();
+    expect(uploadSavedSessionImages).not.toHaveBeenCalled();
+  });
+
+  it("shows status for a draft without creating a session", async () => {
+    const user = userEvent.setup();
+    renderSessionRoute("/sessions");
+    await screen.findByRole("button", { name: "Submit Status" });
+    await user.click(screen.getByRole("button", { name: "Submit Status" }));
+    expect(await screen.findByRole("dialog", { name: "Session status" })).toBeInTheDocument();
+    expect(createSession).not.toHaveBeenCalled();
+    expect(sendSessionMessage).not.toHaveBeenCalled();
   });
 
   it("starts and redirects to a fresh session for the new slash command", async () => {

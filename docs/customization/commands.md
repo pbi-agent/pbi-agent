@@ -70,7 +70,7 @@ At runtime, project commands are discovered from `.agents/commands/*.md`. The
 normalized frontmatter `name` becomes the slash alias, and the Markdown body is
 injected as active turn instructions when the user starts a message with that
 alias. Reserved built-in local commands such as `/skills`, `/mcp`, `/agents`,
-`/reload`, and `/compact` still take precedence. See
+`/reload`, `/status`, and `/compact` still take precedence. See
 [Session Commands](/session-commands) for how slash commands behave in
 interactive sessions.
 

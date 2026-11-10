@@ -65,6 +65,7 @@ import {
 } from "../../sessionTimelineProjection";
 import { useSessionEvents } from "../../hooks/useSessionEvents";
 import { ConnectionBadge } from "./ConnectionBadge";
+import { SessionStatusDialog } from "./SessionStatusDialog";
 import { RunHistory } from "./RunHistory";
 import { SessionTimeline } from "./SessionTimeline";
 import { UsageBar } from "./UsageBar";
@@ -222,6 +223,7 @@ export function SessionPage({
     subAgentId?: string;
   }>();
   const isSubAgentRoute = Boolean(routeSessionId && routeSubAgentId);
+  const [statusOpen, setStatusOpen] = useState(false);
   const [inputWarnings, setInputWarnings] = useState<string[]>([]);
   const [pendingProfileId, setPendingProfileId] = useState<string | null>(null);
   const [interactiveMode, setInteractiveMode] = useState(() =>
@@ -867,6 +869,13 @@ export function SessionPage({
     try {
       const { text, images, followUpDelivery } = payload;
       setInputWarnings([]);
+      if (normalizeSessionCommand(text) === "/status") {
+        if (images.length > 0) {
+          throw new Error("Status commands cannot include image attachments.");
+        }
+        setStatusOpen(true);
+        return;
+      }
       if (normalizeSessionCommand(text) === NEW_SESSION_COMMAND) {
         if (followUpDelivery) {
           throw new Error("New session commands cannot be sent as follow-ups.");
@@ -1089,6 +1098,15 @@ export function SessionPage({
 
   const sessionPanel = (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+      {statusOpen ? (
+        <SessionStatusDialog
+          key={routeSessionId ?? "draft"}
+          sessionId={routeSessionId ?? sessionState?.sessionId ?? null}
+          usage={sessionState?.sessionUsage ?? null}
+          compactThreshold={sessionState?.runtime?.compact_threshold ?? null}
+          onClose={() => setStatusOpen(false)}
+        />
+      ) : null}
       <div
         data-session-topbar=""
         className={cn(

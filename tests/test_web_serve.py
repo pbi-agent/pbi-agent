@@ -3204,6 +3204,11 @@ def test_slash_command_search_endpoint_returns_web_commands(
     assert response.status_code == 200
     assert response.json()["items"] == [
         {
+            "name": "/status",
+            "description": "Show the current session usage report",
+            "kind": "local_command",
+        },
+        {
             "name": "/new",
             "description": "Start a fresh session",
             "kind": "local_command",
@@ -3260,11 +3265,16 @@ def test_slash_command_search_endpoint_includes_command_file_commands(
 
     with TestClient(app) as client:
         response = client.get(
-            "/api/slash-commands/search", params={"q": "", "limit": 11}
+            "/api/slash-commands/search", params={"q": "", "limit": 12}
         )
 
     assert response.status_code == 200
     assert response.json()["items"] == [
+        {
+            "name": "/status",
+            "description": "Show the current session usage report",
+            "kind": "local_command",
+        },
         {
             "name": "/new",
             "description": "Start a fresh session",

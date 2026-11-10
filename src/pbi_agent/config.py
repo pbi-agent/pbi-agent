@@ -106,6 +106,7 @@ SLUG_RE = re.compile(r"[^a-z0-9]+")
 SLASH_ALIAS_RE = re.compile(r"^/[a-z0-9][a-z0-9-]*$")
 RESERVED_COMMAND_ALIASES = frozenset(
     {
+        "/status",
         "/skills",
         "/mcp",
         "/agents",

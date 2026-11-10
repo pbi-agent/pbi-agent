@@ -18,6 +18,11 @@ class SlashCommand:
 
 COMMANDS: tuple[SlashCommand, ...] = (
     SlashCommand(
+        name="/status",
+        description="Show the current session usage report",
+        hidden_keywords="usage tokens cost cache context report statistics",
+    ),
+    SlashCommand(
         name="/new",
         description="Start a fresh session",
         hidden_keywords="new fresh reset restart conversation chat session",

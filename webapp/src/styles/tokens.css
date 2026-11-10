@@ -22,6 +22,12 @@
   --border: #424754;
   --input: #2d3449;
   --ring: #adc6ff;
+  --usage-blue: #60a5fa;
+  --usage-cyan: #22d3ee;
+  --usage-violet: #a78bfa;
+  --usage-amber: #fbbf24;
+  --usage-emerald: #34d399;
+  --usage-rose: #fb7185;
   --chart-1: #adc6ff;
   --chart-2: #89ceff;
   --chart-3: #b9c8de;
@@ -151,6 +157,12 @@
   --border: #d7dee8;
   --input: #d7dee8;
   --ring: #2563eb;
+  --usage-blue: #2563eb;
+  --usage-cyan: #0891b2;
+  --usage-violet: #7c3aed;
+  --usage-amber: #d97706;
+  --usage-emerald: #059669;
+  --usage-rose: #e11d48;
   --chart-1: #2563eb;
   --chart-2: #0891b2;
   --chart-3: #7c3aed;
@@ -205,6 +217,12 @@
   --border: color-mix(in srgb, #ffffff 12%, transparent);
   --input: color-mix(in srgb, #ffffff 16%, transparent);
   --ring: #a1a1aa;
+  --usage-blue: #60a5fa;
+  --usage-cyan: #22d3ee;
+  --usage-violet: #a78bfa;
+  --usage-amber: #fbbf24;
+  --usage-emerald: #34d399;
+  --usage-rose: #fb7185;
   --chart-1: #fafafa;
   --chart-2: #a1a1aa;
   --chart-3: #71717a;
