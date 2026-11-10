@@ -66,6 +66,10 @@ class ChatCompletionsProtocol(ResponseProtocol):
     def set_system_prompt(self, system_prompt: str) -> None:
         self.system_prompt = system_prompt
 
+    def set_excluded_tools(self, excluded_tools: set[str]) -> None:
+        self.excluded_tools = default_excluded_tool_names(excluded_tools)
+        self.refresh_tools()
+
     def refresh_tools(self) -> None:
         excluded_tools = effective_excluded_tool_names(
             self.settings, self.excluded_tools

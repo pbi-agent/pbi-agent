@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
@@ -35,25 +35,44 @@ const multiPrompt: PendingUserQuestions = {
   ],
 };
 
+function renderPanel(
+  value: PendingUserQuestions,
+  onSubmit = vi.fn(),
+  props: { isSubmitting?: boolean; errorMessage?: string | null } = {},
+) {
+  render(
+    <UserQuestionsPanel
+      prompt={value}
+      isSubmitting={props.isSubmitting ?? false}
+      errorMessage={props.errorMessage ?? null}
+      onSubmit={onSubmit}
+    />,
+  );
+  return onSubmit;
+}
+
 describe("UserQuestionsPanel", () => {
-  it("requires an explicit suggestion selection before submitting", async () => {
-    const onSubmit = vi.fn();
-    render(
-      <UserQuestionsPanel
-        prompt={prompt}
-        isSubmitting={false}
-        errorMessage={null}
-        onSubmit={onSubmit}
-      />,
-    );
+  it("renders the three suggestions as radios plus a freeform answer", () => {
+    renderPanel(prompt);
 
-    const recommended = screen.getByRole("button", { name: /Use RESTRecommended/i });
-    expect(recommended).toHaveAttribute("data-variant", "outline");
-    expect(screen.getByRole("button", { name: "Send answers" })).toBeDisabled();
+    const group = screen.getByRole("group", { name: "Which API style should I use?" });
+    expect(group.tagName).toBe("FIELDSET");
+    expect(screen.getAllByRole("radio")).toHaveLength(3);
+    expect(screen.getByRole("radio", { name: /Use REST/ })).not.toBeChecked();
+    expect(screen.getByText("Recommended")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Another answer" })).toBeInTheDocument();
+  });
 
-    await userEvent.click(recommended);
-    expect(recommended).toHaveAttribute("data-variant", "default");
+  it("requires an explicit answer before submitting", async () => {
+    const onSubmit = renderPanel(prompt);
 
+    await userEvent.click(screen.getByRole("button", { name: "Send answers" }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Choose a suggestion or type your own answer to continue."),
+    ).toBeVisible();
+
+    await userEvent.click(screen.getByRole("radio", { name: /Use REST/ }));
     await userEvent.click(screen.getByRole("button", { name: "Send answers" }));
 
     expect(onSubmit).toHaveBeenCalledWith([
@@ -67,125 +86,61 @@ describe("UserQuestionsPanel", () => {
     ]);
   });
 
-  it("submits a custom note alongside the selected suggestion", async () => {
-    const onSubmit = vi.fn();
-    render(
-      <UserQuestionsPanel
-        prompt={prompt}
-        isSubmitting={false}
-        errorMessage={null}
-        onSubmit={onSubmit}
-      />,
+  it("submits a freeform answer instead of a suggestion", async () => {
+    const onSubmit = renderPanel(prompt);
+
+    await userEvent.click(screen.getByRole("radio", { name: /Use SSE/ }));
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Another answer" }),
+      "Use GraphQL subscriptions",
     );
+    expect(screen.getByRole("radio", { name: /Use SSE/ })).not.toBeChecked();
 
-    await userEvent.type(screen.getByLabelText("Additional note"), "Prefer the simplest path");
-    expect(screen.getByRole("button", { name: "Send answers" })).toBeDisabled();
-
-    await userEvent.click(screen.getByRole("button", { name: /Use RESTRecommended/i }));
     await userEvent.click(screen.getByRole("button", { name: "Send answers" }));
 
     expect(onSubmit).toHaveBeenCalledWith([
       {
         question_id: "q_1",
-        answer: "Use REST",
-        selected_suggestion_index: 0,
+        answer: "Use GraphQL subscriptions",
+        selected_suggestion_index: null,
         custom: true,
-        custom_note: "Prefer the simplest path",
+        custom_note: null,
       },
     ]);
   });
 
-  it("renders exactly three suggestions and a separate custom input", () => {
-    render(
-      <UserQuestionsPanel
-        prompt={prompt}
-        isSubmitting={false}
-        errorMessage={null}
-        onSubmit={vi.fn()}
-      />,
-    );
+  it("selects suggestions with number shortcuts", async () => {
+    const onSubmit = renderPanel(prompt);
 
-    const panel = screen.getByText(/Which API style should I use\?/).closest("fieldset");
-    expect(panel).not.toBeNull();
-    expect(within(panel as HTMLElement).getAllByRole("button")).toHaveLength(3);
-    expect(screen.getByLabelText("Additional note")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("radio", { name: /Use REST/ })).toHaveFocus());
+    await userEvent.keyboard("2");
+    expect(screen.getByRole("radio", { name: /Use WebSocket/ })).toBeChecked();
+
+    await userEvent.click(screen.getByRole("button", { name: "Send answers" }));
+    expect(onSubmit).toHaveBeenCalledWith([
+      expect.objectContaining({ answer: "Use WebSocket", selected_suggestion_index: 1 }),
+    ]);
   });
 
-  it("autofocuses the first suggestion so arrow keys work without clicking", async () => {
-    render(
-      <UserQuestionsPanel
-        prompt={prompt}
-        isSubmitting={false}
-        errorMessage={null}
-        onSubmit={vi.fn()}
-      />,
-    );
+  it("shows one question at a time and submits every answer", async () => {
+    const onSubmit = renderPanel(multiPrompt);
 
-    const recommended = screen.getByRole("button", {
-      name: /Use RESTRecommended/i,
-    });
-    expect(recommended).toHaveAttribute("data-variant", "outline");
-    await waitFor(() => expect(recommended).toHaveFocus());
+    expect(screen.getByRole("progressbar")).toHaveTextContent("1 / 2");
+    expect(screen.getByRole("group", { name: /Which API style/ })).toBeVisible();
+    expect(screen.queryByRole("group", { name: /Which database/ })).toBeNull();
 
-    await userEvent.keyboard("{ArrowDown}");
-    expect(recommended).toHaveAttribute("data-variant", "default");
+    await userEvent.click(screen.getByRole("radio", { name: /Use SSE/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
 
-    await userEvent.keyboard("{ArrowDown}");
-    const second = screen.getByRole("button", { name: "Use WebSocket" });
-    expect(second).toHaveAttribute("data-variant", "default");
-    expect(recommended).toHaveAttribute("data-variant", "outline");
-  });
+    expect(screen.getByRole("progressbar")).toHaveTextContent("2 / 2");
+    expect(screen.getByRole("group", { name: /Which database/ })).toBeVisible();
 
-  it("shows one question at a time with navigation between them", async () => {
-    render(
-      <UserQuestionsPanel
-        prompt={multiPrompt}
-        isSubmitting={false}
-        errorMessage={null}
-        onSubmit={vi.fn()}
-      />,
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Previous" }));
+    expect(screen.getByRole("radio", { name: /Use SSE/ })).toBeChecked();
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
 
-    expect(
-      screen.getByText(/Which API style should I use\?/),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/Which database fits best\?/)).toBeNull();
-
-    await userEvent.click(
-      screen.getByRole("button", { name: "Next question" }),
-    );
-
-    expect(screen.getByText(/Which database fits best\?/)).toBeInTheDocument();
-    expect(
-      screen.queryByText(/Which API style should I use\?/),
-    ).toBeNull();
-
-    screen.getByRole("group", { name: "Question 2 of 2" }).focus();
-    await userEvent.keyboard("{ArrowLeft}");
-    expect(
-      screen.getByText(/Which API style should I use\?/),
-    ).toBeInTheDocument();
-  });
-
-  it("submits all answers with their per-question selections", async () => {
-    const onSubmit = vi.fn();
-    render(
-      <UserQuestionsPanel
-        prompt={multiPrompt}
-        isSubmitting={false}
-        errorMessage={null}
-        onSubmit={onSubmit}
-      />,
-    );
-
-    await userEvent.click(screen.getByRole("button", { name: "Use SSE" }));
-    await userEvent.click(
-      screen.getByRole("button", { name: "Next question" }),
-    );
-    await userEvent.click(screen.getByRole("button", { name: "SQLite" }));
-    await userEvent.click(
-      screen.getByRole("button", { name: "Send answers" }),
-    );
+    await userEvent.click(screen.getByRole("radio", { name: /SQLite/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Send answers" }));
 
     expect(onSubmit).toHaveBeenCalledWith([
       {
@@ -205,26 +160,19 @@ describe("UserQuestionsPanel", () => {
     ]);
   });
 
-  it("keeps send disabled until every question has a selected suggestion", async () => {
-    const onSubmit = vi.fn();
-    render(
-      <UserQuestionsPanel
-        prompt={multiPrompt}
-        isSubmitting={false}
-        errorMessage={null}
-        onSubmit={onSubmit}
-      />,
-    );
+  it("does not advance past an unanswered question", async () => {
+    renderPanel(multiPrompt);
 
-    const sendButton = screen.getByRole("button", { name: "Send answers" });
-    expect(sendButton).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
 
-    await userEvent.click(screen.getByRole("button", { name: /Use RESTRecommended/i }));
-    expect(sendButton).toBeDisabled();
+    expect(screen.getByRole("group", { name: /Which API style/ })).toBeVisible();
+    expect(screen.getByRole("progressbar")).toHaveTextContent("1 / 2");
+  });
 
-    await userEvent.click(screen.getByRole("button", { name: "Next question" }));
-    await userEvent.click(screen.getByRole("button", { name: /PostgresRecommended/i }));
+  it("disables sending while a submission is in flight and shows errors", () => {
+    renderPanel(prompt, vi.fn(), { isSubmitting: true, errorMessage: "Request failed" });
 
-    expect(sendButton).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Sending…" })).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Request failed");
   });
 });

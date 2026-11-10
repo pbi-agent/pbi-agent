@@ -720,8 +720,7 @@ class _OpenAIChatCompletionsShape(_GoogleGcpShapeStub):
 
     def set_excluded_tools(self, excluded_tools: set[str]) -> None:
         self._excluded_tools = default_excluded_tool_names(excluded_tools)
-        self._protocol.excluded_tools = self._excluded_tools
-        self._protocol.refresh_tools()
+        self._protocol.set_excluded_tools(self._excluded_tools)
 
     def refresh_tools(self) -> None:
         self._protocol.refresh_tools()

@@ -389,6 +389,23 @@ data: {"type":"response.completed","response":{"id":"resp_2","model":"gpt-5.4","
     assert any(item.get("type") == "function_call_output" for item in second_input)
 
 
+def test_github_copilot_chat_provider_applies_interactive_tool_exclusions() -> None:
+    provider = GitHubCopilotProvider(
+        _make_settings(model="claude-sonnet-4", allowed_tools=("read-image", "shell")),
+        excluded_tools={"ask_user"},
+    )
+
+    def tool_names() -> set[str]:
+        return {
+            tool["function"]["name"]
+            for tool in provider._delegate._tools  # type: ignore[attr-defined]
+        }
+
+    assert "ask_user" not in tool_names()
+    provider.set_excluded_tools(set())
+    assert "ask_user" in tool_names()
+
+
 def test_github_copilot_non_openai_model_uses_chat_completions(
     monkeypatch,
 ) -> None:

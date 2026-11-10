@@ -4424,7 +4424,7 @@ describe("SessionPage", () => {
     expect(await screen.findByText("Assistant needs your input")).toBeInTheDocument();
     expect(screen.getByText("Which API style should I use?")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Use RESTRecommended/i }));
+    await user.click(screen.getByRole("radio", { name: /Use REST/ }));
     await user.click(screen.getByRole("button", { name: "Send answers" }));
 
     await waitFor(() => expect(submitSessionQuestionResponse).toHaveBeenCalledTimes(1));
