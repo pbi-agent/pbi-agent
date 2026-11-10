@@ -488,6 +488,28 @@ class PendingUserQuestionsPrompt:
         }
 
 
+_TURN_TIMELINE_ITEM_EVENTS = frozenset(
+    {"message_added", "message_rekeyed", "thinking_updated", "tool_group_added"}
+)
+
+
+def _turn_timeline_item_id(event_type: str, payload: dict[str, Any]) -> str | None:
+    """Return the timeline item id an event adds, if it belongs to the turn.
+
+    Persisted messages (they carry a ``message_id``) are skipped so the
+    timeline keeps matching the session store: the interrupted prompt is
+    removed separately and restored to the composer, while checkpoint
+    follow-ups and compaction markers stay saved.
+    """
+    if event_type not in _TURN_TIMELINE_ITEM_EVENTS:
+        return None
+    item = payload.get("item") if event_type == "message_rekeyed" else payload
+    if not isinstance(item, dict) or item.get("message_id"):
+        return None
+    item_id = item.get("item_id")
+    return item_id if isinstance(item_id, str) and item_id else None
+
+
 class _ToolInterruptController:
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -1371,6 +1393,13 @@ class WebDisplay(_EventDisplayBase):
         accept_checkpoint_follow_up: CheckpointFollowUpAcceptor | None = None,
     ) -> None:
         super().__init__(publish_event=publish_event, verbose=verbose)
+        # Every timeline item published during a turn (including sub-agent
+        # items, which share this publisher) is recorded so an interrupted
+        # turn can be removed from the timeline as a whole.
+        self._raw_publish_event = publish_event
+        self._publish_event = self._publish_and_record_turn_item
+        self._turn_item_ids_lock = threading.Lock()
+        self._turn_item_ids: list[str] = []
         self._input_queue: queue.Queue[str | QueuedInput | QueuedRuntimeChange] = (
             queue.Queue()
         )
@@ -1569,7 +1598,28 @@ class WebDisplay(_EventDisplayBase):
     def assistant_turn_active(self) -> bool:
         return self._assistant_active
 
+    def _publish_and_record_turn_item(
+        self, event_type: str, payload: dict[str, Any]
+    ) -> None:
+        self._raw_publish_event(event_type, payload)
+        item_id = _turn_timeline_item_id(event_type, payload)
+        if item_id is None:
+            return
+        with self._turn_item_ids_lock:
+            if item_id not in self._turn_item_ids:
+                self._turn_item_ids.append(item_id)
+
+    def discard_interrupted_turn(self) -> None:
+        """Remove every timeline item the interrupted turn published."""
+        with self._turn_item_ids_lock:
+            item_ids = self._turn_item_ids
+            self._turn_item_ids = []
+        for item_id in item_ids:
+            self._raw_publish_event("message_removed", {"item_id": item_id})
+
     def assistant_start(self) -> None:
+        with self._turn_item_ids_lock:
+            self._turn_item_ids = []
         with self._input_state_lock:
             self._input_delivery_pending = False
             self._assistant_active = True

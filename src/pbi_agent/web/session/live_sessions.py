@@ -1024,6 +1024,10 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
                 continue
             if item.get("role") != "user":
                 continue
+            # Sub-agent task prompts are not user input; restoring one into
+            # the composer on interrupt would show the wrong text.
+            if item.get("sub_agent_id"):
+                continue
             item_id = _snapshot_item_id(item)
             if item_id and not item_id.startswith("history-"):
                 return item

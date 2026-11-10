@@ -137,6 +137,9 @@ from pbi_agent.agent.session.shared import (
     extract_active_command as _extract_active_command,
 )
 from pbi_agent.agent.session.shared import (
+    interrupt_requested as _interrupt_requested,
+)
+from pbi_agent.agent.session.shared import (
     log as _log,
 )
 from pbi_agent.agent.session.shared import (
@@ -1240,6 +1243,11 @@ def run_session_loop(
                         provider_history_include_tool_history = (
                             turn_include_tool_history
                         )
+                    discard_turn_items = getattr(
+                        display, "discard_interrupted_turn", None
+                    )
+                    if callable(discard_turn_items):
+                        discard_turn_items()
                     clear_interrupt = getattr(display, "clear_interrupt", None)
                     if callable(clear_interrupt):
                         clear_interrupt()
@@ -1419,8 +1427,21 @@ def run_sub_agent_task(
         if on_started is not None:
             on_started(getattr(child_display, "sub_agent_id", None))
         if cancel_event is not None:
+            # Background delegates outlive the parent turn: only their own
+            # cancel event stops them.
             child_display = cast(
                 DisplayProtocol, _CancellableDisplay(child_display, cancel_event)
+            )
+        else:
+            # Foreground delegates stop when the parent turn is interrupted,
+            # whatever display implementation created them.
+            parent_display = display
+            child_display = cast(
+                DisplayProtocol,
+                _InterruptFollowingDisplay(
+                    child_display,
+                    lambda: _interrupt_requested(parent_display),
+                ),
             )
         _child_tier = child_settings.service_tier or ""
         child_session_usage = TokenUsage(
@@ -1658,6 +1679,20 @@ def run_sub_agent_task(
             "status": "failed",
             "error": {"type": exc.error_type, "message": exc.message},
         }
+    except SessionTurnInterrupted:
+        message = "Sub-agent interrupted by user."
+        if child_display is not None:
+            child_display.finish_sub_agent(status="interrupted")
+        if child_tracer is not None:
+            child_tracer.finish(
+                status="interrupted",
+                usage=child_session_usage,
+                metadata={"error_message": message},
+            )
+        return {
+            "status": "failed",
+            "error": {"type": "interrupted", "message": message},
+        }
     except Exception as exc:
         message = str(exc) or exc.__class__.__name__
         child_display = child_display or display.begin_sub_agent(
@@ -1705,29 +1740,40 @@ def run_sub_agent_task(
             display.session_usage(parent_session_usage)
 
 
-class _CancellableDisplay:
-    """Display proxy whose interrupt state follows a background cancel event."""
+class _InterruptFollowingDisplay:
+    """Display proxy whose interrupt state follows an external predicate."""
 
-    def __init__(self, inner: DisplayProtocol, cancel_event: threading.Event) -> None:
+    def __init__(
+        self, inner: DisplayProtocol, is_interrupted: Callable[[], bool]
+    ) -> None:
         self._inner = inner
-        self._cancel_event = cancel_event
+        self._is_interrupted = is_interrupted
 
     def interrupt_requested(self) -> bool:
-        return self._cancel_event.is_set()
+        return self._is_interrupted()
 
     def tool_interrupt_requested(self, call_id: str) -> bool:
-        if self._cancel_event.is_set():
+        if self._is_interrupted():
             return True
         checker = getattr(self._inner, "tool_interrupt_requested", None)
         return bool(callable(checker) and checker(call_id))
 
     def begin_sub_agent(self, *args: Any, **kwargs: Any) -> DisplayProtocol:
-        # Nested delegates must observe the same background cancellation.
+        # Nested delegates must observe the same interrupt source.
         child = self._inner.begin_sub_agent(*args, **kwargs)
-        return cast(DisplayProtocol, _CancellableDisplay(child, self._cancel_event))
+        return cast(
+            DisplayProtocol, _InterruptFollowingDisplay(child, self._is_interrupted)
+        )
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)
+
+
+class _CancellableDisplay(_InterruptFollowingDisplay):
+    """Display proxy whose interrupt state follows a background cancel event."""
+
+    def __init__(self, inner: DisplayProtocol, cancel_event: threading.Event) -> None:
+        super().__init__(inner, cancel_event.is_set)
 
 
 @contextmanager

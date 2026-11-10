@@ -292,6 +292,7 @@ active_mcp_tool_names_context = _ACTIVE_MCP_TOOL_NAMES
 active_mcp_tool_names_by_workspace = _ACTIVE_MCP_TOOL_NAMES_BY_WORKSPACE
 active_mcp_tool_names_lock = _ACTIVE_MCP_TOOL_NAMES_LOCK
 raise_if_interrupted = _raise_if_interrupted
+interrupt_requested = _interrupt_requested
 selected_model = _selected_model
 run_reasoning_metadata = _run_reasoning_metadata
 selected_sub_agent_model = _selected_sub_agent_model
