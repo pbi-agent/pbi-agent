@@ -59,6 +59,18 @@ describe("SessionSidebar", () => {
     expect(props.onNewSession).toHaveBeenCalledTimes(1);
   });
 
+  it("shows the new session keyboard shortcut in the New button tooltip", async () => {
+    const user = userEvent.setup();
+    renderSidebar();
+
+    const newButton = screen.getByRole("button", { name: /new/i });
+    expect(newButton).toHaveAttribute("aria-keyshortcuts", "Ctrl+Shift+O");
+    await user.hover(newButton);
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("New session");
+    expect(tooltip).toHaveTextContent("Ctrl+Shift+O");
+  });
+
   it("renders a session search box and forwards edits", () => {
     const props = renderSidebar();
 
