@@ -260,3 +260,13 @@ def make_http_error() -> Callable[..., urllib.error.HTTPError]:
         )
 
     return factory
+
+
+@pytest.fixture(autouse=True)
+def isolate_shell_raw_output_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    from pbi_agent.tools import raw_output
+
+    raw_dir = tmp_path_factory.getbasetemp() / "shell-raw-output"
+    monkeypatch.setattr(raw_output, "raw_output_dir", lambda: raw_dir)

@@ -18,6 +18,7 @@ from pbi_agent.maintenance import (
 )
 from pbi_agent.self_update import UpdateCheckError, UpgradePlan
 from pbi_agent.session_store import MessageImageAttachment, SessionStore
+from pbi_agent.tools import raw_output
 from pbi_agent.web import uploads
 
 
@@ -385,3 +386,31 @@ def test_referenced_upload_ids_reads_messages_and_kanban(tmp_path: Path) -> None
         store._conn.commit()
 
         assert store.referenced_upload_ids() == {"message-upload", "task-upload"}
+
+
+def test_daily_maintenance_purges_old_raw_shell_output_once_per_day(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(tmp_path / "sessions.db"))
+    raw_dir = tmp_path / "shell-output"
+    raw_dir.mkdir()
+    monkeypatch.setattr(raw_output, "raw_output_dir", lambda: raw_dir)
+    prefix, suffix = raw_output.RAW_OUTPUT_PREFIX, raw_output.RAW_OUTPUT_SUFFIX
+    stale = raw_dir / f"{prefix}old{suffix}"
+    fresh = raw_dir / f"{prefix}new{suffix}"
+    for path in (stale, fresh):
+        path.write_text("x")
+    old = (datetime.now(UTC) - timedelta(hours=25)).timestamp()
+    os.utime(stale, (old, old))
+
+    first = run_startup_maintenance(check_updates=False)
+    assert not stale.exists()
+    stale.write_text("x")
+    os.utime(stale, (old, old))
+    second = run_startup_maintenance(check_updates=False)
+
+    assert first.ran is True
+    assert second.ran is False
+    # Purged on the first daily run only; the second run is skipped.
+    assert stale.exists()
+    assert fresh.exists()

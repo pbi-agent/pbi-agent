@@ -15,6 +15,7 @@ import uuid
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Literal, cast
 
 BackgroundTaskStatus = Literal["running", "completed", "failed", "killed", "timed_out"]
@@ -73,6 +74,7 @@ class BackgroundTask:
     kind: BackgroundTaskKind = "shell"
     sub_agent_id: str | None = None
     cancel_event: threading.Event | None = field(default=None, repr=False)
+    raw_output_path: Path | None = field(default=None, repr=False)
 
     def summary(self) -> dict[str, Any]:
         end = self.ended_at if self.ended_at is not None else time.time()
@@ -416,11 +418,12 @@ def render_background_result(task: BackgroundTask) -> str:
     """Render a finished task as a model-facing synthetic user input."""
     if task.kind == "sub_agent":
         return _render_sub_agent_result(task)
-    from pbi_agent.tools.shell import _build_output_payload
-
-    payload = _build_output_payload(
+    payload = background_output_payload(
+        task,
         stdout=task.stdout.text(),
         stderr=task.stderr.text(),
+        stdout_dropped=task.stdout.dropped,
+        stderr_dropped=task.stderr.dropped,
         compression=task.compression,
     )
     duration = task.summary()["elapsed_seconds"]
@@ -431,7 +434,7 @@ def render_background_result(task: BackgroundTask) -> str:
         *([f"intent: {task.intent}"] if task.intent else []),
         f"command: {task.command}",
     ]
-    if task.stdout.dropped or payload.get("stdout_truncated"):
+    if payload.get("stdout_tail_dropped") or payload.get("stdout_truncated"):
         lines.append("stdout (truncated):")
     else:
         lines.append("stdout:")
@@ -439,12 +442,79 @@ def render_background_result(task: BackgroundTask) -> str:
     if payload["stderr"]:
         lines.append("stderr:")
         lines.append(payload["stderr"])
+    if payload.get("notice"):
+        lines.append(payload["notice"])
     lines.append(f"</{BACKGROUND_RESULT_TAG}>")
     lines.append(
         "This background shell task you started has finished. Continue the task "
         "using this result."
     )
     return "\n".join(lines)
+
+
+TAIL_DROPPED_NOTE = (
+    f"Background output keeps only the last {TAIL_MAX_CHARS} chars per stream; "
+    "earlier output was dropped and cannot be recovered."
+)
+
+
+def background_output_payload(
+    task: BackgroundTask,
+    *,
+    stdout: str,
+    stderr: str,
+    stdout_dropped: bool,
+    stderr_dropped: bool,
+    compression: bool,
+    status: BackgroundTaskStatus | None = None,
+) -> dict[str, Any]:
+    """Bound/compress a background task output snapshot for the model.
+
+    ``stdout``/``stderr``, the ``*_dropped`` flags, and ``status`` (read before
+    the text) must come from the same snapshot; ``status`` defaults to the
+    task's current status. ``*_tail_dropped`` marks head loss in the retained tail, distinct
+    from ``*_truncated`` (bounded for display). A raw output file is written
+    only once a task has finished, then reused for later reads.
+    """
+    from pbi_agent.tools.raw_output import raw_output_notice, save_raw_output
+    from pbi_agent.tools.shell import _build_output_payload
+
+    payload = _build_output_payload(
+        stdout=stdout, stderr=stderr, compression=compression, save_raw=False
+    )
+    if stdout_dropped:
+        payload["stdout_tail_dropped"] = True
+    if stderr_dropped:
+        payload["stderr_tail_dropped"] = True
+    compressed = bool(
+        payload.get("stdout_compressed") or payload.get("stderr_compressed")
+    )
+    truncated = bool(payload.get("stdout_truncated") or payload.get("stderr_truncated"))
+    tail_note = TAIL_DROPPED_NOTE if stdout_dropped or stderr_dropped else None
+    if not (compressed or truncated):
+        if tail_note:
+            payload["notice"] = tail_note
+        return payload
+    if (status or task.status) == "running":
+        notice = (
+            "Output compressed or truncated. A raw output file is saved once the "
+            "task finishes; read the task output again then."
+        )
+        payload["notice"] = f"{notice} {tail_note}" if tail_note else notice
+        return payload
+    if task.raw_output_path is None:
+        task.raw_output_path = save_raw_output(stdout=stdout, stderr=stderr)
+    if task.raw_output_path is not None:
+        payload["raw_output_path"] = str(task.raw_output_path)
+        payload["notice"] = raw_output_notice(
+            task.raw_output_path,
+            compressed=compressed,
+            truncated=truncated,
+            extra_note=tail_note,
+        )
+    elif tail_note:
+        payload["notice"] = tail_note
+    return payload
 
 
 def _render_sub_agent_result(task: BackgroundTask) -> str:

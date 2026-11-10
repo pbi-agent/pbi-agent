@@ -423,14 +423,20 @@ def test_execute_tool_calls_serializes_compressed_shell_output(
         max_workers=1,
     )
 
-    assert json.loads(batch.results[0].output_json) == {
-        "ok": True,
-        "result": {
-            "stdout": "compressed: raw stdout",
-            "stderr": "compressed: raw stderr",
-            "exit_code": 0,
-        },
+    output = json.loads(batch.results[0].output_json)
+    assert output["ok"] is True
+    result = output["result"]
+    raw_output_path = result.pop("raw_output_path")
+    notice = result.pop("notice")
+    assert result == {
+        "stdout": "compressed: raw stdout",
+        "stderr": "compressed: raw stderr",
+        "stdout_compressed": True,
+        "stderr_compressed": True,
+        "exit_code": 0,
     }
+    assert notice.startswith("Output compressed")
+    assert raw_output_path in notice
 
 
 def test_shell_tool_uses_configured_bootstrap_and_executable(

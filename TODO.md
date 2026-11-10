@@ -1,1 +1,7 @@
-- [x] Release v0.49.0: PR #380 merged, PyPI + GitHub Release published
+- [x] #383: save raw shell output to temp file on truncation (shell, background result, background_task output)
+- [x] Tests: truncated/non-truncated × compression on/off, uniqueness, pruning, write failure, background
+- [x] Docs: docs/tools.md shell section
+- [x] Detect lossy codetool-shell compression (test summaries, repeated output) and save raw file + `*_compressed` flags
+- [x] Live web smoke: lossy pytest summary → notice; whitespace-only compression → none
+- [x] Code-review fixes: per-user dir, background poll file spam, dropped-tail notice, snapshot race, whitespace signature, prune throttle, layering, tail_dropped key
+- [x] Move raw-output cleanup into daily startup maintenance (tools/raw_output.py)

@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from pbi_agent.tools import background_task as background_task_tool
+from pbi_agent.tools import raw_output
 from pbi_agent.tools import shell as shell_tool
 from pbi_agent.tools.background_tasks import (
     BackgroundTask,
@@ -257,3 +258,172 @@ def test_cancellable_display_propagates_to_nested_sub_agents() -> None:
     event.set()
     assert nested.interrupt_requested()
     assert grandchild.interrupt_requested()
+
+
+def test_background_result_includes_raw_output_notice_when_truncated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raw_dir = tmp_path / "raw"
+    monkeypatch.setattr(raw_output, "raw_output_dir", lambda: raw_dir)
+    manager, _finished, done = _collecting_manager()
+    size = shell_tool.MAX_STDOUT_CHARS + 100
+    task = _start(manager, f"{sys.executable} -c \"print('a' * {size})\"")
+    assert done.wait(timeout=10)
+
+    rendered = render_background_result(task)
+
+    assert "stdout (truncated):" in rendered
+    assert "Output truncated. Full raw output saved to" in rendered
+    files = list(raw_dir.iterdir())
+    assert len(files) == 1
+    assert "a" * size in files[0].read_text(encoding="utf-8")
+    assert "earlier output was dropped and cannot be recovered" not in rendered
+
+
+def test_background_result_notes_partial_raw_output_when_tail_dropped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pbi_agent.tools.background_tasks import TAIL_MAX_CHARS
+
+    monkeypatch.setattr(raw_output, "raw_output_dir", lambda: tmp_path / "raw")
+    manager, _finished, done = _collecting_manager()
+    size = TAIL_MAX_CHARS * 2
+    task = _start(manager, f"{sys.executable} -c \"print('a' * {size})\"")
+    assert done.wait(timeout=10)
+
+    rendered = render_background_result(task)
+
+    assert task.stdout.dropped is True
+    assert "earlier output was dropped and cannot be recovered" in rendered
+
+
+def test_background_result_without_truncation_creates_no_raw_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raw_dir = tmp_path / "raw"
+    monkeypatch.setattr(raw_output, "raw_output_dir", lambda: raw_dir)
+    manager, _finished, done = _collecting_manager()
+    task = _start(manager, "echo hello")
+    assert done.wait(timeout=5)
+
+    rendered = render_background_result(task)
+
+    assert "Output truncated" not in rendered
+    assert not raw_dir.exists()
+
+
+def _finished_task(status: str = "completed") -> BackgroundTask:
+    return BackgroundTask(
+        task_id="bg-test",
+        command="cmd",
+        working_directory=".",
+        tool_call_id=None,
+        timeout_ms=1000,
+        compression=False,
+        started_at=0.0,
+        status=status,  # type: ignore[arg-type]
+    )
+
+
+def test_background_output_payload_reuses_raw_file_for_finished_task(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pbi_agent.tools.background_tasks import background_output_payload
+
+    raw_dir = tmp_path / "raw"
+    monkeypatch.setattr(raw_output, "raw_output_dir", lambda: raw_dir)
+    task = _finished_task()
+    big = "a" * (shell_tool.MAX_STDOUT_CHARS + 1)
+
+    first = background_output_payload(
+        task,
+        stdout=big,
+        stderr="",
+        stdout_dropped=False,
+        stderr_dropped=False,
+        compression=False,
+    )
+    second = background_output_payload(
+        task,
+        stdout=big,
+        stderr="",
+        stdout_dropped=False,
+        stderr_dropped=False,
+        compression=False,
+    )
+
+    assert first["raw_output_path"] == second["raw_output_path"]
+    assert len(list(raw_dir.iterdir())) == 1
+
+
+def test_background_output_payload_writes_no_file_while_running(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pbi_agent.tools.background_tasks import background_output_payload
+
+    raw_dir = tmp_path / "raw"
+    monkeypatch.setattr(raw_output, "raw_output_dir", lambda: raw_dir)
+
+    payload = background_output_payload(
+        _finished_task(status="running"),
+        stdout="a" * (shell_tool.MAX_STDOUT_CHARS + 1),
+        stderr="",
+        stdout_dropped=False,
+        stderr_dropped=False,
+        compression=False,
+    )
+
+    assert payload["stdout_truncated"] is True
+    assert "raw_output_path" not in payload
+    assert "once the task finishes" in payload["notice"]
+    assert not raw_dir.exists()
+
+
+def test_background_output_payload_explains_dropped_tail_without_truncation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pbi_agent.tools.background_tasks import (
+        TAIL_DROPPED_NOTE,
+        background_output_payload,
+    )
+
+    raw_dir = tmp_path / "raw"
+    monkeypatch.setattr(raw_output, "raw_output_dir", lambda: raw_dir)
+
+    payload = background_output_payload(
+        _finished_task(),
+        stdout="short tail",
+        stderr="",
+        stdout_dropped=True,
+        stderr_dropped=False,
+        compression=False,
+    )
+
+    assert payload["stdout_tail_dropped"] is True
+    assert "stdout_truncated" not in payload
+    assert payload["notice"] == TAIL_DROPPED_NOTE
+    assert not raw_dir.exists()
+
+
+def test_background_task_output_action_separates_tail_dropped_from_truncated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pbi_agent.tools.background_tasks import TAIL_MAX_CHARS
+
+    monkeypatch.setattr(raw_output, "raw_output_dir", lambda: tmp_path / "raw")
+    manager, _finished, done = _collecting_manager()
+    task = _start(manager, f"{sys.executable} -c \"print('a' * {TAIL_MAX_CHARS * 2})\"")
+    assert done.wait(timeout=10)
+    context = _context(tmp_path, manager)
+
+    first = background_task_tool.handle(
+        {"action": "output", "task_id": task.task_id}, context
+    )
+    second = background_task_tool.handle(
+        {"action": "output", "task_id": task.task_id}, context
+    )
+
+    assert first["stdout_tail_dropped"] is True
+    assert first["stdout_truncated"] is True
+    assert "cannot be recovered" in first["notice"]
+    assert first["raw_output_path"] == second["raw_output_path"]
