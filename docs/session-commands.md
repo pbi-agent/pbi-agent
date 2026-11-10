@@ -21,6 +21,7 @@ This page is separate from the [CLI Reference](/cli) and the [Built-in Tools](/t
 | `/agents` | Web and interactive runtime | Shows discovered project sub-agents. |
 | `/init` | Web and interactive runtime | Creates a starter `AGENTS.md`. |
 | `/reload` | Web and interactive runtime | Reloads workspace instructions, project catalogs, non-MCP tools, and the web file-mention cache. |
+| `/status` | Web UI | Opens a visual session usage report without calling the model or adding a chat message. |
 | `/compact` | Web and interactive runtime | Summarizes the current live session into compact context for future turns. |
 | `/<command-name>` | Web and interactive runtime | Applies a project command from `.agents/commands/*.md` to the current turn. |
 | <kbd>Ctrl</kbd>+<kbd>Space</kbd> | Web session composer | Starts or stops microphone dictation when a speech-to-text provider is configured. |
@@ -116,6 +117,19 @@ Reloads the active provider initialization for future model turns. It refreshes:
 
 `/reload` does not reload `.agents/mcp.json` or already-started MCP server tool catalogs. Restart the session after changing MCP configuration.
 
+### `/status`
+
+In the browser chat input, submit `/status` to open the current session report.
+It shows total tokens and estimated USD cost, input/output/reasoning and cache
+metrics, the main-agent/sub-agent split, current context against the compaction
+threshold, and recorded run/API/tool/error counts. Sub-agent usage is already
+included in session totals. Reasoning is reported separately and is not added to
+the backend's total again. Cost is an estimate, not an invoice; models without
+known pricing may show zero cost.
+
+The report uses existing session data and makes no model request. Before the first
+response, usage is shown as unavailable rather than as a measured zero.
+
 ### `/compact`
 
 Compacts the current live session by asking the active provider to summarize the useful conversation context. Future turns continue from that summary instead of the full older transcript.
@@ -188,6 +202,7 @@ Reserved built-in aliases take precedence and cannot be defined by project comma
 - `/mcp`
 - `/agents`
 - `/reload`
+- `/status` (browser UI)
 - `/compact`
 
 ::: tip

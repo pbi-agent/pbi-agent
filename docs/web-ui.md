@@ -95,6 +95,7 @@ Some inputs are handled by the web app/session runtime without a model request:
 - `!command` runs a workspace shell command.
 - `/skills`, `/mcp`, and `/agents` show discovered project catalogs.
 - `/reload` refreshes workspace instructions and the web file-mention cache.
+- `/status` opens a visual usage report with token, cost, cache, context, sub-agent, and activity metrics without calling the model.
 - `/compact` summarizes long session history for future turns.
 
 These commands are documented in [Session Commands](/session-commands).
