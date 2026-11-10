@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pbi-agent-web",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "pbi-agent", "web", "--port", "7431"],
+      "port": 7431
+    }
+  ]
+}
