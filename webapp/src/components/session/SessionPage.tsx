@@ -74,7 +74,7 @@ import { ReplySelectionPopover } from "./ReplySelectionPopover";
 import { WorkspaceFileTreePanel } from "./WorkspaceFileTreePanel";
 import {
   WORKSPACE_FILE_TREE_STALE_TIME_MS,
-  WORKSPACE_FILE_TREE_SUMMARY_REFETCH_INTERVAL_MS,
+  workspaceFileTreeRefetchInterval,
   workspaceFileTreeQueryKey,
 } from "./workspaceFileTreeQueries";
 import { WorkspaceBadge } from "../WorkspaceBadge";
@@ -304,8 +304,8 @@ export function SessionPage({
   const workspaceFileTreeSummaryQuery = useQuery({
     queryKey: workspaceFileTreeKey,
     queryFn: fetchWorkspaceFileTree,
-    // While the explorer is open, WorkspaceFileTreePanel polls this same key.
-    refetchInterval: fileTreeOpen ? false : WORKSPACE_FILE_TREE_SUMMARY_REFETCH_INTERVAL_MS,
+    // Sole poller for this key; WorkspaceFileTreePanel observes without an interval.
+    refetchInterval: workspaceFileTreeRefetchInterval(fileTreeOpen),
     staleTime: WORKSPACE_FILE_TREE_STALE_TIME_MS,
   });
 

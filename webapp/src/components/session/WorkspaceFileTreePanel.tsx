@@ -19,7 +19,6 @@ import {
   type WorkspaceTreeIcon,
 } from "../../lib/workspaceFileIcons";
 import {
-  WORKSPACE_FILE_TREE_REFETCH_INTERVAL_MS,
   WORKSPACE_FILE_TREE_STALE_TIME_MS,
   workspaceFileDiffQueryKey,
   workspaceFilePreviewQueryKey,
@@ -77,7 +76,7 @@ export function WorkspaceFileTreePanel({
   const treeQuery = useQuery({
     queryKey: treeQueryKey,
     queryFn: fetchWorkspaceFileTree,
-    refetchInterval: WORKSPACE_FILE_TREE_REFETCH_INTERVAL_MS,
+    // Polling is owned by SessionPage (workspaceFileTreeRefetchInterval).
     staleTime: WORKSPACE_FILE_TREE_STALE_TIME_MS,
   });
   const items = useMemo(

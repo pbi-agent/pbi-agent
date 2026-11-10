@@ -4,6 +4,7 @@ import { eventStreamUrl, fetchSessionDetail } from "../api";
 import { nextClientStreamId, updateLiveSessionDebug } from "../debug/liveSessionDebug";
 import { parseSseEvent } from "../events";
 import { resolveSessionEventTarget, useSessionStore } from "../store";
+import { WORKSPACE_FILE_TREE_QUERY_PREFIX } from "../components/session/workspaceFileTreeQueries";
 import type { WebEvent } from "../types";
 
 const INITIAL_DELAY = 1000;
@@ -43,6 +44,7 @@ export function useLiveSessionEvents(
     let disposed = false;
     let hasOpened = false;
     let recoveryMode = false;
+    const seenFileMutationCallIds = new Set<string>();
 
     function scheduleReconnect(currentSource: EventSource) {
       if (!disposed && source === currentSource && !retryTimer) {
@@ -256,6 +258,9 @@ export function useLiveSessionEvents(
           );
           return;
         }
+        if (hasNewCompletedFileMutation(event, seenFileMutationCallIds)) {
+          void queryClient.invalidateQueries({ queryKey: [WORKSPACE_FILE_TREE_QUERY_PREFIX] });
+        }
         if (shouldRefreshRunQueries(event, wasInputEnabled)) {
           const sessionId = resolveSessionId(
             event,
@@ -293,6 +298,40 @@ export function useLiveSessionEvents(
       });
     };
   }, [applyEvent, queryClient, resetStreamState, sessionKey, liveSessionId, sessionId, setConnection]);
+}
+
+const FILE_MUTATING_TOOL_NAMES = new Set([
+  "apply_patch",
+  "replace_in_file",
+  "write_file",
+  "shell",
+]);
+
+/**
+ * True when a tool-group update carries a finished file-mutating tool call we
+ * have not seen yet. Tool-group updates republish every item in the group, so
+ * call ids are tracked to refresh the file tree once per call.
+ */
+export function hasNewCompletedFileMutation(
+  event: WebEvent,
+  seenCallIds: Set<string>,
+): boolean {
+  if (event.type !== "tool_group_added") return false;
+  let found = false;
+  for (const item of event.payload.items ?? []) {
+    const metadata = item.metadata;
+    if (!metadata) continue;
+    const toolName = metadata.tool_name;
+    const callId = metadata.call_id;
+    const status = metadata.status;
+    if (typeof toolName !== "string" || !FILE_MUTATING_TOOL_NAMES.has(toolName)) continue;
+    if (status !== "completed" && status !== "failed") continue;
+    if (typeof callId !== "string" || callId.length === 0) continue;
+    if (seenCallIds.has(callId)) continue;
+    seenCallIds.add(callId);
+    found = true;
+  }
+  return found;
 }
 
 function shouldRefreshRunQueries(event: WebEvent, wasInputEnabled: boolean | null): boolean {
