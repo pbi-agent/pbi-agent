@@ -1,3 +1,3 @@
-- [x] Release v0.51.0 prep: bump, uv lock, changelog, validation, commit 2563017b, PR #387 (CI green)
-- [x] Merged PR #387 (e569db5c); Release run 42786355857 green (PyPI + GitHub Release); release notes frontmatter stripped
-- [x] `pbi-agent init` / `/init`: install only AGENTS.md; drop default commands/sub-agents bootstrap
+- [x] #199: Add built-in `/status` command and visual session usage report
+- [x] Add command/report regression tests and docs
+- [x] Run relevant Python, frontend, and docs checks
