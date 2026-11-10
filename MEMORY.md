@@ -23,13 +23,13 @@ Entry shape: rule/fact — why/evidence — `[verified YYYY-MM-DD]` or `[unverif
 ## Topic Pages
 - `.agents/memory/tooling.md`: Ruff exceptions, tool pins, test hygiene, releases, upgrade, security.
 - `.agents/memory/providers.md`: provider internals, Copilot, xAI, models/pricing, reasoning, OpenAI/ChatGPT, Google.
-- `.agents/memory/tools.md`: explore, shell, background shell, `allowed_tools`, patching, MCP.
+- `.agents/memory/tools.md`: read_image, shell, background shell, `allowed_tools`, patching, MCP.
 - `.agents/memory/runtime.md`: prompt assembly, catalogs, sub-agents, commands, replay, hooks, sandbox/init, branding.
 - `.agents/memory/web.md`: API contracts, web sessions, channels, events, timeline, UI quirks, composer, follow-ups.
 
 ## Daily Log
 
-### 2026-11-09
-- Released v0.49.0 (PR #380); Release run 42593771313 green; release notes frontmatter stripped. Local lint needs `bun install` for `@shadcn/lint`.
-- Sub-agent `include_context` transcript: filters persisted `<background_task_result>` synthetic user msgs (checkpoint steer + auto-wake) and keeps current turn in place before steers (no dup). Tests in `test_sub_agent_tool.py`; full pytest/ruff/basedpyright green. OpenAI/Azure/Google `previous_response_id` inheritance still carries them.
-- Released v0.50.0 (PR #381, sub-agent context fix); Release run 42636442151 green (PyPI + GH Release); notes frontmatter stripped.
+### 2026-11-10
+- #382: removed `explore_workspace`/`codetool-explore`/`workspace_filters.py`; added `read_image` tool + `read-image` group (aliases `read`/`read_image`); skills load via `shell`; webapp/docs/tests updated. Full ruff/basedpyright/pytest/web lint/typecheck/test/build + docs build green. Uncommitted.
+- #382 review fixes: aliases, `.agents` frontmatter → `read-image` (explorer/reviewer + shell), shell read rule always on, skills-need-shell warning, image stat size precheck. No webapp legacy explore rendering (user: no retro-compat). read_image stays unconfined by request.
+- #382 live smoke (web :7431, worker profile): legacy `read` profiles load as `read-image`; 13 commands/10 agents discovered; shell read + skill load via shell + read_image (workspace + /usr/share abs path) OK; logs/console clean. Fixed missed profile-card label map (`ModelProfilesSettingsSection.tsx`) + test.

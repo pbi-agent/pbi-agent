@@ -23,7 +23,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 const TOOL_VISIBILITY_LABELS: Record<string, string> = {
-  read: "Read",
+  "read-image": "Read image",
   write: "Write",
   web: "Web",
   "sub-agent": "Sub-agent",

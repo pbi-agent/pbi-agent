@@ -117,7 +117,7 @@ def test_discovers_allowed_tools(tmp_path: Path) -> None:
             "---\n"
             "name: reviewer\n"
             "description: Reviews code changes.\n"
-            "allowed_tools: read, web, shell\n"
+            "allowed_tools: read-image, web, shell\n"
             "---\n\n"
             "Review prompt.\n"
         ),
@@ -126,7 +126,7 @@ def test_discovers_allowed_tools(tmp_path: Path) -> None:
     agents = discover_project_sub_agents(tmp_path)
 
     assert len(agents) == 1
-    assert agents[0].allowed_tools == ("read", "web", "shell")
+    assert agents[0].allowed_tools == ("read-image", "web", "shell")
 
 
 def test_discovers_composable_frontmatter_lists(tmp_path: Path) -> None:

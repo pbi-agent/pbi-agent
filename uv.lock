@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -150,20 +150,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/c7/0e/7fa0ef50764b67090eca4114772a2abf8b6148198475e54c660b97caeee6/click-8.5.0.tar.gz", hash = "sha256:ba0d2089de75ea0310e2dde03160e6ca10009947fb95a182f9b54021bb272e34", size = 382235, upload-time = "2026-08-26T13:33:14.56Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/58/50/6c0d534c5f134586a8e1ba4e330569e32f057e33372ae556463212fb4cd3/click-8.5.0-py3-none-any.whl", hash = "sha256:255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360", size = 125251, upload-time = "2026-08-26T13:33:12.928Z" },
-]
-
-[[package]]
-name = "codetool-explore"
-version = "0.7.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/52/bd/0595788b435b3abe07f4f1a69f41f348ad26f19d9b963472d22f35e85eaf/codetool_explore-0.7.1.tar.gz", hash = "sha256:8f14588378b17cccad0d3eb25c98149700bd870f52359f0da35ff09aed44f9f9", size = 107024, upload-time = "2026-06-30T15:47:38.239Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/77/33/4a6696124ce2fbb936c2403db8530690836989bd53ba6ed0cb1534175c02/codetool_explore-0.7.1-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:43eebd6a0ffe68e1efd1d8fc5ef59e8f4fb0d8260fb3dd7afc953148d1d245a1", size = 1107643, upload-time = "2026-06-30T15:47:29.301Z" },
-    { url = "https://files.pythonhosted.org/packages/2b/a6/772613ed25cc7d0a9be2f0b3400ef59b1df6a1be8ab2d5957b241bf388bb/codetool_explore-0.7.1-py3-none-macosx_11_0_arm64.whl", hash = "sha256:aed7ac8926d7f8fcd56dda1d408da4a702b66d4c0dac6f93833725bd3a7dc121", size = 1054459, upload-time = "2026-06-30T15:47:30.827Z" },
-    { url = "https://files.pythonhosted.org/packages/0e/d7/2ff2ff80e3ddcd135c537799cd379fb53f000e8bff6dedb743ab0bdf4941/codetool_explore-0.7.1-py3-none-manylinux2014_aarch64.whl", hash = "sha256:2d84673cb91bfca54a3dca8e2626deeaeccaf960045b009b963a79289ebf2bd0", size = 1168965, upload-time = "2026-06-30T15:47:32.186Z" },
-    { url = "https://files.pythonhosted.org/packages/9a/28/d42a83d0114779c2af3d9b5de1a7aea65e5480b051d7e55b552db3919212/codetool_explore-0.7.1-py3-none-manylinux2014_x86_64.whl", hash = "sha256:d176e36afee92a3736da799bbd3b53e26684b00a2c1b0b9b11ee8f77ab49ad77", size = 1196409, upload-time = "2026-06-30T15:47:33.699Z" },
-    { url = "https://files.pythonhosted.org/packages/74/b4/959976aba7ac5b8cc5b0ca1212794df8f68b69de5476b6463b79b57d74de/codetool_explore-0.7.1-py3-none-win_amd64.whl", hash = "sha256:dd7d88676b7fe28c1f5d900216f18027279936c7eff264b432e54907d8a79cd1", size = 929635, upload-time = "2026-06-30T15:47:35.009Z" },
-    { url = "https://files.pythonhosted.org/packages/e7/60/09cc394d1a7d6a648fa4750f48af7b56152abba2f9f824cd222f6cfe9233/codetool_explore-0.7.1-py3-none-win_arm64.whl", hash = "sha256:42cf451869ed9231fb3fc7ce763dae2af023b9c88668f8a43a0f486570895bf0", size = 861696, upload-time = "2026-06-30T15:47:36.37Z" },
 ]
 
 [[package]]
@@ -558,7 +544,6 @@ name = "pbi-agent"
 version = "0.50.0"
 source = { editable = "." }
 dependencies = [
-    { name = "codetool-explore" },
     { name = "codetool-shell" },
     { name = "fastapi" },
     { name = "lark" },
@@ -580,7 +565,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "codetool-explore", specifier = "==0.7.1" },
     { name = "codetool-shell", specifier = "==0.1.3" },
     { name = "fastapi", specifier = "==0.162.0" },
     { name = "lark", specifier = "==1.3.1" },

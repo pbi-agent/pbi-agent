@@ -24,7 +24,6 @@ _DEFAULT_SYSTEM_PROMPT_PREAMBLE = """
 You are task assistant. Treat every user task/question as workspace-related: inspect context and use available tools to achieve the outcome.
 """.strip()
 
-_READ_TOOL_NAMES = frozenset({"explore_workspace"})
 _WRITE_TOOL_NAMES = frozenset({"apply_patch", "replace_in_file", "write_file"})
 
 _SUB_AGENT_PROMPT = """
@@ -96,13 +95,11 @@ def _tool_usage_rules(
     lines = [
         "<tool_usage_rules>",
     ]
-    if "shell" in active_names and (
-        active_names & _READ_TOOL_NAMES or active_names & _WRITE_TOOL_NAMES
-    ):
-        lines.append(
-            "Prefer file tools for file operations; use `shell` only for "
-            "command execution."
-        )
+    if "shell" in active_names:
+        rule = "Use `shell` to read and search files"
+        if active_names & _WRITE_TOOL_NAMES:
+            rule += "; prefer file edit tools for file changes"
+        lines.append(f"{rule}.")
 
     usage_lines = [
         f"- {spec.prompt_usage}" for spec in specs if spec.prompt_usage is not None
@@ -238,6 +235,17 @@ def _append_workspace_memory(base_prompt: str, cwd: Path | None = None) -> str:
     return f"{base_prompt}\n\n<workspace_memory>\n{memory}\n</workspace_memory>"
 
 
+def _warn_skills_need_shell(
+    visible_skill_names: tuple[str, ...] | None,
+    source_label: str,
+) -> None:
+    if visible_skill_names:
+        _warn(
+            f"{source_label} lists skills, but the `shell` tool group is "
+            "disabled; skills need `shell` to load SKILL.md and are omitted."
+        )
+
+
 def _append_available_skills(
     base_prompt: str,
     cwd: Path | None = None,
@@ -285,7 +293,7 @@ def _append_available_skills(
 Project skills use progressive disclosure: the catalog contains only each skill's name, description, and SKILL.md location.
 - Use a skill when the user's task matches its description or the user explicitly names it.
 - Treat `$<skill-name>` in user input as an explicit request to use that skill; strip the `$` and match `<skill-name>` against catalogued skill names.
-- Before applying a matched skill, load its SKILL.md with `explore_workspace` target="read" using the listed location.
+- Before applying a matched skill, load its SKILL.md with `shell` (e.g. `cat <location>`) using the listed location.
 - Treat loaded skill instructions as task guidance for the current session.
 - Resolve relative paths against the skill directory, which is the parent directory of SKILL.md.
 - Load referenced resources only when needed.
@@ -420,7 +428,7 @@ def get_system_prompt(
         ),
         cwd,
     )
-    if "explore_workspace" in active_names:
+    if "shell" in active_names:
         prompt = _append_available_skills(
             prompt,
             cwd,
@@ -428,6 +436,8 @@ def get_system_prompt(
             visible_skill_names=visible_skill_names,
             workspace_directory_key=workspace_directory_key,
         )
+    else:
+        _warn_skills_need_shell(visible_skill_names, "Command frontmatter")
     if "sub_agent" in active_names:
         prompt = _append_available_sub_agents(
             prompt,
@@ -473,7 +483,7 @@ def get_sub_agent_system_prompt(
     prompt = _append_project_rules(f"{base}\n\n{_SUB_AGENT_PROMPT}", cwd)
     excluded_names = _active_tool_excluded_names(settings, excluded_tools)
     active_names = {spec.name for spec in get_tool_specs(excluded_names=excluded_names)}
-    if "explore_workspace" in active_names:
+    if "shell" in active_names:
         prompt = _append_available_skills(
             prompt,
             cwd,
@@ -482,6 +492,8 @@ def get_sub_agent_system_prompt(
             source_label=skill_source_label,
             workspace_directory_key=workspace_directory_key,
         )
+    else:
+        _warn_skills_need_shell(visible_skill_names, skill_source_label)
     if "sub_agent" in active_names:
         prompt = _append_available_sub_agents(
             prompt,

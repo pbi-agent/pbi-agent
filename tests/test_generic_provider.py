@@ -48,7 +48,7 @@ def test_generic_provider_includes_web_tools_with_web_group() -> None:
     tool_names = {tool["function"]["name"] for tool in provider._tools}
     assert "read_web_url" in tool_names
     assert "web_search" in tool_names
-    assert "explore_workspace" not in tool_names
+    assert "read_image" not in tool_names
 
 
 def test_generic_request_turn_omits_empty_tools(
@@ -227,7 +227,7 @@ def test_generic_request_turn_replays_tagged_reasoning_after_tool_call(
                                     "id": "call_read_license",
                                     "type": "function",
                                     "function": {
-                                        "name": "explore_workspace",
+                                        "name": "read_image",
                                         "arguments": (
                                             '{"pattern":"LICENSE","target":"read"}'
                                         ),
@@ -299,7 +299,7 @@ def test_generic_request_turn_replays_tagged_reasoning_after_tool_call(
                     "id": "call_read_license",
                     "type": "function",
                     "function": {
-                        "name": "explore_workspace",
+                        "name": "read_image",
                         "arguments": '{"pattern":"LICENSE","target":"read"}',
                     },
                 }
@@ -346,7 +346,7 @@ def test_generic_parse_response_extracts_tool_call_only_think_tags() -> None:
                                 "id": "call_read_license",
                                 "type": "function",
                                 "function": {
-                                    "name": "explore_workspace",
+                                    "name": "read_image",
                                     "arguments": (
                                         '{"pattern":"LICENSE","target":"read"}'
                                     ),
@@ -366,7 +366,7 @@ def test_generic_parse_response_extracts_tool_call_only_think_tags() -> None:
     assert result.function_calls == [
         ToolCall(
             call_id="call_read_license",
-            name="explore_workspace",
+            name="read_image",
             arguments={"pattern": "LICENSE", "target": "read"},
         )
     ]
@@ -378,7 +378,7 @@ def test_generic_parse_response_extracts_tool_call_only_think_tags() -> None:
                 "id": "call_read_license",
                 "type": "function",
                 "function": {
-                    "name": "explore_workspace",
+                    "name": "read_image",
                     "arguments": '{"pattern":"LICENSE","target":"read"}',
                 },
             }
@@ -461,7 +461,7 @@ def test_azure_chat_completions_uses_api_key_header_and_endpoint(
                                 "id": "call_2",
                                 "type": "function",
                                 "function": {
-                                    "name": "explore_workspace",
+                                    "name": "read_image",
                                     "arguments": {
                                         "pattern": "README.md",
                                         "target": "read",
@@ -481,7 +481,7 @@ def test_azure_chat_completions_uses_api_key_header_and_endpoint(
         ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
         ToolCall(
             call_id="call_2",
-            name="explore_workspace",
+            name="read_image",
             arguments={"pattern": "README.md", "target": "read"},
         ),
     ]
@@ -598,7 +598,7 @@ def test_generic_parse_response_merges_split_choice_text_and_tool_calls() -> Non
                                 "id": "toolu_1",
                                 "type": "function",
                                 "function": {
-                                    "name": "explore_workspace",
+                                    "name": "read_image",
                                     "arguments": (
                                         '{"pattern":"src/app.py","target":"read"}'
                                     ),
@@ -615,7 +615,7 @@ def test_generic_parse_response_merges_split_choice_text_and_tool_calls() -> Non
     assert result.function_calls == [
         ToolCall(
             call_id="toolu_1",
-            name="explore_workspace",
+            name="read_image",
             arguments={"pattern": "src/app.py", "target": "read"},
         )
     ]
@@ -628,7 +628,7 @@ def test_generic_parse_response_merges_split_choice_text_and_tool_calls() -> Non
                 "id": "toolu_1",
                 "type": "function",
                 "function": {
-                    "name": "explore_workspace",
+                    "name": "read_image",
                     "arguments": '{"pattern":"src/app.py","target":"read"}',
                 },
             }
@@ -938,7 +938,7 @@ def test_generic_execute_tool_calls_returns_chat_completion_tool_messages(
             ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
             ToolCall(
                 call_id="call_2",
-                name="explore_workspace",
+                name="read_image",
                 arguments={"pattern": "README.md", "target": "read"},
             ),
         ],
@@ -1009,7 +1009,7 @@ def test_generic_execute_tool_calls_returns_chat_completion_tool_messages(
             "arguments": {"command": "pwd"},
         },
         {
-            "name": "explore_workspace",
+            "name": "read_image",
             "success": False,
             "call_id": "call_2",
             "arguments": {"pattern": "README.md", "target": "read"},
@@ -1030,7 +1030,7 @@ def test_generic_execute_tool_calls_serializes_image_attachments(
         function_calls=[
             ToolCall(
                 call_id="call_image",
-                name="explore_workspace",
+                name="read_image",
                 arguments={"pattern": "chart", "target": "read"},
             )
         ],

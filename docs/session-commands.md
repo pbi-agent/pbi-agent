@@ -7,7 +7,7 @@ description: 'Interactive web session commands, composer shortcuts, file mention
 
 Session commands are input shortcuts handled by the interactive browser session. Some run locally without a model request, while others transform the next user turn before it is sent to the model.
 
-This page is separate from the [CLI Reference](/cli) and the [Built-in Tools](/tools): CLI commands are terminal entry points such as `pbi-agent run`, and built-in tools are model-callable functions such as `shell` and `explore_workspace`.
+This page is separate from the [CLI Reference](/cli) and the [Built-in Tools](/tools): CLI commands are terminal entry points such as `pbi-agent run`, and built-in tools are model-callable functions such as `shell` and `read_image`.
 
 ## Quick reference
 
@@ -139,7 +139,7 @@ Each command file requires YAML frontmatter with the same `name` and `descriptio
 name: fastapi
 description: FastAPI best practices and conventions. Use when working with FastAPI APIs and Pydantic models for them.
 model_profile_id: analysis
-allowed_tools: read,web,shell
+allowed_tools: web,shell
 skills: fastapi
 sub_agents: api-reviewer
 ---
@@ -167,11 +167,11 @@ Use optional `model_profile_id` to force a specific saved model profile whenever
 
 Use optional `allowed_tools` to replace the selected profile's built-in tool
 visibility for that command turn. It accepts the same comma-separated groups as
-model profiles and `pbi-agent run`: `read`, `write`, `web`, `sub-agent`, and
+model profiles and `pbi-agent run`: `read-image`, `write`, `web`, `sub-agent`, and
 `shell`, plus command-only `ask-user`. For example,
-`allowed_tools: read,shell` permits workspace inspection and shell commands but
+`allowed_tools: shell` permits workspace inspection and shell commands but
 disables file edits, web access, and sub-agent delegation for that command
-turn. Use `allowed_tools: read,ask-user` when a command may ask browser users
+turn. Use `allowed_tools: shell,ask-user` when a command may ask browser users
 clarifying questions.
 
 Use optional `skills` to scope the command turn to a comma-separated list of

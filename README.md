@@ -27,7 +27,7 @@ Modern LLMs are more intuitive and capable, so a coding agent does not need to o
    The default prompt is intentionally small: define the goal, active tools, and hard workspace rules, then let the model reason from the task. Users can still add `INSTRUCTIONS.md`, `AGENTS.md`, skills, commands, and sub-agents when a project needs more guidance.
 
 2. **Bounded workspace output**
-   Shell output is returned raw with size guardrails, while workspace search, read, and list operations use `codetool-explore` to return compact, model-ready file evidence. The agent avoids dumping unbounded terminal logs or whole files when snippets are enough.
+   Shell output is returned raw with size guardrails and stream compression; the agent reads and searches files through bounded shell commands (`rg`, `sed -n`, `head`) and attaches images with `read_image`. It avoids dumping unbounded terminal logs or whole files when snippets are enough.
 
 3. **Tool history omitted by default**
    When resuming a session, `pbi-agent` keeps the conversation useful without replaying every prior tool call and result by default. This supports isolated flows such as planning, review, or fresh task runs. If previous tool traces matter, enable them with `--include-tool-history` or the web UI tool-history toggle.

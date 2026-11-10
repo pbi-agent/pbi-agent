@@ -3,7 +3,6 @@ import {
   CheckCircle2Icon,
   FileCode2Icon,
   FileImageIcon,
-  FileTextIcon,
   GlobeIcon,
   SearchIcon,
   SquareIcon,
@@ -78,9 +77,6 @@ export function ToolResult({
   }
   if (toolName === "read_web_url") {
     return <ReadWebUrlToolResult metadata={metadata} text={text} running={running} />;
-  }
-  if (toolName === "explore_workspace") {
-    return <ExploreWorkspaceToolResult metadata={metadata} text={text} running={running} />;
   }
   if (toolName === "web_search") {
     return <WebSearchToolResult metadata={metadata} text={text} running={running} />;
@@ -218,78 +214,6 @@ function ReadWebUrlToolResult({ metadata, text, running }: ToolResultProps) {
   );
 }
 
-function ExploreWorkspaceToolResult({ metadata, text, running }: ToolResultProps) {
-  const args = objectValue(metadata?.arguments);
-  const result = objectValue(metadata?.result);
-  const pattern = stringValue(args?.pattern) ?? "Explore";
-  const root = rootLabel(args?.root);
-  const regex = args?.regex !== false;
-  const target = stringValue(args?.target) ?? "content";
-  const pathScope = stringValue(args?.path_scope) ?? "path";
-  const mode = stringValue(args?.mode) ?? "files";
-  const contextLines = numberValue(args?.context_lines);
-  const limit = numberValue(args?.limit);
-  const cursor = cursorValue(args?.cursor);
-  const glob = stringListValue(args?.glob);
-  const exclude = stringListValue(args?.exclude);
-  const rawOutput = stringValue(metadata?.result) ?? "";
-  const error = errorText(metadata?.error ?? result?.error);
-  const isImageRead = target === "read" && stringValue(result?.mime_type);
-  const title = stringValue(result?.path) ?? pattern;
-  const description = [
-    target === "read" ? (isImageRead ? "Inspect image" : "Read file") : target === "list" ? "List" : target === "path" ? "Path search" : "Content search",
-    target === "content" || target === "path" ? (regex ? "regex" : "literal") : null,
-    `root ${root}`,
-  ].filter(Boolean).join(" · ");
-  const options = [
-    target === "content" || target === "path" ? `mode ${mode}` : null,
-    target === "path" ? `scope ${pathScope}` : null,
-    contextLines !== undefined && contextLines > 0 ? `context ${contextLines}` : null,
-    limit !== undefined ? `limit ${limit}` : null,
-    cursor !== undefined ? `cursor ${cursor}` : null,
-    ...glob.map((value) => `glob ${value}`),
-    ...exclude.map((value) => `exclude ${value}`),
-  ].filter((value): value is string => Boolean(value));
-
-  return (
-    <ToolCard
-      metadata={metadata}
-      running={running}
-      icon={isImageRead ? <FileImageIcon /> : target === "read" ? <FileTextIcon /> : <SearchIcon />}
-      title={title}
-      description={description}
-      variant="explore-workspace"
-    >
-      {error ? <ToolNotice tone="error" label="Error" value={error} /> : null}
-      {isImageRead ? (
-        <div className={KV_CLASSES}>
-          <span>Attachment</span>
-          <strong>{metadata?.success === false ? "Failed" : "Ready for model context"}</strong>
-          {stringValue(result?.mime_type) ? <span>{stringValue(result?.mime_type)}</span> : null}
-          {numberValue(result?.byte_count) ? <span>{formatBytes(numberValue(result?.byte_count))}</span> : null}
-        </div>
-      ) : null}
-      {options.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2" aria-label="Explore options">
-          {options.map((option) => (
-            <Badge key={option} variant="outline" size="meta">{option}</Badge>
-          ))}
-        </div>
-      ) : null}
-      {rawOutput && !isImageRead ? (
-        target === "read" ? (
-          <CodeOutputBlock label="Content" value={rawOutput} path={pattern} />
-        ) : (
-          <OutputBlock label={target === "list" ? "Listing" : "Raw output"} value={rawOutput} />
-        )
-      ) : !running && !error && !text ? (
-        <ToolNotice label="No output" value="The operation returned no text." />
-      ) : null}
-      {!rawOutput && text ? <OutputBlock label="Summary" value={text} /> : null}
-    </ToolCard>
-  );
-}
-
 function WebSearchToolResult({ metadata, text, running }: ToolResultProps) {
   const result = objectValue(metadata?.result);
   const args = objectValue(metadata?.arguments);
@@ -341,7 +265,7 @@ function GenericToolResult({ metadata, text, running }: ToolResultProps) {
   );
 }
 
-function ToolCard({ metadata, running, icon, title, description, statusLabel, headerAction, variant, children }: {
+function ToolCard({ metadata, running, icon, title, description, statusLabel, headerAction, children }: {
   metadata?: ToolCallMetadata;
   running?: boolean;
   icon: ReactNode;
@@ -349,7 +273,6 @@ function ToolCard({ metadata, running, icon, title, description, statusLabel, he
   description?: string;
   statusLabel?: string;
   headerAction?: ReactNode;
-  variant?: "explore-workspace";
   children: ReactNode;
 }) {
   const failed = metadata?.success === false || metadata?.status === "failed";
@@ -357,7 +280,7 @@ function ToolCard({ metadata, running, icon, title, description, statusLabel, he
   return (
     <Card
       size="sm"
-      data-tool-result-card={variant ?? "default"}
+      data-tool-result-card="default"
       data-status={failed ? "failed" : running ? "running" : "done"}
     >
       <CardHeader className="items-center">
@@ -509,27 +432,6 @@ function stringValue(value: unknown): string | undefined {
 
 function numberValue(value: unknown): number | undefined {
   return typeof value === "number" ? value : undefined;
-}
-
-function cursorValue(value: unknown): number | string | undefined {
-  if (typeof value === "number") return value;
-  if (typeof value === "string" && value.trim().length > 0) return value.trim();
-  return undefined;
-}
-
-function stringListValue(value: unknown): string[] {
-  if (typeof value === "string" && value.length > 0) return [value];
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string" && item.length > 0);
-}
-
-function rootLabel(value: unknown): string {
-  if (typeof value === "string" && value.length > 0) return value;
-  if (Array.isArray(value)) {
-    const items = value.filter((item): item is string => typeof item === "string" && item.length > 0);
-    if (items.length > 0) return items.join(", ");
-  }
-  return ".";
 }
 
 function timeoutValue(value: unknown): number | string | undefined {

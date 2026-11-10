@@ -411,7 +411,7 @@ def test_get_system_prompt_with_project_skills(tmp_path, monkeypatch):
     assert "Treat `$<skill-name>` in user input as an explicit request" in prompt
     assert "strip the `$` and match `<skill-name>`" in prompt
     assert (
-        'load its SKILL.md with `explore_workspace` target="read" using the listed location'
+        "load its SKILL.md with `shell` (e.g. `cat <location>`) using the listed location"
         in prompt
     )
 
@@ -755,12 +755,12 @@ def test_get_system_prompt_filters_tool_rules_by_active_availability(
     settings = Settings(
         api_key="test-key",
         provider="openai",
-        allowed_tools=("read",),
+        allowed_tools=("read-image",),
     )
 
     prompt = get_system_prompt(settings=settings, excluded_tools={"ask_user"})
 
-    assert "Use `explore_workspace`" in prompt
+    assert "Use `read_image`" in prompt
     assert "Use `shell`" not in prompt
     assert "Use `apply_patch`" not in prompt
     assert "Use `write_file`" not in prompt
@@ -785,7 +785,7 @@ def test_get_system_prompt_omits_sub_agent_catalog_when_tool_disabled(
     settings = Settings(
         api_key="test-key",
         provider="openai",
-        allowed_tools=("read",),
+        allowed_tools=("read-image",),
     )
 
     prompt = get_system_prompt(settings=settings, excluded_tools={"ask_user"})
@@ -811,7 +811,7 @@ def test_get_system_prompt_mentions_web_search_only_for_web_allowed_tool(
         settings=Settings(
             api_key="test-key",
             provider="openai",
-            allowed_tools=("read",),
+            allowed_tools=("read-image",),
         )
     )
 
@@ -854,7 +854,7 @@ def test_get_system_prompt_uses_instructions_md(tmp_path, monkeypatch):
     prompt = get_system_prompt()
     assert prompt.startswith("You are a code review bot.")
     assert "<tool_usage_rules>" in prompt
-    assert "Use `explore_workspace`" in prompt
+    assert "Use `read_image`" in prompt
     assert "Power BI" not in prompt
 
 
@@ -871,12 +871,12 @@ def test_get_system_prompt_replaces_instructions_md_tool_rules(tmp_path, monkeyp
         settings=Settings(
             api_key="test-key",
             provider="openai",
-            allowed_tools=("read",),
+            allowed_tools=("read-image",),
         )
     )
 
     assert prompt.startswith("Custom.")
-    assert "Use `explore_workspace`" in prompt
+    assert "Use `read_image`" in prompt
     assert "Use `shell` for everything" not in prompt
 
 
@@ -976,3 +976,33 @@ def test_system_prompts_cap_injected_memory(tmp_path, builder):
     assert "- fact 199" in prompt
     assert "- fact 200" not in prompt
     assert "[MEMORY.md truncated" in prompt
+
+
+def test_shell_only_prompt_tells_model_to_read_files_with_shell(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    settings = Settings(api_key="test-key", provider="openai", allowed_tools=("shell",))
+
+    prompt = get_system_prompt(settings=settings, excluded_tools={"ask_user"})
+
+    assert "Use `shell` to read and search files." in prompt
+    assert "prefer file edit tools" not in prompt
+
+
+def test_scoped_skills_without_shell_warn_and_are_omitted(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.chdir(tmp_path)
+    _write_skill(tmp_path, "fastapi", "Build FastAPI routes.")
+    settings = Settings(
+        api_key="test-key", provider="openai", allowed_tools=("read-image",)
+    )
+
+    prompt = get_system_prompt(
+        settings=settings,
+        excluded_tools={"ask_user"},
+        cwd=tmp_path,
+        visible_skill_names=("fastapi",),
+    )
+
+    assert "<available_skills>" not in prompt
+    assert "skills need `shell`" in capsys.readouterr().err

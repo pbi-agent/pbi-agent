@@ -47,9 +47,9 @@ description: Use this skill when the task matches this repository-specific workf
 
 At runtime, discovered skills are appended to the active system prompt as an
 `<available_skills>` catalog with the absolute `SKILL.md` path. The model is
-expected to load a relevant skill itself with `explore_workspace` using
-`target: "read"` before proceeding, then use `explore_workspace` or bounded
-shell commands to inspect referenced project-local resources as needed.
+expected to load a relevant skill itself with `shell` (for example
+`cat <location>`) before proceeding, then use bounded shell commands to inspect
+referenced project-local resources as needed.
 
 Project commands and sub-agents can restrict this catalog with a `skills`
 frontmatter field:

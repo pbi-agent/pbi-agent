@@ -56,7 +56,7 @@ Each sub-agent file must include YAML frontmatter with at least `name` and
 name: reviewer
 description: Review implementation and test coverage.
 model_profile_id: reviewer
-allowed_tools: read,shell
+allowed_tools: read-image,shell
 skills: fastapi,shadcn
 commands: review
 sub_agents: confidence-checker,fixer
@@ -113,7 +113,7 @@ profiles, `pbi-agent run`, and project commands:
 
 | Tool group | Built-ins |
 | --- | --- |
-| `read` | `explore_workspace` |
+| `read-image` | `read_image` |
 | `write` | `apply_patch`, `replace_in_file`, `write_file` |
 | `web` | `read_web_url`, `web_search` |
 | `sub-agent` | `sub_agent` |
@@ -132,7 +132,7 @@ specialists such as read-only reviewers:
 ---
 name: readonly-reviewer
 description: Review changes without editing files or running shell commands.
-allowed_tools: read
+allowed_tools: read-image
 ---
 ```
 
@@ -153,7 +153,7 @@ Sub-agent frontmatter can compose other project components:
 name: reviewer
 description: Review changes against the plan.
 model_profile_id: reviewer
-allowed_tools: read
+allowed_tools: read-image
 commands: review
 ---
 ```
@@ -168,8 +168,8 @@ remain the runtime policy.
 `skills` works like command skill scoping. When omitted, the child sees the
 normal enabled project skill catalog. When present, only the listed skills are
 advertised. Missing or disabled skills are soft references: `pbi-agent` prints a
-CLI warning and omits them. Skill loading requires the child to have the `read`
-tool group so it can load `SKILL.md` with `explore_workspace`.
+CLI warning and omits them. Skill loading requires the child to have the `shell`
+tool group so it can load `SKILL.md`.
 
 `sub_agents` enables controlled nested delegation. When omitted, nested
 `sub_agent` calls are disabled inside the child. When present, only the listed

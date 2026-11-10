@@ -41,7 +41,7 @@ describe("session timeline projection", () => {
       {
         kind: "tool_group",
         itemId: "sub-tool-1",
-        label: "explore_workspace",
+        label: "read_image",
         status: "running",
         items: [{ text: "reading" }],
         subAgentId: "sub-1",
@@ -132,9 +132,9 @@ describe("session timeline projection", () => {
       {
         kind: "tool_group",
         itemId: "run-1:subagent-25-tool-group-2",
-        label: "explore_workspace",
+        label: "read_image",
         status: "completed",
-        items: [{ text: "explore_workspace" }],
+        items: [{ text: "read_image" }],
         subAgentId: "run-1:subagent-25",
       },
       {
@@ -167,8 +167,8 @@ describe("session timeline projection", () => {
       {
         kind: "tool_group",
         itemId: "run-1:subagent-25-tool-group-2",
-        label: "explore_workspace",
-        items: [{ text: "explore_workspace" }],
+        label: "read_image",
+        items: [{ text: "read_image" }],
         subAgentId: "run-1:subagent-25",
       },
     ]);

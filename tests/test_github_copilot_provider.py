@@ -131,7 +131,7 @@ def test_github_copilot_provider_includes_web_tools_with_web_group() -> None:
     }
     assert "read_web_url" in tool_names
     assert "web_search" in tool_names
-    assert "explore_workspace" not in tool_names
+    assert "read_image" not in tool_names
 
 
 def test_github_copilot_provider_forwards_runtime_settings_to_delegate() -> None:
@@ -145,7 +145,7 @@ def test_github_copilot_provider_forwards_runtime_settings_to_delegate() -> None
         if "name" in tool  # type: ignore[attr-defined]
     }
     assert "shell" in tool_names
-    assert "explore_workspace" not in tool_names
+    assert "read_image" not in tool_names
 
 
 def test_github_copilot_chat_provider_advertises_simple_edit_tools_only() -> None:
@@ -319,13 +319,13 @@ def test_github_copilot_tool_followup_replays_history_without_previous_response_
 data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-5.4","created_at":1}}
 
 event: response.output_item.added
-data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"explore_workspace","arguments":""}}
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"read_image","arguments":""}}
 
 event: response.function_call_arguments.delta
 data: {"type":"response.function_call_arguments.delta","output_index":0,"item_id":"fc_1","delta":"{\\"pattern\\":\\"LICENSE\\",\\"target\\":\\"path\\"}"}
 
 event: response.output_item.done
-data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"explore_workspace","arguments":"{\\"pattern\\":\\"LICENSE\\",\\"target\\":\\"path\\"}"}}
+data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"read_image","arguments":"{\\"pattern\\":\\"LICENSE\\",\\"target\\":\\"path\\"}"}}
 
 event: response.completed
 data: {"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.4","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":1,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":6}}}
@@ -519,13 +519,13 @@ event: response.output_item.done
 data: {"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","id":"rs_1","encrypted_content":"opaque"}}
 
 event: response.output_item.added
-data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"explore_workspace","arguments":""}}
+data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"read_image","arguments":""}}
 
 event: response.function_call_arguments.delta
 data: {"type":"response.function_call_arguments.delta","item_id":"enc_fc_1","output_index":1,"delta":"{\\"pattern\\":\\"README.md\\",\\"target\\":\\"read\\"}"}
 
 event: response.output_item.done
-data: {"type":"response.output_item.done","output_index":1,"item":{"type":"function_call","id":"fc_2","call_id":"call_1","name":"explore_workspace","arguments":"{\\"pattern\\":\\"README.md\\",\\"target\\":\\"read\\"}","status":"completed"}}
+data: {"type":"response.output_item.done","output_index":1,"item":{"type":"function_call","id":"fc_2","call_id":"call_1","name":"read_image","arguments":"{\\"pattern\\":\\"README.md\\",\\"target\\":\\"read\\"}","status":"completed"}}
 
 event: response.completed
 data: {"type":"response.completed","response":{"id":"resp_2","model":"gpt-5.4","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":1},"total_tokens":8}}}
@@ -550,7 +550,7 @@ data: {"type":"response.completed","response":{"id":"resp_2","model":"gpt-5.4","
     assert response.reasoning_summary == "Thinking"
     assert len(response.function_calls) == 1
     assert response.function_calls[0].call_id == "call_1"
-    assert response.function_calls[0].name == "explore_workspace"
+    assert response.function_calls[0].name == "read_image"
     assert response.function_calls[0].arguments == {
         "pattern": "README.md",
         "target": "read",

@@ -28,7 +28,7 @@ def test_registry_exposes_expected_built_in_tools() -> None:
         "apply_patch",
         "replace_in_file",
         "write_file",
-        "explore_workspace",
+        "read_image",
         "read_web_url",
         "web_search",
         "ask_user",
@@ -90,7 +90,7 @@ def test_effective_excluded_tool_names_non_openai_uses_simple_editing() -> None:
 
 def test_effective_excluded_tool_names_disables_web_tools_without_web_group() -> None:
     excluded = effective_excluded_tool_names(
-        Settings(provider="openai", allowed_tools=("read",))
+        Settings(provider="openai", allowed_tools=("read-image",))
     )
 
     assert "read_web_url" in excluded
@@ -101,11 +101,11 @@ def test_effective_excluded_tool_names_honors_allowed_tools() -> None:
     excluded = effective_excluded_tool_names(
         Settings(
             provider="openai",
-            allowed_tools=("read",),
+            allowed_tools=("read-image",),
         )
     )
 
-    assert "explore_workspace" not in excluded
+    assert "read_image" not in excluded
     assert "shell" in excluded
     assert "read_web_url" in excluded
     assert "web_search" in excluded
@@ -118,7 +118,7 @@ def test_effective_excluded_tool_names_keeps_ask_user_disabled_when_not_allowed(
         Settings(provider="openai", allowed_tools=())
     )
     assert "ask_user" in effective_excluded_tool_names(
-        Settings(provider="openai", allowed_tools=("read",))
+        Settings(provider="openai", allowed_tools=("read-image",))
     )
 
 
@@ -128,7 +128,7 @@ def test_effective_excluded_tool_names_allows_command_enabled_ask_user() -> None
     )
 
     assert "ask_user" not in excluded
-    assert "explore_workspace" in excluded
+    assert "read_image" in excluded
     assert "shell" in excluded
 
 
@@ -141,7 +141,7 @@ def test_web_allowed_tool_enables_fetch_and_search_tools() -> None:
     excluded = effective_excluded_tool_names(settings)
     assert "read_web_url" not in excluded
     assert "web_search" not in excluded
-    assert "explore_workspace" in excluded
+    assert "read_image" in excluded
 
 
 def test_apply_patch_uses_codex_freeform_spec() -> None:

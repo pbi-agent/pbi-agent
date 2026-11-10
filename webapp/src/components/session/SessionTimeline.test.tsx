@@ -353,7 +353,7 @@ describe("SessionTimeline", () => {
           {
             kind: "tool_group",
             itemId: "tool-b",
-            label: "explore_workspace",
+            label: "read_image",
             status: "completed",
             subAgentId: "subagent-b",
             items: [{ text: "Designer inspected layout" }],
@@ -452,12 +452,12 @@ describe("SessionTimeline", () => {
           {
             kind: "tool_group",
             itemId: "tool-2",
-            label: "explore_workspace",
+            label: "read_image",
             status: "completed",
             items: [
               {
                 text: "read file",
-                metadata: { tool_name: "explore_workspace", status: "completed" },
+                metadata: { tool_name: "read_image", status: "completed" },
               },
             ],
           },
@@ -487,7 +487,7 @@ describe("SessionTimeline", () => {
 
     const firstWork = screen.getByRole("button", { name: "Working 1 shell" });
     const notice = screen.getByText("Recovered after retry.");
-    const secondWork = screen.getByRole("button", { name: "Working 1 search" });
+    const secondWork = screen.getByRole("button", { name: "Working 1 read" });
     const finalAnswer = screen.getByText("Final answer");
 
     expect(firstWork.compareDocumentPosition(notice)).toBe(
@@ -534,12 +534,12 @@ describe("SessionTimeline", () => {
           {
             kind: "tool_group",
             itemId: "tool-2",
-            label: "explore_workspace",
+            label: "read_image",
             status: "completed",
             items: [
               {
                 text: "read file",
-                metadata: { tool_name: "explore_workspace", status: "completed" },
+                metadata: { tool_name: "read_image", status: "completed" },
               },
             ],
           },
@@ -567,7 +567,7 @@ describe("SessionTimeline", () => {
     const userMessage = screen.getByText("Run the task");
     const firstWork = screen.getByRole("button", { name: "Working 1 shell" });
     const notice = screen.getByText("Recovered after retry.");
-    const secondWork = screen.getByRole("button", { name: "Working 1 search" });
+    const secondWork = screen.getByRole("button", { name: "Working 1 read" });
 
     expect(userMessage.compareDocumentPosition(firstWork)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
@@ -716,15 +716,15 @@ describe("SessionTimeline", () => {
       {
         kind: "tool_group",
         itemId: "tool-b",
-        label: "explore_workspace",
+        label: "read_image",
         status: "completed",
         subAgentId: "subagent-b",
         items: [
           {
             text: "Designer inspected layout",
             metadata: {
-              tool_name: "explore_workspace",
-              arguments: { pattern: "layout.md", target: "read" },
+              tool_name: "read_image",
+              arguments: { path: "layout.md" },
             },
           },
         ],
@@ -876,13 +876,13 @@ describe("SessionTimeline", () => {
           {
             kind: "tool_group",
             itemId: "subagent-1-tool-2",
-            label: "explore_workspace",
+            label: "read_image",
             status: "running",
             subAgentId: "subagent-1",
             items: [
               {
                 text: "read file",
-                metadata: { tool_name: "explore_workspace", status: "running" },
+                metadata: { tool_name: "read_image", status: "running" },
               },
             ],
           },
@@ -953,16 +953,16 @@ describe("SessionTimeline", () => {
       itemId: "subagent-1-tool-2",
       createdAt: "2026-05-14T10:00:05.000Z",
       updatedAt: "2026-05-14T10:00:07.000Z",
-      label: "explore_workspace",
+      label: "read_image",
       status: "running",
       subAgentId: "subagent-1",
       items: [
         {
           text: "read file",
           metadata: {
-            tool_name: "explore_workspace",
+            tool_name: "read_image",
             status: "running",
-            arguments: { pattern: "README.md", target: "read" },
+            arguments: { path: "README.md" },
           },
         },
       ],
@@ -974,9 +974,9 @@ describe("SessionTimeline", () => {
         {
           text: "read file",
           metadata: {
-            tool_name: "explore_workspace",
+            tool_name: "read_image",
             status: "completed",
-            arguments: { pattern: "README.md", target: "read" },
+            arguments: { path: "README.md" },
           },
         },
       ],
@@ -1130,13 +1130,13 @@ describe("SessionTimeline", () => {
           {
             kind: "tool_group",
             itemId: "subagent-1-tool-2",
-            label: "explore_workspace",
+            label: "read_image",
             status: "running",
             subAgentId: "subagent-1",
             items: [
               {
                 text: "read file",
-                metadata: { tool_name: "explore_workspace", status: "running" },
+                metadata: { tool_name: "read_image", status: "running" },
               },
             ],
           },
@@ -1176,7 +1176,7 @@ describe("SessionTimeline", () => {
             items: [
               {
                 text: "file contents",
-                metadata: { tool_name: "explore_workspace", arguments: { pattern: "README.md", target: "read" }, result: "file contents" },
+                metadata: { tool_name: "read_image", arguments: { path: "README.md" }, result: "file contents" },
               },
               {
                 text: "command output",
@@ -1202,56 +1202,17 @@ describe("SessionTimeline", () => {
     openWorking(0, false);
     expect(screen.getByRole("button", { name: /^Thinking$/i })).toBeInTheDocument();
     expect(screen.queryByText(/thinking block/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Read.*README.md/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Inspect image.*README.md/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Command.*bun run typecheck/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Activity/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /In motion/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /explore_workspace/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /read_image/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /shell.*bun run typecheck/i })).not.toBeInTheDocument();
     expect(screen.queryByText("file contents")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Read.*README.md/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Inspect image.*README.md/i }));
     expect(screen.getByText("file contents")).toBeInTheDocument();
     expect(screen.queryByText("ok")).not.toBeInTheDocument();
-  });
-
-  it("shows explore_workspace rows as Explore with the pattern in Working", () => {
-    render(
-      <SessionTimeline
-        items={[
-          {
-            kind: "tool_group",
-            itemId: "tools-1",
-            label: "Explore workspace",
-            status: "completed",
-            items: [
-              {
-                text: "explore_workspace DEFAULT_LIMIT",
-                metadata: {
-                  tool_name: "explore_workspace",
-                  arguments: { pattern: "DEFAULT_LIMIT" },
-                  result: "README.md:1:DEFAULT_LIMIT",
-                },
-              },
-            ],
-          },
-        ]}
-        subAgents={{}}
-        connection="connected"
-        waitMessage={null}
-        processing={null}
-        itemsVersion={1}
-      />,
-    );
-
-    expect(screen.getByRole("button", { name: "Working 1 search" })).toBeInTheDocument();
-
-    openWorking(0, false);
-
-    const searchButton = screen.getByRole("button", { name: /Search.*DEFAULT_LIMIT/ });
-    expect(searchButton).toHaveTextContent("Search");
-    expect(searchButton).toHaveTextContent("DEFAULT_LIMIT");
-    expect(screen.queryByText("explore_workspace")).not.toBeInTheDocument();
   });
 
   it("shows long Working tool lists in a five-row scroll area and centers opened tools", async () => {
@@ -1272,8 +1233,8 @@ describe("SessionTimeline", () => {
             items: Array.from({ length: 7 }, (_, index) => ({
               text: `file ${index + 1}`,
               metadata: {
-                tool_name: "explore_workspace",
-                arguments: { pattern: `file-${index + 1}.txt`, target: "read" },
+                tool_name: "read_image",
+                arguments: { path: `file-${index + 1}.txt` },
                 result: `file ${index + 1}`,
               },
             })),
@@ -1310,7 +1271,7 @@ describe("SessionTimeline", () => {
       toJSON: () => ({}),
     });
 
-    const sixthToolButton = screen.getByRole("button", { name: /Read.*file-6\.txt/i });
+    const sixthToolButton = screen.getByRole("button", { name: /Inspect image.*file-6\.txt/i });
     const sixthToolItem = sixthToolButton.closest<HTMLElement>("[data-working-item]");
     expect(sixthToolItem).not.toBeNull();
     sixthToolItem!.getBoundingClientRect = () => ({
@@ -1352,8 +1313,8 @@ describe("SessionTimeline", () => {
             items: Array.from({ length: 7 }, (_, index) => ({
               text: `file ${index + 1}`,
               metadata: {
-                tool_name: "explore_workspace",
-                arguments: { pattern: `file-${index + 1}.txt`, target: "read" },
+                tool_name: "read_image",
+                arguments: { path: `file-${index + 1}.txt` },
                 result: `file ${index + 1}`,
               },
             })),
@@ -1374,7 +1335,7 @@ describe("SessionTimeline", () => {
     Object.defineProperty(scrollArea, "clientHeight", { configurable: true, value: 160 });
     Object.defineProperty(scrollArea, "scrollHeight", { configurable: true, value: 700 });
 
-    const sixthToolButton = screen.getByRole("button", { name: /Read.*file-6\.txt/i });
+    const sixthToolButton = screen.getByRole("button", { name: /Inspect image.*file-6\.txt/i });
     const sixthToolItem = sixthToolButton.closest<HTMLElement>("[data-working-item]");
     expect(sixthToolItem).not.toBeNull();
     Object.defineProperty(sixthToolItem!, "scrollHeight", { configurable: true, value: 320 });
@@ -1399,8 +1360,8 @@ describe("SessionTimeline", () => {
             items: Array.from({ length: 7 }, (_, index) => ({
               text: `file ${index + 1}`,
               metadata: {
-                tool_name: "explore_workspace",
-                arguments: { pattern: `file-${index + 1}.txt`, target: "read" },
+                tool_name: "read_image",
+                arguments: { path: `file-${index + 1}.txt` },
                 result: `file ${index + 1}`,
               },
             })),
@@ -1440,18 +1401,18 @@ describe("SessionTimeline", () => {
             status: "completed",
             items: [
               {
-                text: "explore_workspace alpha.txt",
+                text: "custom_lookup alpha.txt",
                 metadata: {
-                  tool_name: "explore_workspace",
-                  arguments: { pattern: "alpha.txt", target: "read" },
+                  tool_name: "custom_lookup",
+                  arguments: { path: "alpha.txt" },
                   result: "ALPHA_CONTENT",
                 },
               },
               {
-                text: "explore_workspace beta.txt",
+                text: "custom_lookup beta.txt",
                 metadata: {
-                  tool_name: "explore_workspace",
-                  arguments: { pattern: "beta.txt", target: "read" },
+                  tool_name: "custom_lookup",
+                  arguments: { path: "beta.txt" },
                   result: "BETA_CONTENT",
                 },
               },
@@ -1968,9 +1929,9 @@ describe("SessionTimeline", () => {
             itemId: "tool-2",
             createdAt: "2026-05-14T10:00:06.000Z",
             updatedAt: "2026-05-14T10:00:08.000Z",
-            label: "explore_workspace",
+            label: "read_image",
             status: "completed",
-            items: [{ text: "second output", metadata: { tool_name: "explore_workspace", arguments: { pattern: "notes.md", target: "read" } } }],
+            items: [{ text: "second output", metadata: { tool_name: "read_image", arguments: { path: "notes.md" } } }],
           },
         ]}
         subAgents={{}}
@@ -2024,9 +1985,9 @@ describe("SessionTimeline", () => {
           {
             kind: "tool_group",
             itemId: "tool-2",
-            label: "explore_workspace",
+            label: "read_image",
             status: "completed",
-            items: [{ text: "second output", metadata: { tool_name: "explore_workspace", arguments: { pattern: "notes.md", target: "read" } } }],
+            items: [{ text: "second output", metadata: { tool_name: "read_image", arguments: { path: "notes.md" } } }],
           },
           {
             kind: "message",
@@ -2095,9 +2056,9 @@ describe("SessionTimeline", () => {
           {
             kind: "tool_group",
             itemId: "tool-2",
-            label: "explore_workspace",
+            label: "read_image",
             status: "completed",
-            items: [{ text: "second output", metadata: { tool_name: "explore_workspace", arguments: { target: "read" } } }],
+            items: [{ text: "second output", metadata: { tool_name: "read_image", arguments: {} } }],
           },
           {
             kind: "message",
@@ -2246,10 +2207,10 @@ describe("SessionTimeline", () => {
         itemId: "subagent-a-tool-1",
         createdAt: "2026-05-14T10:00:01.000Z",
         updatedAt: "2026-05-14T10:00:04.000Z",
-        label: "explore_workspace",
+        label: "read_image",
         status: "completed",
         subAgentId: "subagent-a",
-        items: [{ text: "Read notes", metadata: { tool_name: "explore_workspace", arguments: { pattern: "notes.md", target: "read" } } }],
+        items: [{ text: "Read notes", metadata: { tool_name: "read_image", arguments: { path: "notes.md" } } }],
       },
     ];
 
@@ -2291,10 +2252,10 @@ describe("SessionTimeline", () => {
         itemId: "subagent-a-tool-1",
         createdAt: "2026-05-14T10:00:02.000Z",
         updatedAt: "2026-05-14T10:00:04.000Z",
-        label: "explore_workspace",
+        label: "read_image",
         status: "completed",
         subAgentId: "subagent-a",
-        items: [{ text: "Read notes", metadata: { tool_name: "explore_workspace", arguments: { pattern: "notes.md", target: "read" } } }],
+        items: [{ text: "Read notes", metadata: { tool_name: "read_image", arguments: { path: "notes.md" } } }],
       },
     ];
     const projection = projectMainTimelineItems(subAgentItems);
@@ -2337,9 +2298,9 @@ describe("SessionTimeline", () => {
             itemId: "tool-1",
             createdAt: "2026-05-14T10:00:01.000Z",
             updatedAt: "2026-05-14T10:00:04.000Z",
-            label: "explore_workspace",
+            label: "read_image",
             status: "completed",
-            items: [{ text: "Read notes", metadata: { tool_name: "explore_workspace", arguments: { pattern: "notes.md", target: "read" } } }],
+            items: [{ text: "Read notes", metadata: { tool_name: "read_image", arguments: { path: "notes.md" } } }],
           },
           {
             kind: "message",
@@ -2415,10 +2376,10 @@ describe("SessionTimeline", () => {
             label: "Tool calls",
             status: "completed",
             items: [
-              { text: "explore_workspace README.md done", metadata: { tool_name: "explore_workspace", arguments: { pattern: "README.md", target: "read" } } },
+              { text: "read_image README.md done", metadata: { tool_name: "read_image", arguments: { path: "README.md" } } },
               { text: "Fetched https://example.com", classes: "tool-call-read-web-url" },
               { text: "web_search pbi-agent done", metadata: { tool_name: "web_search" } },
-              { text: "explore_workspace UserService done", classes: "tool-call-explore-workspace" },
+              { text: "web_search UserService done", classes: "tool-call-web-search" },
               { text: "shell bun run typecheck done", metadata: { tool_name: "shell" } },
               { text: "apply_patch done", metadata: { tool_name: "apply_patch" } },
               { text: "replace_in_file done", metadata: { tool_name: "replace_in_file" } },
@@ -2456,7 +2417,7 @@ describe("SessionTimeline", () => {
           {
             kind: "tool_group",
             itemId: "tool-1",
-            label: "explore_workspace",
+            label: "read_image",
             status: "completed",
             subAgentId: "subagent-researcher",
             items: [{ text: "Read notes" }],
@@ -2491,7 +2452,7 @@ describe("SessionTimeline", () => {
         items: [
           {
             text: "first read",
-            metadata: { tool_name: "explore_workspace", arguments: { pattern: "README.md", target: "read" } },
+            metadata: { tool_name: "read_image", arguments: { path: "README.md" } },
           },
         ],
       },
@@ -2525,7 +2486,7 @@ describe("SessionTimeline", () => {
               ...baseItems[0].items,
               {
                 text: "second read",
-                metadata: { tool_name: "explore_workspace", arguments: { pattern: "package.json", target: "read" } },
+                metadata: { tool_name: "read_image", arguments: { path: "package.json" } },
               },
             ],
           },
@@ -2952,43 +2913,6 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
     expect(screen.getByText("Stdout")).toBeInTheDocument();
     expect(screen.getByText("hello")).toBeInTheDocument();
     expect(screen.getByText("call_shell_1")).toBeInTheDocument();
-  });
-
-  it("renders explore_workspace read output as a file preview card", () => {
-    render(
-      <SessionTimeline
-        items={[
-          {
-            kind: "tool_group",
-            itemId: "tool-explore-workspace",
-            label: "explore_workspace",
-            items: [
-              {
-                text: "explore_workspace TODO.md done",
-                metadata: {
-                  tool_name: "explore_workspace",
-                  status: "completed",
-                  success: true,
-                  arguments: { pattern: "TODO.md", target: "read" },
-                  result: "# TODO\n[X] Done",
-                },
-              },
-            ],
-          },
-        ]}
-        subAgents={{}}
-        connection="connected"
-        waitMessage={null}
-        processing={null}
-        itemsVersion={1}
-      />,
-    );
-
-    openWorking();
-
-    expect(screen.getAllByText("TODO.md")[0]).toBeInTheDocument();
-    expect(screen.getByText("Read file · root .")).toBeInTheDocument();
-    expect(screen.getByText(/\[X\] Done/)).toBeInTheDocument();
   });
 
   it("renders read_image, read_web_url, web_search, sub_agent, and generic tool cards", () => {
@@ -4810,7 +4734,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
           {
             kind: "tool_group",
             itemId: "tool-2",
-            label: "explore_workspace",
+            label: "read_image",
             status: "completed",
             items: [{ text: "second output" }],
           },

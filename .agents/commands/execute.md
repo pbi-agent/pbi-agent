@@ -2,7 +2,7 @@
 name: execute
 description: Execute Mode
 model_profile_id: worker-pro
-allowed_tools: read,write,shell
+allowed_tools: read-image,write,shell
 ---
 
 # Execute Mode

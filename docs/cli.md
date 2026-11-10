@@ -135,13 +135,13 @@ Public command catalogs are discovered from `commands/*.md` by default. Command 
 name: reviewer
 description: Review implementation and test coverage.
 model_profile_id: reviewer
-allowed_tools: read,shell
+allowed_tools: read-image,shell
 skills: fastapi,shadcn
 sub_agents: confidence-checker,fixer
 ---
 ```
 
-Command `allowed_tools` accepts comma-separated built-in tool groups: `read`, `write`, `web`, `sub-agent`, and `shell`, plus command-only `ask-user`. `skills` and `sub_agents` are comma-separated scalar lists. See [Project Commands](/customization/commands). If a repository keeps command files under `.agents/commands/`, target that directory explicitly with a local path or GitHub tree URL.
+Command `allowed_tools` accepts comma-separated built-in tool groups: `read-image`, `write`, `web`, `sub-agent`, and `shell`, plus command-only `ask-user`. `skills` and `sub_agents` are comma-separated scalar lists. See [Project Commands](/customization/commands). If a repository keeps command files under `.agents/commands/`, target that directory explicitly with a local path or GitHub tree URL.
 
 ## `pbi-agent agents`
 
@@ -183,14 +183,14 @@ Agent files require `name` and `description` frontmatter. They may also set `mod
 name: reviewer
 description: Review implementation and test coverage.
 model_profile_id: reviewer
-allowed_tools: read,shell
+allowed_tools: read-image,shell
 skills: fastapi,shadcn
 commands: review
 sub_agents: confidence-checker,fixer
 ---
 ```
 
-`allowed_tools` accepts comma-separated built-in tool groups: `read`, `write`, `web`, `sub-agent`, and `shell`. `skills`, `commands`, and `sub_agents` are comma-separated scalar lists. See [Project Sub-agents](/customization/sub-agents). Public agent catalogs are discovered from `agents/*.md` by default. If a repository keeps agent files under `.agents/agents/`, target that directory explicitly with a local path or GitHub tree URL.
+`allowed_tools` accepts comma-separated built-in tool groups: `read-image`, `write`, `web`, `sub-agent`, and `shell`. `skills`, `commands`, and `sub_agents` are comma-separated scalar lists. See [Project Sub-agents](/customization/sub-agents). Public agent catalogs are discovered from `agents/*.md` by default. If a repository keeps agent files under `.agents/agents/`, target that directory explicitly with a local path or GitHub tree URL.
 
 ## `pbi-agent init`
 
@@ -335,7 +335,7 @@ Stored model profiles hold runnable model and runtime settings tied to one saved
 
 Profile options: `--model`, `--sub-agent-model`, `--reasoning-effort`, `--max-tokens`, `--service-tier`, `--allowed-tools`, `--max-tool-workers`, `--max-retries`, and `--compact-threshold`.
 
-`--allowed-tools` accepts comma-separated built-in tool groups (`read`, `write`, `web`, `sub-agent`, and `shell`) and stores the profile's tool visibility. When unset, all built-ins are available for the profile; when set, only the listed groups are advertised and executable. See [Model Profiles](/model-profiles#profile-tool-visibility).
+`--allowed-tools` accepts comma-separated built-in tool groups (`read-image`, `write`, `web`, `sub-agent`, and `shell`) and stores the profile's tool visibility. When unset, all built-ins are available for the profile; when set, only the listed groups are advertised and executable. See [Model Profiles](/model-profiles#profile-tool-visibility).
 
 ## `pbi-agent web` (default)
 
@@ -411,7 +411,7 @@ pbi-agent run --prompt "Read the text in this image." --image ./general_ocr_002.
 | `--image` | repeatable, none by default | Attach a local workspace image to the prompt. Paths must stay inside the workspace. |
 | `--session-id ID` | none | Resume a previous saved session by ID. |
 | `--include-tool-history` | `false` | With `--session-id`, also include prior tool calls, tool arguments, tool results, and useful tool errors in the resumed model context. |
-| `--allowed-tools GROUPS` | profile/default | Comma-separated built-in tool groups for this run: `read`, `write`, `web`, `sub-agent`, and `shell`. Replaces the selected profile's tool visibility for the run. |
+| `--allowed-tools GROUPS` | profile/default | Comma-separated built-in tool groups for this run: `read-image`, `write`, `web`, `sub-agent`, and `shell`. Replaces the selected profile's tool visibility for the run. |
 
 By default, resumed CLI runs include prior user and assistant messages only. Use
 `--include-tool-history` when the next prompt depends on previous tool-assisted

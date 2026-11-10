@@ -1,7 +1,7 @@
 ---
 name: review
 description: Review Mode
-allowed_tools: read,shell
+allowed_tools: read-image,shell
 ---
 
 # Review Mode

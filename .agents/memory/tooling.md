@@ -10,3 +10,4 @@ Migrated from `MEMORY.md` on 2026-11-07; entries predate verification tags.
 - Security: open packaging follow-up — transitive security minima are lock-only, not enforced in published runtime metadata.
 - Linux browser open: stdlib `webbrowser.open` in `-I` child, DEVNULL stdio, bounded wait; Snap Brave GPU/AppArmor logs are browser noise. GUI launch unverified.
 - `shadcn add` may emit `import { cn } from "cn"` (resolves via `@shadcn/lint` dep); rewrite to `@/lib/utils`. Build static assets with the CI-pinned Bun (1.4.4; local upgraded) or the CI static-asset check drifts. [verified 2026-11-07]
+- Local `bun run lint` needs `bun install` first for `@shadcn/lint`. [verified 2026-11-09]

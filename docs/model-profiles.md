@@ -43,7 +43,7 @@ pbi-agent config profiles create \
   --model gpt-5.4 \
   --sub-agent-model gpt-5.4-mini \
   --reasoning-effort xhigh \
-  --allowed-tools read,web,shell \
+  --allowed-tools read-image,web,shell \
   --max-tool-workers 4
 
 pbi-agent config profiles select analysis
@@ -70,7 +70,7 @@ If no profile is selected, pbi-agent falls back to CLI flags, environment variab
 | Reasoning effort | Optional provider-level reasoning setting: `low`, `medium`, `high`, or `xhigh`. |
 | Max tokens | Provider output-token cap. Empty means the project default. |
 | Service tier | OpenAI-only service tier such as `auto`, `default`, `flex`, or `priority`. |
-| Tool visibility | Built-in tool groups exposed by the profile: read, write, web, sub-agent, and shell. |
+| Tool visibility | Built-in tool groups exposed by the profile: read-image, write, web, sub-agent, and shell. |
 | Max tool workers | Maximum number of local tool calls that can execute in parallel. |
 | Max retries | Retry count for transient provider failures. |
 | Compact threshold | Context-token threshold for automatic compaction where supported. |
@@ -82,15 +82,15 @@ use that profile. In the web UI, edit a profile and set **Tool visibility**. In
 the CLI, use `--allowed-tools` when creating or updating a profile:
 
 ```bash
-pbi-agent config profiles update analysis --allowed-tools read,web,shell
-pbi-agent config profiles update readonly --allowed-tools read
+pbi-agent config profiles update analysis --allowed-tools read-image,web,shell
+pbi-agent config profiles update readonly --allowed-tools read-image
 ```
 
 Allowed groups:
 
 | Tool group | Built-ins |
 | --- | --- |
-| `read` | `explore_workspace` |
+| `read-image` | `read_image` |
 | `write` | `apply_patch`, `replace_in_file`, `write_file` |
 | `web` | `read_web_url`, `web_search` |
 | `sub-agent` | `sub_agent` |

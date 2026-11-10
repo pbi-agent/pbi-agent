@@ -178,7 +178,7 @@ def test_indentless_sequence_fields_are_ignored_for_skill_discovery(
         "name: compress\n"
         "description: Compress markdown-heavy notes.\n"
         "tools:\n"
-        "- explore_workspace\n"
+        "- read_image\n"
         "- apply_patch\n"
         "---\n\n"
         "# compress\n",

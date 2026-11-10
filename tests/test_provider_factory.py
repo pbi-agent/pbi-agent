@@ -127,7 +127,7 @@ def test_create_provider_default_prompt_uses_active_tool_availability(
                 backend="github_copilot",
                 access_token="gho_test_token",
             ),
-            allowed_tools=("read",),
+            allowed_tools=("read-image",),
         )
     elif provider_name == "chatgpt":
         settings = Settings(
@@ -138,19 +138,19 @@ def test_create_provider_default_prompt_uses_active_tool_availability(
                 backend="openai_chatgpt",
                 access_token="access-token",
             ),
-            allowed_tools=("read",),
+            allowed_tools=("read-image",),
         )
     else:
         settings = Settings(
             api_key="test-key",
             provider=provider_name,
-            allowed_tools=("read",),
+            allowed_tools=("read-image",),
         )
 
     provider = create_provider(settings)
     prompt = _provider_default_prompt(provider)
 
-    assert "Use `explore_workspace`" in prompt
+    assert "Use `read_image`" in prompt
     assert "Use `shell`" not in prompt
     assert "Use `apply_patch`" not in prompt
     assert "Use `replace_in_file`" not in prompt

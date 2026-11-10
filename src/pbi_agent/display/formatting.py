@@ -15,7 +15,7 @@ from pbi_agent.models.messages import TokenUsage, context_window_for_model
 TOOL_STYLE_MAP = {
     "shell": "shell",
     "apply_patch": "apply-patch",
-    "explore_workspace": "explore-workspace",
+    "read_image": "read-image",
     "read_web_url": "read-web-url",
     "sub_agent": "sub-agent",
     "mcp": "mcp",
@@ -24,7 +24,7 @@ TOOL_STYLE_MAP = {
 TOOL_ICONS: dict[str, str] = {
     "shell": "\u25b6",  # ▶
     "apply-patch": "\u25a0",  # ■
-    "explore-workspace": "\U0001f50e",  # 🔎
+    "read-image": "\U0001f5bc",  # 🖼
     "read-web-url": "\U0001f310",  # 🌐
     "sub-agent": "\u25c9",  # ◉
     "mcp": "\u25a7",  # ▧
@@ -35,7 +35,7 @@ TOOL_ICONS: dict[str, str] = {
 TOOL_BORDER_STYLES: dict[str, str] = {
     "shell": "blue",
     "apply-patch": "#F97316",
-    "explore-workspace": "#0EA5E9",
+    "read-image": "#0EA5E9",
     "read-web-url": "#06B6D4",
     "sub-agent": "#F59E0B",
     "mcp": "#14B8A6",
@@ -416,59 +416,27 @@ def format_read_web_url_item(
     return "\n".join(lines)
 
 
-def format_explore_workspace_item(
-    pattern: str,
+def format_read_image_item(
+    path: str,
     *,
     verbose: bool = False,
     status: str,
     call_id: str = "",
-    root: str = ".",
-    regex: bool = True,
-    target: str = "content",
-    path_scope: str = "path",
-    mode: str = "files",
-    context_lines: int | str = 0,
-    glob: Any = None,
-    exclude: Any = None,
-    limit: int | str = 50,
-    cursor: Any = None,
     result: Any = None,
 ) -> str:
-    raw_output = _explore_workspace_raw_output(result)
-    error_output = _explore_workspace_error_output(result)
-
-    pattern_mode = "regex" if regex else "literal"
-    target_label = _explore_workspace_target_label(target)
     lines = [
-        f"[#0EA5E9]\U0001f50e[/#0EA5E9] "
-        f"[bold]{escape_markup_text(shorten(pattern or '<missing pattern>', 96))}[/bold]  "
-        f"{status}",
-        f"[dim]root:[/dim] {escape_markup_text(shorten(root or '.', 80))}  "
-        f"[dim]target:[/dim] {escape_markup_text(target_label)}  "
-        f"[dim]pattern:[/dim] {pattern_mode}",
+        f"[#0EA5E9]\U0001f5bc[/#0EA5E9] "
+        f"[bold]{escape_markup_text(shorten(path, 96))}[/bold]  {status}",
     ]
-    mode_parts = [f"mode={mode}"]
-    context_value = _safe_positive_int(context_lines, default=0)
-    if context_value > 0:
-        mode_parts.append(f"context={context_value}")
-    if target == "path":
-        mode_parts.append(f"path_scope={path_scope}")
-    limit_value = _safe_positive_int(limit, default=50)
-    if limit_value != 50:
-        mode_parts.append(f"limit={limit_value}")
-    cursor_label = _format_explore_workspace_cursor(cursor)
-    if cursor_label:
-        mode_parts.append(f"cursor={cursor_label}")
-    lines.append(f"[dim]options:[/dim] {escape_markup_text('  '.join(mode_parts))}")
-    filters = _explore_workspace_filter_parts(glob=glob, exclude=exclude)
-    if filters:
-        lines.append("  ".join(filters))
-    if error_output:
-        lines.append(
-            f"[red]error:[/red] {escape_markup_text(shorten(error_output, 180))}"
-        )
-    elif raw_output:
-        lines.extend(_explore_workspace_output_preview(raw_output))
+    payload = to_dict(result)
+    body = payload.get("result") if isinstance(payload.get("result"), dict) else payload
+    error = body.get("error") if isinstance(body, dict) else None
+    if isinstance(error, str) and error:
+        lines.append(f"[red]error:[/red] {escape_markup_text(shorten(error, 180))}")
+    elif isinstance(body, dict) and isinstance(body.get("mime_type"), str):
+        byte_count = body.get("byte_count")
+        size = f"  {byte_count} bytes" if isinstance(byte_count, int) else ""
+        lines.append(f"[dim]{escape_markup_text(body['mime_type'])}{size}[/dim]")
     _append_verbose_call_id(lines, call_id, verbose)
     return "\n".join(lines)
 
@@ -520,103 +488,6 @@ def format_web_search_sources_item(
 def format_wait_seconds(wait_seconds: float) -> str:
     """Format wait seconds for display: ``1.50`` → ``'1.5'``, ``2.00`` → ``'2'``."""
     return f"{wait_seconds:.2f}".rstrip("0").rstrip(".")
-
-
-def _safe_positive_int(value: int | str, *, default: int) -> int:
-    try:
-        normalized = int(value)
-    except (TypeError, ValueError):
-        return default
-    return normalized if normalized > 0 else default
-
-
-def _explore_workspace_raw_output(result: Any) -> str:
-    if isinstance(result, str):
-        return result
-    payload = to_dict(result)
-    body = payload.get("result") if "result" in payload else None
-    return body if isinstance(body, str) else ""
-
-
-def _explore_workspace_error_output(result: Any) -> str:
-    payload = to_dict(result)
-    error = payload.get("error")
-    if isinstance(error, str):
-        return error
-    if isinstance(error, dict):
-        message = error.get("message")
-        if isinstance(message, str):
-            return message
-    body = payload.get("result")
-    if isinstance(body, dict):
-        body_error = body.get("error")
-        return body_error if isinstance(body_error, str) else ""
-    return ""
-
-
-def _explore_workspace_output_preview(raw_output: str) -> list[str]:
-    lines = raw_output.splitlines()
-    if not lines:
-        return []
-    if len(lines) == 1:
-        return [f"[dim]output:[/dim] {escape_markup_text(shorten(lines[0], 180))}"]
-
-    preview_lines = lines[:8]
-    rendered = ["[dim]output:[/dim]"]
-    rendered.extend(escape_markup_text(shorten(line, 180)) for line in preview_lines)
-    hidden_count = len(lines) - len(preview_lines)
-    if hidden_count > 0:
-        rendered.append(
-            f"[dim]… {hidden_count} more line{'s' if hidden_count != 1 else ''}[/dim]"
-        )
-    return rendered
-
-
-def _explore_workspace_filter_parts(
-    *, glob: Any = None, exclude: Any = None
-) -> list[str]:
-    parts: list[str] = []
-    glob_label = _format_explore_workspace_filter_value(glob)
-    if glob_label:
-        parts.append(f"[dim]glob:[/dim] {escape_markup_text(glob_label)}")
-    exclude_label = _format_explore_workspace_filter_value(exclude)
-    if exclude_label:
-        parts.append(f"[dim]exclude:[/dim] {escape_markup_text(exclude_label)}")
-    return parts
-
-
-def _format_explore_workspace_filter_value(value: Any) -> str:
-    if isinstance(value, str):
-        return shorten(value, 80) if value else ""
-    if isinstance(value, list):
-        labels = [str(item) for item in value if isinstance(item, str) and item]
-        if not labels:
-            return ""
-        visible = ", ".join(shorten(label, 32) for label in labels[:3])
-        if len(labels) > 3:
-            visible += f", +{len(labels) - 3}"
-        return visible
-    return ""
-
-
-def _format_explore_workspace_cursor(value: Any) -> str:
-    if isinstance(value, bool) or value is None:
-        return ""
-    if isinstance(value, int):
-        return str(value)
-    if isinstance(value, str):
-        return shorten(value.strip(), 80)
-    return ""
-
-
-def _explore_workspace_target_label(target: str) -> str:
-    if target == "read":
-        return "read"
-    if target == "list":
-        return "list"
-    if target == "path":
-        return "path search"
-    return "content search"
 
 
 # ---------------------------------------------------------------------------
@@ -675,22 +546,12 @@ def route_function_result(
             call_id=call_id,
         )
 
-    if name == "explore_workspace":
-        return name, format_explore_workspace_item(
-            str(args.get("pattern", "")).strip() or "<missing pattern>",
+    if name == "read_image":
+        return name, format_read_image_item(
+            str(args.get("path", "")).strip() or "<missing path>",
             verbose=verbose,
             status=status,
             call_id=call_id,
-            root=str(args.get("root", ".") or "."),
-            regex=args.get("regex") is not False,
-            target=str(args.get("target", "content") or "content"),
-            path_scope=str(args.get("path_scope", "path") or "path"),
-            mode=str(args.get("mode", "files") or "files"),
-            context_lines=args.get("context_lines", 0),
-            glob=args.get("glob"),
-            exclude=args.get("exclude"),
-            limit=args.get("limit", 50),
-            cursor=args.get("cursor"),
             result=result,
         )
 
@@ -739,9 +600,9 @@ __all__ = [
     "compact_json",
     "escape_markup_text",
     "format_context_tooltip",
-    "format_explore_workspace_item",
     "format_generic_function_item",
     "format_patch_tool_item",
+    "format_read_image_item",
     "format_read_web_url_item",
     "format_reasoning_title",
     "format_session_subtitle",

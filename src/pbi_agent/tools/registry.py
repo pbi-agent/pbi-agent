@@ -18,8 +18,8 @@ from pbi_agent.tools.ask_user import SPEC as _au_spec
 from pbi_agent.tools.ask_user import handle as _au_handle
 from pbi_agent.tools.background_task import SPEC as _bt_spec
 from pbi_agent.tools.background_task import handle as _bt_handle
-from pbi_agent.tools.explore_workspace import SPEC as _ew_spec
-from pbi_agent.tools.explore_workspace import handle as _ew_handle
+from pbi_agent.tools.read_image import SPEC as _ri_spec
+from pbi_agent.tools.read_image import handle as _ri_handle
 from pbi_agent.tools.read_web_url import SPEC as _rwu_spec
 from pbi_agent.tools.read_web_url import handle as _rwu_handle
 from pbi_agent.tools.replace_in_file import SPEC as _rif_spec
@@ -38,7 +38,7 @@ _REGISTRY[_bt_spec.name] = (_bt_spec, _bt_handle)
 _REGISTRY[_ap_spec.name] = (_ap_spec, _ap_handle)
 _REGISTRY[_rif_spec.name] = (_rif_spec, _rif_handle)
 _REGISTRY[_wf_spec.name] = (_wf_spec, _wf_handle)
-_REGISTRY[_ew_spec.name] = (_ew_spec, _ew_handle)
+_REGISTRY[_ri_spec.name] = (_ri_spec, _ri_handle)
 _REGISTRY[_rwu_spec.name] = (_rwu_spec, _rwu_handle)
 _REGISTRY[_ws_spec.name] = (_ws_spec, _ws_handle)
 _REGISTRY[_au_spec.name] = (_au_spec, _au_handle)
