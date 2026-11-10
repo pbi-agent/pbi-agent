@@ -34,10 +34,8 @@ from pbi_agent.agent.session import (
 )
 from pbi_agent.agent.skill_discovery import format_project_skills_markdown
 from pbi_agent.agent.system_prompt import get_system_prompt
-from pbi_agent.agents.project_installer import ProjectAgentInstallResult
 from pbi_agent.auth.models import AUTH_MODE_COPILOT_ACCOUNT
 from pbi_agent.auth.providers.github_copilot import GITHUB_COPILOT_RESPONSES_URL
-from pbi_agent.commands.project_installer import ProjectCommandInstallResult
 from pbi_agent.config import (
     DEFAULT_GOOGLE_INTERACTIONS_URL,
     DEFAULT_GOOGLE_MODEL,
@@ -53,7 +51,6 @@ from pbi_agent.config import (
     update_user_profile_config,
 )
 from pbi_agent.display.protocol import DisplayProtocol, QueuedInput, QueuedRuntimeChange
-from pbi_agent.init_agents import DEFAULT_INIT_AGENTS, DEFAULT_INIT_COMMANDS
 from pbi_agent.models.messages import (
     CompletedResponse,
     ImageAttachment,
@@ -80,72 +77,6 @@ def _write_command(root, name: str, content: str) -> None:
         title = " ".join(part.capitalize() for part in name.split("-") if part)
         content = f"---\nname: {title}\ndescription: {title} command.\n---\n\n{content}"
     (commands_dir / f"{name}.md").write_text(content, encoding="utf-8")
-
-
-def _install_fake_init_bootstrap(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_install_command(
-        source: str,
-        *,
-        command_name: str | None = None,
-        force: bool = False,
-        workspace: Path | None = None,
-    ) -> ProjectCommandInstallResult:
-        del force
-        assert command_name is not None
-        root = (workspace or Path.cwd()).resolve()
-        install_path = root / ".agents" / "commands" / f"{command_name}.md"
-        install_path.parent.mkdir(parents=True, exist_ok=True)
-        install_path.write_text(
-            (
-                f"---\nname: {command_name}\ndescription: {command_name} command.\n"
-                f"---\n\n# {command_name}\n"
-            ),
-            encoding="utf-8",
-        )
-        return ProjectCommandInstallResult(
-            command_id=command_name,
-            slash_alias=f"/{command_name}",
-            install_path=install_path,
-            source=source,
-            ref=None,
-            subpath=f"commands/{command_name}.md",
-        )
-
-    def fake_install_agent(
-        source: str,
-        *,
-        agent_name: str | None = None,
-        force: bool = False,
-        workspace: Path | None = None,
-    ) -> ProjectAgentInstallResult:
-        del force
-        assert agent_name is not None
-        root = (workspace or Path.cwd()).resolve()
-        install_path = root / ".agents" / "agents" / f"{agent_name}.md"
-        install_path.parent.mkdir(parents=True, exist_ok=True)
-        install_path.write_text(
-            (
-                f"---\nname: {agent_name}\ndescription: Reviews code changes.\n"
-                "---\n\nReview code changes.\n"
-            ),
-            encoding="utf-8",
-        )
-        return ProjectAgentInstallResult(
-            agent_name=agent_name,
-            install_path=install_path,
-            source=source,
-            ref=None,
-            subpath=f"agents/{agent_name}.md",
-        )
-
-    monkeypatch.setattr(
-        "pbi_agent.init_agents.install_project_command",
-        fake_install_command,
-    )
-    monkeypatch.setattr(
-        "pbi_agent.init_agents.install_project_agent",
-        fake_install_agent,
-    )
 
 
 def test_create_session_uses_workspace_key_env(monkeypatch, tmp_path) -> None:
@@ -3547,7 +3478,6 @@ def test_run_session_loop_handles_init_command_locally(monkeypatch, tmp_path) ->
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
 
     monkeypatch.chdir(tmp_path)
-    _install_fake_init_bootstrap(monkeypatch)
     monkeypatch.setattr(
         "pbi_agent.agent.session._open_runtime_provider",
         _stub_runtime_provider(provider),
@@ -3564,14 +3494,8 @@ def test_run_session_loop_handles_init_command_locally(monkeypatch, tmp_path) ->
     assert provider.request_messages == []
     assert len(display.markdown_calls) == 1
     assert "Created AGENTS.md" in display.markdown_calls[0]
-    assert "Installed command `/execute`" in display.markdown_calls[0]
-    assert "Installed sub-agent `code-reviewer`" in display.markdown_calls[0]
     assert content.startswith("# AGENTS.md")
-    for command_name in DEFAULT_INIT_COMMANDS:
-        assert (tmp_path / ".agents" / "commands" / f"{command_name}.md").is_file()
-    for agent_name in DEFAULT_INIT_AGENTS:
-        assert (tmp_path / ".agents" / "agents" / f"{agent_name}.md").is_file()
-    assert not (tmp_path / ".agents" / "agents" / "plan.md").exists()
+    assert not (tmp_path / ".agents").exists()
     assert provider.system_prompts == ["updated prompt"]
     assert provider.refresh_tools_calls == 1
     assert display.assistant_start_calls == 0
@@ -3587,7 +3511,6 @@ def test_run_session_loop_init_command_protects_existing_file(
     agents_path.write_text("existing", encoding="utf-8")
 
     monkeypatch.chdir(tmp_path)
-    _install_fake_init_bootstrap(monkeypatch)
     monkeypatch.setattr(
         "pbi_agent.agent.session._open_runtime_provider",
         _stub_runtime_provider(provider),
@@ -3619,15 +3542,8 @@ def test_run_session_loop_init_command_force_overwrites_existing_file(
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
     agents_path = tmp_path / "AGENTS.md"
     agents_path.write_text("existing", encoding="utf-8")
-    command_path = tmp_path / ".agents" / "commands" / "plan.md"
-    command_path.parent.mkdir(parents=True, exist_ok=True)
-    command_path.write_text("old command", encoding="utf-8")
-    agent_path = tmp_path / ".agents" / "agents" / "code-reviewer.md"
-    agent_path.parent.mkdir(parents=True, exist_ok=True)
-    agent_path.write_text("old agent", encoding="utf-8")
 
     monkeypatch.chdir(tmp_path)
-    _install_fake_init_bootstrap(monkeypatch)
     monkeypatch.setattr(
         "pbi_agent.agent.session._open_runtime_provider",
         _stub_runtime_provider(provider),
@@ -3644,11 +3560,7 @@ def test_run_session_loop_init_command_force_overwrites_existing_file(
     assert provider.request_messages == []
     assert len(display.markdown_calls) == 1
     assert "Overwrote AGENTS.md" in display.markdown_calls[0]
-    assert "Overwrote command `/plan`" in display.markdown_calls[0]
-    assert "Overwrote sub-agent `code-reviewer`" in display.markdown_calls[0]
     assert content.startswith("# AGENTS.md")
-    assert command_path.read_text(encoding="utf-8") != "old command"
-    assert agent_path.read_text(encoding="utf-8") != "old agent"
     assert provider.system_prompts == ["updated prompt"]
     assert provider.refresh_tools_calls == 1
     assert display.assistant_start_calls == 0

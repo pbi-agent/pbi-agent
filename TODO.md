@@ -1,7 +1,3 @@
-- [x] #383: save raw shell output to temp file on truncation (shell, background result, background_task output)
-- [x] Tests: truncated/non-truncated × compression on/off, uniqueness, pruning, write failure, background
-- [x] Docs: docs/tools.md shell section
-- [x] Detect lossy codetool-shell compression (test summaries, repeated output) and save raw file + `*_compressed` flags
-- [x] Live web smoke: lossy pytest summary → notice; whitespace-only compression → none
-- [x] Code-review fixes: per-user dir, background poll file spam, dropped-tail notice, snapshot race, whitespace signature, prune throttle, layering, tail_dropped key
-- [x] Move raw-output cleanup into daily startup maintenance (tools/raw_output.py)
+- [x] Release v0.51.0 prep: bump, uv lock, changelog, validation, commit 2563017b, PR #387 (CI green)
+- [x] Merged PR #387 (e569db5c); Release run 42786355857 green (PyPI + GitHub Release); release notes frontmatter stripped
+- [x] `pbi-agent init` / `/init`: install only AGENTS.md; drop default commands/sub-agents bootstrap
