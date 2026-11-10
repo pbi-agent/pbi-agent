@@ -90,6 +90,12 @@ class GenericProvider(Provider):
     def set_system_prompt(self, system_prompt: str) -> None:
         self._protocol.set_system_prompt(system_prompt)
 
+    def set_excluded_tools(self, excluded_tools: set[str]) -> None:
+        # The protocol owns tool definitions; keep its exclusions in sync, otherwise
+        # per-turn changes (e.g. interactive mode enabling ask_user) are ignored.
+        self._excluded_tools = default_excluded_tool_names(excluded_tools)
+        self._protocol.set_excluded_tools(self._excluded_tools)
+
     def refresh_tools(self) -> None:
         if hasattr(self, "_protocol"):
             self._protocol.refresh_tools()

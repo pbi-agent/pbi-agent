@@ -10453,6 +10453,83 @@ def test_saved_session_question_response_combines_selection_and_custom_note(
         manager.shutdown()
 
 
+@pytest.mark.parametrize(
+    ("answer", "expected_error"),
+    [
+        ({"answer": "GraphQL instead", "selected_suggestion_index": None}, None),
+        ({"answer": "   ", "selected_suggestion_index": None}, "non-empty custom"),
+        ({"answer": "REST", "selected_suggestion_index": 5}, "invalid suggestion"),
+    ],
+)
+def test_question_response_validates_freeform_answer(
+    tmp_path, monkeypatch, answer: dict[str, object], expected_error: str | None
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    manager = WebSessionManager(_settings())
+    manager.start()
+    session = manager.create_session_record(title="Needs input")
+    try:
+        live_payload = manager.create_live_session(session_id=session["session_id"])
+        live_session = manager._live_sessions[live_payload["live_session_id"]]
+        received: list[UserQuestionAnswer] = []
+
+        def ask() -> None:
+            received.extend(
+                live_session.display.ask_user_questions(
+                    [
+                        PendingUserQuestion(
+                            question_id="q-1",
+                            question="Which API style?",
+                            suggestions=["REST", "WebSocket", "SSE"],
+                        )
+                    ]
+                )
+            )
+
+        worker = threading.Thread(target=ask, daemon=True)
+        worker.start()
+        deadline = time.monotonic() + 1
+        while time.monotonic() < deadline:
+            pending = live_session.snapshot.pending_user_questions
+            if isinstance(pending, dict) and pending.get("prompt_id") == "ask-1":
+                break
+            time.sleep(0.01)
+        else:
+            raise AssertionError("pending prompt was not published")
+
+        payload = [{"question_id": "q-1", "custom": True, **answer}]
+        if expected_error is not None:
+            with pytest.raises(ValueError, match=expected_error):
+                manager.submit_saved_session_question_response(
+                    session["session_id"], prompt_id="ask-1", answers=payload
+                )
+            # Release the waiting worker with a valid freeform answer.
+            payload = [
+                {
+                    "question_id": "q-1",
+                    "answer": "GraphQL instead",
+                    "selected_suggestion_index": None,
+                    "custom": True,
+                }
+            ]
+
+        manager.submit_saved_session_question_response(
+            session["session_id"], prompt_id="ask-1", answers=payload
+        )
+        worker.join(timeout=1)
+        assert not worker.is_alive()
+        assert received == [
+            UserQuestionAnswer(
+                question_id="q-1",
+                question="Which API style?",
+                answer="GraphQL instead",
+                custom=True,
+            )
+        ]
+    finally:
+        manager.shutdown()
+
+
 def test_get_session_detail_does_not_attach_ended_web_run(
     tmp_path, monkeypatch
 ) -> None:

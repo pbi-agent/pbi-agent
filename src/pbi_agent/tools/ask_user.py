@@ -37,7 +37,8 @@ SPEC = ToolSpec(
                             "items": {"type": "string"},
                             "description": (
                                 "Exactly three mutually exclusive choices. The first suggestion "
-                                "is treated as the recommended answer."
+                                "is treated as the recommended answer. The user may instead "
+                                "type their own answer."
                             ),
                         },
                     },

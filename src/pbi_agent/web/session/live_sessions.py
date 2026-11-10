@@ -540,11 +540,21 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
             suggestions = question.get("suggestions")
             if not isinstance(suggestions, list) or len(suggestions) != 3:
                 raise RuntimeError("Pending user question suggestions are invalid.")
-            if not isinstance(selected_index, int) or selected_index not in {0, 1, 2}:
+            if selected_index is None:
+                # Freeform answer typed by the user instead of a suggestion.
+                if not answer_text:
+                    raise ValueError(
+                        "Question answers must include a selected suggestion "
+                        "or a non-empty custom answer."
+                    )
+                is_custom = True
+            elif isinstance(selected_index, int) and selected_index in {0, 1, 2}:
+                answer_text = str(suggestions[selected_index])
+                is_custom = bool(custom_note)
+            else:
                 raise ValueError(
-                    "Question answers must include a selected suggestion index."
+                    "Question answers include an invalid suggestion index."
                 )
-            answer_text = str(suggestions[selected_index])
             if custom_note:
                 answer_text = f"{answer_text}\n\nAdditional note: {custom_note}"
             parsed_answers.append(
@@ -552,7 +562,7 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
                     question_id=question_id,
                     question=str(question.get("question") or ""),
                     answer=answer_text,
-                    custom=bool(custom_note),
+                    custom=is_custom,
                 )
             )
         if seen_ids != set(question_by_id):

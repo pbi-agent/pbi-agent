@@ -51,6 +51,20 @@ def test_generic_provider_includes_web_tools_with_web_group() -> None:
     assert "read_image" not in tool_names
 
 
+def test_generic_provider_set_excluded_tools_updates_advertised_tools() -> None:
+    provider = GenericProvider(
+        _make_settings(allowed_tools=("read-image", "shell")),
+        excluded_tools={"ask_user"},
+    )
+    assert "ask_user" not in {tool["function"]["name"] for tool in provider._tools}
+
+    provider.set_excluded_tools(set())
+    assert "ask_user" in {tool["function"]["name"] for tool in provider._tools}
+
+    provider.set_excluded_tools({"ask_user"})
+    assert "ask_user" not in {tool["function"]["name"] for tool in provider._tools}
+
+
 def test_generic_request_turn_omits_empty_tools(
     monkeypatch,
     display_spy,
