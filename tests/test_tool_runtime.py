@@ -436,7 +436,8 @@ def test_execute_tool_calls_serializes_compressed_shell_output(
         "exit_code": 0,
     }
     assert notice.startswith("Output compressed")
-    assert raw_output_path in notice
+    assert "raw_output_path" in notice
+    assert raw_output_path not in notice
 
 
 def test_shell_tool_uses_configured_bootstrap_and_executable(
