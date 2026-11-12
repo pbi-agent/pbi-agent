@@ -1,3 +1,1 @@
-- [x] Fix CLI welcome model truncation with wrapping metadata
-- [x] Add regression coverage (26 targeted tests passed)
-- [x] Run Python static validation (Ruff check/format and basedpyright passed)
+- [ ] Include `/status` session usage dashboard (PR #392, merged 4998e974 on master after v0.51.0) in next release (v0.52.0)
