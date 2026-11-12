@@ -1556,6 +1556,8 @@ export function SessionPage({
           >
             <ResizablePanel
               id="session-main"
+              // Panel styles its inner wrapper; keep the chat growing to full height.
+              className="flex min-h-0 flex-col"
               defaultSize="50%"
               minSize="30%"
 
