@@ -192,11 +192,12 @@ class ConsoleDisplay(DisplayProtocol):
             detail_parts.append(
                 f"[dim]reasoning:[/dim] {escape_markup_text(reasoning_effort)}"
             )
-        subtitle = "  ".join(detail_parts) if detail_parts else None
+        content = f"[dim]{escape_markup_text(mode)}[/dim]"
+        if detail_parts:
+            content += "\n" + "\n".join(detail_parts)
         self._console.print(
             Panel(
-                f"[dim]{escape_markup_text(mode)}[/dim]",
-                subtitle=subtitle,
+                content,
                 border_style=PBI_AGENT_ACCENT,
                 expand=False,
                 padding=(0, 2),

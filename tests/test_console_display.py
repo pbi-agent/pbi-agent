@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 
 import pytest
+from rich.console import Console
 
 from pbi_agent.display.console_display import ConsoleDisplay
 from pbi_agent.models.messages import TokenUsage
@@ -234,3 +235,37 @@ def test_sub_agent_section_renders_summary_status_and_logs() -> None:
     assert "Inspect the workspace" in output
     assert "Child result" in output
     assert "completed" in output
+
+
+@pytest.mark.parametrize("width", [32, 80, 160])
+@pytest.mark.parametrize("interactive", [False, True])
+def test_welcome_keeps_full_model_and_reasoning(width: int, interactive: bool) -> None:
+    display, stdout, _ = _display()
+    display._console = Console(file=stdout, width=width)
+    model = "claude-sonnet-4-5-20250929[custom]"
+
+    display.welcome(
+        interactive=interactive,
+        model=model,
+        reasoning_effort="high",
+        single_turn_hint="Run complete",
+    )
+
+    output = stdout.getvalue()
+    # Ignore panel borders and wrapping while checking that no characters were lost.
+    content = "".join(line.strip("│ ") for line in output.splitlines()[1:-1])
+    assert f"model:{model}" in "".join(content.split())
+    assert "reasoning: high" in content
+    assert ("interactive" if interactive else "single-turn") in content
+    assert "Run complete" in output
+
+
+def test_welcome_without_metadata() -> None:
+    display, stdout, _ = _display()
+
+    display.welcome(interactive=False)
+
+    output = stdout.getvalue()
+    assert "single-turn" in output
+    assert "model:" not in output
+    assert "reasoning:" not in output
