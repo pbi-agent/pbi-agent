@@ -61,12 +61,40 @@ def test_release_workflow_fails_when_changelog_notes_are_missing() -> None:
     upload_index = workflow.index("twine upload dist/*")
     create_index = workflow.index('gh release create "$TAG"')
     publish_index = workflow.index('gh release edit "$TAG" --draft=false --latest')
-    notes_arg_index = workflow.index('--notes-file "$NOTES_FILE"')
+    notes_arg_index = workflow.index('--notes-file "$NOTES_FILE"', create_index)
 
     assert notes_file_index < missing_check_index < exit_index < create_index
     assert create_index < upload_index < publish_index
     assert create_index < notes_arg_index
     assert "Release for pbi-agent version $VERSION" not in workflow
+
+
+@pytest.mark.parametrize("notes_exist", [False, True])
+def test_release_workflow_checks_changelog_file(tmp_path, notes_exist) -> None:
+    workflow = read_workflow("release.yml")
+    notes_step = workflow.split("      - name: Check release notes\n", 1)[1].split(
+        "\n      - name:", 1
+    )[0]
+    script = dedent(notes_step.split("        run: |\n", 1)[1])
+    if notes_exist:
+        notes = tmp_path / "docs/changelog/v0.31.0.md"
+        notes.parent.mkdir(parents=True)
+        notes.write_text("# v0.31.0\n", encoding="utf-8")
+
+    result = subprocess.run(
+        ["bash", "-e", "-c", script],
+        cwd=tmp_path,
+        env={**os.environ, "VERSION": "0.31.0"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    if notes_exist:
+        assert result.returncode == 0, result.stderr
+    else:
+        assert result.returncode != 0
+        assert "Missing changelog notes: docs/changelog/v0.31.0.md" in result.stderr
 
 
 def test_release_workflow_rejects_release_target_mismatch_before_publishing() -> None:
@@ -281,6 +309,10 @@ def test_release_workflow_reuses_draft_for_partial_release_recovery() -> None:
         'gh release view "$TAG" --json isDraft --jq .isDraft'
     )
     reuse_index = workflow.index("Reusing draft release $TAG for $GITHUB_SHA.")
+    refresh_notes_index = workflow.index(
+        'gh release edit "$TAG" --notes-file "$NOTES_FILE"', reuse_index
+    )
+    create_index = workflow.index('gh release create "$TAG"')
     pypi_recovery_index = workflow.index(
         'echo "PyPI version $VERSION already exists; publishing existing draft release."'
     )
@@ -295,7 +327,8 @@ def test_release_workflow_reuses_draft_for_partial_release_recovery() -> None:
     )
     publish_index = workflow.index('gh release edit "$TAG" --draft=false --latest')
 
-    assert draft_check_index < reuse_index < pypi_recovery_index < skip_upload_index
+    assert draft_check_index < reuse_index < refresh_notes_index < create_index
+    assert create_index < pypi_recovery_index < skip_upload_index
     assert skip_upload_index < upload_guard_index < publish_guard_index < publish_index
 
 
