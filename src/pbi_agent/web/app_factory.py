@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from pbi_agent import session_titles
 from pbi_agent.config import ResolvedRuntime, Settings
 from pbi_agent.web.api import (
     board_router,
@@ -50,6 +51,11 @@ def create_app(
             target=manager.warm_file_mentions_cache,
             daemon=True,
             name="pbi-agent-web-mention-cache",
+        ).start()
+        threading.Thread(
+            target=session_titles.ensure_assets,
+            daemon=True,
+            name="pbi-agent-web-title-assets",
         ).start()
         try:
             yield

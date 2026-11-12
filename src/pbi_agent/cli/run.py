@@ -75,6 +75,7 @@ def _run_single_turn_command(
         renderer=console,
     )
 
+    title_job = _start_local_title_job(prompt, resume_session_id)
     try:
         outcome = channel.run(
             lambda display: run_single_turn(
@@ -93,6 +94,67 @@ def _run_single_turn_command(
         _print_error(format_user_facing_error(exc))
         return 1
 
+    if outcome.session_id and title_job is not None:
+        _apply_local_title(outcome.session_id, prompt, title_job)
     if outcome.session_id:
         print(f"session_id={outcome.session_id}")
     return 4 if outcome.tool_errors else 0
+
+
+class _LocalTitleJob:
+    """Generate a local session title concurrently with the CLI turn."""
+
+    def __init__(self, prompt: str) -> None:
+        import threading
+
+        self.title: str | None = None
+        self._thread = threading.Thread(
+            target=self._generate,
+            args=(prompt,),
+            daemon=True,
+            name="pbi-agent-cli-session-title",
+        )
+        self._thread.start()
+
+    def _generate(self, prompt: str) -> None:
+        from pbi_agent import session_titles
+
+        try:
+            self.title = session_titles.generate_title(prompt)
+        except Exception:
+            self.title = None
+
+    def result(self, timeout: float) -> str | None:
+        self._thread.join(timeout)
+        return self.title
+
+
+def _start_local_title_job(
+    prompt: str, resume_session_id: str | None
+) -> _LocalTitleJob | None:
+    from pbi_agent import session_titles
+
+    if resume_session_id or prompt.lstrip().startswith("/"):
+        return None
+    if not session_titles.is_ready():
+        return None
+    return _LocalTitleJob(prompt)
+
+
+def _apply_local_title(session_id: str, prompt: str, job: _LocalTitleJob) -> None:
+    """Swap the truncated-prompt placeholder for the generated title, unless
+    the session was renamed meanwhile."""
+    from pbi_agent.session_store import SessionStore
+
+    title = job.result(timeout=30.0)
+    prefix = prompt.strip()[:80]
+    if not title or title == prefix:
+        return
+    try:
+        with SessionStore() as store:
+            record = store.get_session(session_id)
+            if record is None or not record.title.startswith(prefix):
+                return
+            store.replace_session_title(session_id, expected=record.title, title=title)
+    except Exception:
+        pass

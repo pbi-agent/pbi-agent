@@ -46,6 +46,23 @@ Session features include:
 
 See [Session Commands](/session-commands) for the full composer syntax reference.
 
+### Session titles
+
+A new session is first titled with the start of its first message. When the
+local title model is available, that title is replaced a moment later by a
+one-line summary generated on your machine; nothing is sent to a provider for
+it, and a title you edit yourself is never overwritten.
+
+The first time `pbi-agent web` starts, it downloads the title model
+([oot-oneliner](https://huggingface.co/oot-ai/oot-oneliner-GGUF), about 1.1 GB,
+LFM license) and the official prebuilt
+[llama.cpp](https://github.com/ggml-org/llama.cpp) build for your platform
+(13-25 MB) in the background into `~/.pbi-agent/title-model`. Both are pinned
+to one version and verified against a SHA-256 checksum, and an interrupted
+download resumes on the next start. Until they are present, and on platforms
+without a prebuilt llama.cpp build, titles stay as the start of the first
+message. Set `PBI_AGENT_LOCAL_TITLES=0` to turn this off.
+
 ## Saved sessions and resume behavior
 
 Saved sessions appear in the Sessions sidebar. Reopening a session restores the provider checkpoint when possible; otherwise pbi-agent replays the visible history needed to continue. The session timeline shows user turns, assistant turns, local tool activity, image attachments, shell output, and run metadata.

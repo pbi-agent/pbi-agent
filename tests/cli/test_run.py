@@ -267,3 +267,27 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         self.assertEqual(rc, 1)
         self.assertIn("Project directory does not exist", stderr.getvalue())
+
+
+def test_cli_run_applies_local_session_title(tmp_path, monkeypatch) -> None:
+    from pbi_agent import session_titles
+    from pbi_agent.cli import run as run_module
+    from pbi_agent.session_store import SessionStore
+
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(tmp_path / "s.db"))
+    monkeypatch.setattr(session_titles, "is_ready", lambda: True)
+    monkeypatch.setattr(session_titles, "generate_title", lambda text: "Repo summary")
+    with SessionStore() as store:
+        sid = store.create_session(
+            directory="d", provider="p", model="m", title="Summarize this repository."
+        )
+
+    job = run_module._start_local_title_job("Summarize this repository.", None)
+    assert job is not None
+    run_module._apply_local_title(sid, "Summarize this repository.", job)
+
+    with SessionStore() as store:
+        record = store.get_session(sid)
+    assert record is not None and record.title == "Repo summary"
+    assert run_module._start_local_title_job("x", "existing") is None
+    assert run_module._start_local_title_job("/init", None) is None

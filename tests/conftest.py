@@ -227,6 +227,13 @@ def isolate_workspace_context_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def isolate_local_session_titles(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    # Never download the title model or llama.cpp from tests.
+    monkeypatch.setenv("PBI_AGENT_LOCAL_TITLES", "0")
+    monkeypatch.setenv("PBI_AGENT_TITLE_MODEL_DIR", str(tmp_path / "title-model"))
+
+
+@pytest.fixture(autouse=True)
 def isolate_web_uploads(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setattr(uploads, "_UPLOADS_ROOT", tmp_path / "web_uploads")
 
