@@ -11,6 +11,7 @@ import {
   MessageCircleQuestionMark,
   PanelRightIcon,
   SquareTerminalIcon,
+  ActivityIcon,
 } from "lucide-react";
 import { AppSidebarLayout } from "../AppSidebar";
 import {
@@ -38,6 +39,8 @@ import {
   uploadSavedSessionImages,
 } from "../../api";
 import { BackgroundTasksPanel } from "./BackgroundTasksPanel";
+import { TerminalPanel } from "../terminal/TerminalPanel";
+import { useTerminalStore } from "../terminal/terminalStore";
 import type {
   HistoryItem,
   LiveSession,
@@ -235,9 +238,22 @@ export function SessionPage({
   const composerRef = useRef<ComposerHandle>(null);
   const submitInFlightRef = useRef(false);
   const [directSubmitPending, setDirectSubmitPending] = useState(false);
-  const [sidePanel, setSidePanel] = useState<"files" | "background" | null>(null);
+  const [sidePanel, setSidePanel] = useState<"files" | "background" | "terminal" | null>(
+    () => (useTerminalStore.getState().open ? "terminal" : null),
+  );
   const fileTreeOpen = sidePanel === "files";
   const backgroundPanelOpen = sidePanel === "background";
+  const terminalPanelOpen = sidePanel === "terminal";
+  const terminalRequestedOpen = useTerminalStore((state) => state.open);
+  const setTerminalRequestedOpen = useTerminalStore((state) => state.setOpen);
+  useEffect(() => {
+    if (terminalRequestedOpen) setSidePanel("terminal");
+  }, [terminalRequestedOpen]);
+  useEffect(() => {
+    if (sidePanel !== "terminal" && useTerminalStore.getState().open) {
+      setTerminalRequestedOpen(false);
+    }
+  }, [sidePanel, setTerminalRequestedOpen]);
   const setFileTreeOpen = useCallback(
     (next: boolean | ((current: boolean) => boolean)) => {
       setSidePanel((current) => {
@@ -1258,7 +1274,7 @@ export function SessionPage({
                     onPressedChange={(pressed) =>
                       setSidePanel(pressed ? "background" : null)}
                   >
-                    <SquareTerminalIcon aria-hidden="true" />
+                    <ActivityIcon aria-hidden="true" />
                     {runningBackgroundTaskCount > 0 && !backgroundPanelOpen ? (
                       <span
                         aria-hidden="true"
@@ -1275,6 +1291,27 @@ export function SessionPage({
                 </TooltipContent>
               </Tooltip>
             ) : null}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Toggle
+                  type="button"
+                  variant="default"
+                  size="default"
+                  data-topbar-control="terminal"
+                  pressed={terminalPanelOpen}
+                  aria-label={terminalPanelOpen ? "Close terminal" : "Open terminal"}
+                  aria-expanded={terminalPanelOpen}
+                  aria-controls="terminal-panel"
+                  onPressedChange={(pressed) =>
+                    setSidePanel(pressed ? "terminal" : null)}
+                >
+                  <SquareTerminalIcon aria-hidden="true" />
+                </Toggle>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="end">
+                Terminal
+              </TooltipContent>
+            </Tooltip>
           </div>
           {routeSessionId && !isSubAgentRoute ? (
             <RunHistory
@@ -1512,7 +1549,7 @@ export function SessionPage({
         data-debug-event-cursor={sessionState?.lastEventSeq ?? undefined}
         data-debug-connection={sessionState?.connection ?? undefined}
       >
-        {sidePanel !== null && (fileTreeOpen || !isSubAgentRoute) ? (
+        {sidePanel !== null && (fileTreeOpen || terminalPanelOpen || !isSubAgentRoute) ? (
           <ResizablePanelGroup
             direction="horizontal"
             className="min-h-0 flex-1 overflow-hidden"
@@ -1537,6 +1574,8 @@ export function SessionPage({
                   workspaceKey={workspaceQueryKey}
                   onClose={() => setFileTreeOpen(false)}
                 />
+              ) : terminalPanelOpen ? (
+                <TerminalPanel onClose={() => setSidePanel(null)} />
               ) : (
                 <BackgroundTasksPanel
                   sessionId={routeSessionId ?? sessionState?.sessionId ?? null}
