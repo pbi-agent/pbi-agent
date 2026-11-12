@@ -36,6 +36,6 @@ describe("Badge", () => {
 
     const badge = screen.getByText("claude-opus-4-7-1");
     expect(badge).toHaveAttribute("data-size", "meta");
-    expect(badge).toHaveClass("font-mono", "text-[0.6875rem]", "h-5", "py-0", "leading-5");
+    expect(badge).toHaveClass("font-mono", "text-[0.6875rem]", "h-5", "py-0", "leading-none");
   });
 });
