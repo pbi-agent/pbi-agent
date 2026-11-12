@@ -18,8 +18,10 @@ export function CopyShortcut({
   text,
   ariaLabel = "Copy",
   className,
+  size = "icon-sm",
 }: {
   text: string;
+  size?: "icon-xs" | "icon-sm";
   ariaLabel?: string;
   className?: string;
 }) {
@@ -57,7 +59,7 @@ export function CopyShortcut({
           <Button
             type="button"
             variant="outline"
-            size="icon-sm"
+            size={size}
             className={className}
             aria-label={buttonLabel}
             data-copy-status={status}

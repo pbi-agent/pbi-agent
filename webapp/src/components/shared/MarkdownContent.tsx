@@ -209,8 +209,15 @@ function CopyableSnippet({
       )}
       data-markdown-copyable-snippet={kind}
     >
-      <div className="pointer-events-none absolute top-2 right-2 z-10 flex opacity-0 transition-opacity group-focus-within/snippet:pointer-events-auto group-focus-within/snippet:opacity-100 group-hover/snippet:pointer-events-auto group-hover/snippet:opacity-100">
-        <CopyShortcut text={text} ariaLabel="Copy snippet" />
+      <div className={cn(
+        "pointer-events-none absolute z-10 flex opacity-0 transition-opacity group-focus-within/snippet:pointer-events-auto group-focus-within/snippet:opacity-100 group-hover/snippet:pointer-events-auto group-hover/snippet:opacity-100",
+        kind === "code" ? "top-1 right-1.5" : "top-2 right-2",
+      )}>
+        <CopyShortcut
+          text={text}
+          ariaLabel="Copy snippet"
+          size={kind === "code" ? "icon-xs" : "icon-sm"}
+        />
       </div>
       <CopyableSnippetContext.Provider value>
         {children}
