@@ -33,3 +33,4 @@ Entry shape: rule/fact — why/evidence — `[verified YYYY-MM-DD]` or `[unverif
 
 ### 2026-11-12
 - #393: raw-output notices reference `raw_output_path` instead of repeating the file path; background completion text renders a separate path field. 88 targeted tests + Ruff/format/basedpyright passed.
+- CLI welcome: moved model/reasoning from clipped Rich panel subtitle into wrapping body; regression coverage at 32/80/160 columns. 26 targeted tests + Ruff/format/basedpyright passed.
