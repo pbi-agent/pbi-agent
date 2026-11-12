@@ -129,7 +129,14 @@ class DefaultWebCommandTests(unittest.TestCase):
         mock_display_cls.assert_called_once_with(verbose=False)
         prompt, runtime, display = mock_run.call_args.args
         self.assertEqual(prompt, "Inspect the report")
-        self.assertIs(display, mock_display_cls.return_value)
+        # CLI turns run through the shared web live-session channel: the
+        # console renders while the web display persists the timeline.
+        from pbi_agent.web.display import WebDisplay
+        from pbi_agent.web.session.headless import TeeDisplay
+
+        self.assertIsInstance(display, TeeDisplay)
+        self.assertIsInstance(display._primary, WebDisplay)
+        self.assertIs(display._secondary, mock_display_cls.return_value)
         self.assertEqual(runtime.settings, settings)
         self.assertEqual(runtime.provider_id, "")
         self.assertEqual(runtime.profile_id, "")
