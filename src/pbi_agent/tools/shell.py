@@ -563,6 +563,6 @@ def _build_output_payload(
         if raw_path is not None:
             payload["raw_output_path"] = str(raw_path)
             payload["notice"] = raw_output_notice(
-                raw_path, compressed=compressed, truncated=truncated
+                compressed=compressed, truncated=truncated
             )
     return payload

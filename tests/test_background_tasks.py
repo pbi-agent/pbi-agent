@@ -276,6 +276,8 @@ def test_background_result_includes_raw_output_notice_when_truncated(
     assert "Output truncated. Full raw output saved to" in rendered
     files = list(raw_dir.iterdir())
     assert len(files) == 1
+    assert f"raw_output_path: {files[0]}" in rendered
+    assert rendered.count(str(files[0])) == 1
     assert "a" * size in files[0].read_text(encoding="utf-8")
     assert "earlier output was dropped and cannot be recovered" not in rendered
 
@@ -353,6 +355,8 @@ def test_background_output_payload_reuses_raw_file_for_finished_task(
     )
 
     assert first["raw_output_path"] == second["raw_output_path"]
+    assert first["raw_output_path"] not in first["notice"]
+    assert "raw_output_path" in first["notice"]
     assert len(list(raw_dir.iterdir())) == 1
 
 
@@ -427,3 +431,5 @@ def test_background_task_output_action_separates_tail_dropped_from_truncated(
     assert first["stdout_truncated"] is True
     assert "cannot be recovered" in first["notice"]
     assert first["raw_output_path"] == second["raw_output_path"]
+    assert first["raw_output_path"] not in first["notice"]
+    assert "raw_output_path" in first["notice"]

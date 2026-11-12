@@ -74,7 +74,6 @@ def purge_old_raw_output_files(*, cutoff: datetime, root: Path | None = None) ->
 
 
 def raw_output_notice(
-    path: Path,
     *,
     compressed: bool,
     truncated: bool,
@@ -87,7 +86,7 @@ def raw_output_notice(
     else:
         reason = "Output truncated."
     notice = (
-        f"{reason} Full raw output saved to `{path}`. Read it with shell if you "
+        f"{reason} Full raw output saved to raw_output_path. Read it with shell if you "
         "need the complete content."
     )
     if extra_note:
