@@ -747,7 +747,8 @@ def test_shell_truncated_output_saves_raw_file_with_notice(
     raw_path = Path(result["raw_output_path"])
     assert raw_path.parent == raw_output_dir
     assert raw_path.name.startswith(raw_output.RAW_OUTPUT_PREFIX)
-    assert str(raw_path) in result["notice"]
+    assert str(raw_path) not in result["notice"]
+    assert "raw_output_path" in result["notice"]
     assert result["notice"].startswith("Output truncated.")
     content = raw_path.read_text(encoding="utf-8")
     # The file holds the original, uncompressed, unbounded output.
@@ -791,6 +792,7 @@ def test_shell_compression_truncation_saves_raw_file(
     )
 
     assert result["stderr_truncated"] is True
+    assert result["raw_output_path"] not in result["notice"]
     content = Path(result["raw_output_path"]).read_text(encoding="utf-8")
     assert "raw stdout" in content and "raw stderr" in content
 
@@ -855,6 +857,7 @@ def test_shell_lossy_compression_without_truncation_saves_raw_file(
         "Output compressed (some content summarized or omitted)."
     )
     assert "truncated" not in result["notice"]
+    assert result["raw_output_path"] not in result["notice"]
     content = Path(result["raw_output_path"]).read_text(encoding="utf-8")
     assert content == (
         f"===== stdout =====\n{raw_stdout}\n===== stderr =====\nwarn\n\n"

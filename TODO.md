@@ -1,3 +1,2 @@
-- [x] #199: Add built-in `/status` command and visual session usage report
-- [x] Add command/report regression tests and docs
-- [x] Run relevant Python, frontend, and docs checks
+- [x] #393: Remove duplicated raw-output path from notices, retaining background completion access
+- [x] Update regression tests and run Python validation (88 tests, Ruff, basedpyright)

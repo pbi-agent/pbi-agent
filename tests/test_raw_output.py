@@ -102,8 +102,8 @@ def test_raw_output_notice_reason(
     compressed: bool, truncated: bool, prefix: str
 ) -> None:
     notice = raw_output.raw_output_notice(
-        Path("/x/f.log"), compressed=compressed, truncated=truncated, extra_note="N."
+        compressed=compressed, truncated=truncated, extra_note="N."
     )
     assert notice.startswith(prefix)
-    assert "`/x/f.log`" in notice
+    assert "Full raw output saved to raw_output_path." in notice
     assert notice.endswith(" N.")

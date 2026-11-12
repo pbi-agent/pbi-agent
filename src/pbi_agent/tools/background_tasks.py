@@ -442,6 +442,8 @@ def render_background_result(task: BackgroundTask) -> str:
     if payload["stderr"]:
         lines.append("stderr:")
         lines.append(payload["stderr"])
+    if payload.get("raw_output_path"):
+        lines.append(f"raw_output_path: {payload['raw_output_path']}")
     if payload.get("notice"):
         lines.append(payload["notice"])
     lines.append(f"</{BACKGROUND_RESULT_TAG}>")
@@ -507,7 +509,6 @@ def background_output_payload(
     if task.raw_output_path is not None:
         payload["raw_output_path"] = str(task.raw_output_path)
         payload["notice"] = raw_output_notice(
-            task.raw_output_path,
             compressed=compressed,
             truncated=truncated,
             extra_note=tail_note,
