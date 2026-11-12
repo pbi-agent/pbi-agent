@@ -49,3 +49,5 @@ Entry shape: rule/fact — why/evidence — `[verified YYYY-MM-DD]` or `[unverif
 - Follow-up delivery menu items: `items-start`→`items-center` so label/badge no longer hug the top edge (looked cropped). Lint forbids padding/gap on Button. Web tests/lint/types/build green.
 - Tool-card `meta` badge text 1px low: leading-5 (20px) in h-5 box with 1px borders → leading-none. Web tests/lint/types/build green.
 - Meta badge text still sat high (measured in headless Chromium: ~1px more space below than above for lowercase/cap text in mono fonts). Fix: `pt-px pb-0` on `size="meta"`. Wrapping text in a `text-box` trim span breaks 16 `getByText(...).toHaveAttribute` tests, so not used. Web tests/lint/types/build green.
+- Released v0.53.0 (#407, PRs #402–#406); all validation green, Release run published PyPI + GitHub Release.
+- Capped requires-python to >=3.12,<3.15 (PyYAML has no 3.15 Windows wheels → uv tool install failed needing MSVC); relocked.
