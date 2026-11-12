@@ -132,3 +132,15 @@ def test_terminal_rejects_cross_origin(app) -> None:
             "/api/terminals/ws", headers={"origin": "http://evil.example"}
         ) as ws:
             ws.receive_text()
+
+
+def test_uvicorn_websocket_backend_is_installed() -> None:
+    """The web terminal needs a WebSocket protocol for plain (non-[standard]) uvicorn."""
+    import importlib.util
+
+    from uvicorn.config import Config
+
+    assert importlib.util.find_spec("websockets") is not None
+    config = Config(app="pbi_agent.web.serve:app", ws="auto")
+    config.load()
+    assert config.ws_protocol_class is not None

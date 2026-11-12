@@ -51,3 +51,5 @@ Entry shape: rule/fact — why/evidence — `[verified YYYY-MM-DD]` or `[unverif
 - Meta badge text still sat high (measured in headless Chromium: ~1px more space below than above for lowercase/cap text in mono fonts). Fix: `pt-px pb-0` on `size="meta"`. Wrapping text in a `text-box` trim span breaks 16 `getByText(...).toHaveAttribute` tests, so not used. Web tests/lint/types/build green.
 - Released v0.53.0 (#407, PRs #402–#406); all validation green, Release run published PyPI + GitHub Release.
 - Capped requires-python to >=3.12,<3.15 (PyYAML has no 3.15 Windows wheels → uv tool install failed needing MSVC); relocked.
+- Released v0.54.0 (#409, PR #408 Python <3.15 cap); validation green, Release run published PyPI + GitHub Release.
+- Dropped uvicorn[standard] → uvicorn + websockets==17.4 (removes pyyaml/uvloop/httptools/watchfiles) and removed <3.15 requires-python cap; regression test asserts uvicorn WS backend loads. Full suite (minus pre-existing failing test_lost_manager_lease_rejects_new_live_sessions, fails on clean tree) + Ruff/format/basedpyright green.
