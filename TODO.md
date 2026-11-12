@@ -15,3 +15,6 @@
 - [x] Run full Python suite for release-workflow regression fix (passed).
 
 - [x] Release v0.56.0 (#413, PR #412 Windows ConPTY terminal): validated, merged, PyPI + GitHub Release published
+
+- [x] Badge text vertical centering across the web UI (cap-height trimmed label span; unlayered meta CSS override removed); 751 web tests, lint, typecheck, build, headless Chromium geometry + pixel checks.
+- [ ] Badge centering: expanded tool-result cards (`ToolResult`/`GitDiffResult` badges) not exercised in the browser run; Firefox without `text-box` support falls back to plain flex centering.

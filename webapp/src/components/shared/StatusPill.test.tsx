@@ -17,13 +17,13 @@ describe("StatusPill", () => {
   it.each(cases)("maps %s to the %s Badge variant", (status, variant) => {
     render(<StatusPill status={status} />);
 
-    expect(screen.getByText(status)).toHaveAttribute("data-variant", variant);
+    expect(screen.getByText(status).closest('[data-slot="badge"]')).toHaveAttribute("data-variant", variant);
   });
 
   it("can render with shared metadata badge sizing", () => {
     render(<StatusPill status="started" size="meta" />);
 
-    const status = screen.getByText("started");
+    const status = screen.getByText("started").closest('[data-slot="badge"]');
     expect(status).toHaveAttribute("data-variant", "running");
     expect(status).toHaveAttribute("data-size", "meta");
   });
@@ -31,7 +31,7 @@ describe("StatusPill", () => {
   it("can render custom text with the mapped status styling", () => {
     render(<StatusPill status="completed">ok</StatusPill>);
 
-    const status = screen.getByText("ok");
+    const status = screen.getByText("ok").closest('[data-slot="badge"]');
     expect(status).toHaveAttribute("data-variant", "completed");
     expect(status).not.toHaveTextContent("completed");
   });

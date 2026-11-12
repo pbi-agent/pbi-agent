@@ -162,7 +162,7 @@ describe("RunHistory", () => {
 
     await user.click(await screen.findByRole("button", { name: /run history/i }));
 
-    const status = await screen.findByText("completed");
+    const status = (await screen.findByText("completed")).closest('[data-slot="badge"]');
     expect(status).toHaveAttribute("data-variant", "completed");
     expect(status).toHaveAttribute("data-size", "meta");
   });

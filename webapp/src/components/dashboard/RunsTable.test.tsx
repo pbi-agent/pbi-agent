@@ -63,13 +63,13 @@ describe("RunsTable", () => {
   it("uses the shared app status badge styling for run statuses", async () => {
     renderWithProviders(<RunsTable scope="workspace" />);
 
-    const status = await screen.findByText("started", {
-      selector: "[data-slot='badge']",
-    });
+    const status = (
+      await screen.findByText("started", { selector: "[data-slot='badge-label']" })
+    ).closest("[data-slot='badge']");
 
     expect(status).toHaveAttribute("data-variant", "running");
     expect(status).toHaveAttribute("data-size", "meta");
-    expect(status.closest("[data-run-id]")).toHaveAttribute("data-run-id", "run-1");
+    expect(status?.closest("[data-run-id]")).toHaveAttribute("data-run-id", "run-1");
   });
 
   it("loads filter options from the distinct database values endpoint", async () => {

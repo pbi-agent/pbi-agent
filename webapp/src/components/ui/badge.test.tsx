@@ -7,7 +7,7 @@ describe("Badge", () => {
     (variant) => {
       render(<Badge variant={variant}>{variant}</Badge>);
 
-      expect(screen.getByText(variant)).toHaveAttribute("data-variant", variant);
+      expect(screen.getByText(variant).closest('[data-slot="badge"]')).toHaveAttribute("data-variant", variant);
     },
   );
 
@@ -16,7 +16,7 @@ describe("Badge", () => {
     (variant) => {
       render(<Badge variant={variant}>{variant}</Badge>);
 
-      expect(screen.getByText(variant).querySelector('[data-slot="badge-dot"]')).toBeInTheDocument();
+      expect(screen.getByText(variant).closest('[data-slot="badge"]')?.querySelector('[data-slot="badge-dot"]')).toBeInTheDocument();
     },
   );
 
@@ -34,8 +34,8 @@ describe("Badge", () => {
   it("supports the compact metadata size", () => {
     render(<Badge variant="secondary" size="meta">claude-opus-4-7-1</Badge>);
 
-    const badge = screen.getByText("claude-opus-4-7-1");
+    const badge = screen.getByText("claude-opus-4-7-1").closest('[data-slot="badge"]');
     expect(badge).toHaveAttribute("data-size", "meta");
-    expect(badge).toHaveClass("font-mono", "text-[0.6875rem]", "h-5", "pt-px", "pb-0", "leading-none");
+    expect(badge).toHaveClass("font-mono", "text-[0.6875rem]", "h-6", "py-0", "leading-none");
   });
 });
