@@ -99,7 +99,7 @@ When user asks to continue, merge, or publish existing release workflow:
 12. Stage only release-scoped paths and inspect `git diff --cached`.
 13. Commit `chore: release v<version>`.
 14. Push branch and open release PR against `master`.
-15. Verify PR checks/status, merge, then follow `release-writing` Publish Mode: confirm the single `Release` workflow run (PyPI publish + GitHub Release/tag), strip frontmatter from release notes if needed, and report publish status.
+15. Verify PR checks/status, merge, then follow `release-writing` Publish Mode: confirm the single `Release` workflow run (PyPI publish + GitHub Release/tag), verify the release body starts with `# v<version>` (the workflow strips frontmatter; edit manually only if it is still malformed), and report publish status.
 
 ## PR content
 

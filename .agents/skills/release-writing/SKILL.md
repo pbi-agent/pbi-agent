@@ -112,9 +112,9 @@ Only after explicit user approval and clean checks:
 2. Merge release PR into `master` using `gh pr merge` when branch protection permits.
 3. Wait for `.github/workflows/release.yml` or inspect with `gh run list --workflow Release`.
 4. Confirm `gh release view v<version> --json body,url` exists and inspect the release body formatting before reporting success:
-   - Body must not start with VitePress frontmatter (`---`).
-   - Body should start with `# v<version>` and include the expected release sections.
-   - If malformed or generic, update from a frontmatter-stripped changelog draft with `gh release edit v<version> --notes-file <file>` and re-check the body.
+   - The `Release` workflow strips VitePress frontmatter from `docs/changelog/v<version>.md`, appends `Full changelog: ...`, and fails before the PyPI upload unless the body starts with `# v<version>`.
+   - Still verify: body must not start with `---`, should start with `# v<version>`, and include the expected sections.
+   - Fallback only if malformed or generic: update from a frontmatter-stripped changelog draft with `gh release edit v<version> --notes-file <file>` and re-check the body.
 5. Confirm the same `Release` run's **Publish to PyPI** step succeeded (`gh run view <run-id> --json jobs`).
 6. If the run failed, retry with `gh workflow run release.yml --ref master -f version=<version>`; never rerun an old-SHA run. PyPI CDN lags; verify instead of republishing.
 7. Report separate states:

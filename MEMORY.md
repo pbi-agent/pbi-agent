@@ -41,3 +41,4 @@ Entry shape: rule/fact — why/evidence — `[verified YYYY-MM-DD]` or `[unverif
 - Bash snippet header: Run pinned top-right, hover-revealed copy shortcut inline to its left (non-shell snippets keep floating copy). Web tests/lint/types/build green.
 - /review fixes: terminal WS now requires trusted Host (IP literal/localhost or `--url` host) to block DNS rebinding; manager prunes exited detached terminals. Terminal+serve tests, Ruff/format/basedpyright green.
 - Background tasks topbar toggle icon: `ActivityIcon` → `LayersIcon` (SessionPage). Web tests/lint/typecheck/build green.
+- Release workflow: draft step now strips VitePress frontmatter from `docs/changelog/v<version>.md` into `$RUNNER_TEMP` notes (+ `Full changelog:` line), fails pre-PyPI unless body starts `# v<version>`, and refreshes notes on reused drafts. awk tested on v0.52.0/v0.51.0/v0.9.0; YAML parses. Release skill/command updated.

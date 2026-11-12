@@ -181,7 +181,23 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          NOTES_FILE="docs/changelog/v$VERSION.md"
+          CHANGELOG_FILE="docs/changelog/v$VERSION.md"
+          NOTES_FILE="$RUNNER_TEMP/release-notes-v$VERSION.md"
+
+          # Strip VitePress frontmatter and leading blank lines so the release body starts at "# v<version>".
+          {
+            awk '
+              NR == 1 && $0 == "---" { in_fm = 1; next }
+              in_fm { if ($0 == "---") in_fm = 0; next }
+              !started && $0 ~ /^[[:space:]]*$/ { next }
+              { started = 1; print }
+            ' "$CHANGELOG_FILE"
+            printf '\nFull changelog: %s\n' "$CHANGELOG_FILE"
+          } > "$NOTES_FILE"
+          if [ "$(head -n 1 "$NOTES_FILE")" != "# v$VERSION" ]; then
+            echo "Release notes must start with '# v$VERSION' after frontmatter is stripped." >&2
+            exit 1
+          fi
 
           release_target="$(gh release view "$TAG" --json targetCommitish --jq .targetCommitish 2>/dev/null || true)"
           release_is_draft="$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || true)"
@@ -253,6 +269,7 @@ jobs:
 
           if [ "$release_is_draft" = "true" ]; then
             echo "Reusing draft release $TAG for $GITHUB_SHA."
+            gh release edit "$TAG" --notes-file "$NOTES_FILE"
           else
             gh release create "$TAG" \
               --target "$GITHUB_SHA" \
