@@ -1693,7 +1693,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               variant={index === followUpSelectedIndex ? "secondary" : "ghost"}
               role="menuitem"
               data-active={index === followUpSelectedIndex ? "" : undefined}
-              className="h-auto min-h-14 w-full shrink-0 items-start justify-between text-left whitespace-normal"
+              className="h-auto min-h-14 w-full shrink-0 items-center justify-between text-left whitespace-normal"
               disabled={!canDraftFollowUp}
               onMouseDown={(event) => {
                 event.preventDefault();
