@@ -1895,6 +1895,19 @@ class SessionStore:
             self._conn.execute(sql, params)
             self._conn.commit()
 
+    def replace_session_title(
+        self, session_id: str, *, expected: str, title: str
+    ) -> bool:
+        """Atomically set ``title`` only while the current title is ``expected``."""
+        with self._lock:
+            cursor = self._conn.execute(
+                "UPDATE sessions SET title = ?, updated_at = ? "
+                "WHERE session_id = ? AND title = ?",
+                (title, _now_iso(), session_id, expected),
+            )
+            self._conn.commit()
+        return cursor.rowcount > 0
+
     def get_session(self, session_id: str) -> SessionRecord | None:
         with self._lock:
             row = self._conn.execute(

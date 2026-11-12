@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import logging
 import threading
 import uuid
 from pathlib import Path
 from typing import Any
 
+from pbi_agent import session_titles
 from pbi_agent.agent.error_formatting import format_user_facing_error
 from pbi_agent.agent.session import (
     COMPACT_COMMAND,
@@ -55,6 +57,8 @@ from pbi_agent.web.uploads import (
 )
 
 _LOCAL_COMMANDS = TEMPORARY_LOCAL_COMMANDS | {COMPACT_COMMAND}
+
+_log = logging.getLogger(__name__)
 
 
 class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
@@ -502,6 +506,36 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
                 "session_updated",
                 {"session": _serialize_session(updated)},
             )
+        if session_titles.is_ready() and not text.lstrip().startswith("/"):
+            threading.Thread(
+                target=self._apply_local_session_title,
+                args=(session_id, text, title),
+                daemon=True,
+                name="pbi-agent-web-session-title",
+            ).start()
+
+    def _apply_local_session_title(
+        self, session_id: str, text: str, placeholder: str
+    ) -> None:
+        """Replace the truncated first-message title with a generated one,
+        unless the session was renamed or removed in the meantime."""
+        try:
+            title = session_titles.generate_title(text)
+            if not title or title == placeholder:
+                return
+            with SessionStore() as store:
+                if not store.replace_session_title(
+                    session_id, expected=placeholder, title=title
+                ):
+                    return
+                updated = store.get_session(session_id)
+            if updated is not None:
+                self._app_stream.publish(
+                    "session_updated",
+                    {"session": _serialize_session(updated)},
+                )
+        except Exception:
+            _log.debug("Local session title failed", exc_info=True)
 
     def submit_question_response(
         self,
