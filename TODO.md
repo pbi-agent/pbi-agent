@@ -18,3 +18,8 @@
 
 - [x] Badge text vertical centering across the web UI (cap-height trimmed label span; unlayered meta CSS override removed); 751 web tests, lint, typecheck, build, headless Chromium geometry + pixel checks.
 - [ ] Badge centering: expanded tool-result cards (`ToolResult`/`GitDiffResult` badges) not exercised in the browser run; Firefox without `text-box` support falls back to plain flex centering.
+
+- [x] Sidebar session title tooltip when truncated; session title breadcrumb in topbar when sidebar is collapsed; fade-in when a generated title replaces the placeholder; no topbar overlap with right panels open (754 web tests, lint, typecheck, build, headless Chromium at 1440/1205/1000/800).
+- [ ] Topbar session title is hidden when the topbar is narrower than 36rem (phones, narrow split with a right panel); title animation still plays on a rename made elsewhere (other tab/CLI), since the frontend cannot tell who changed the title.
+- [x] Code-review fixes for session-title UI (8 of 10 findings; 761 web tests, lint, typecheck, build, headless Chromium).
+- [ ] Keyboard focus on a clipped sidebar title that also scrolls the list into view showed no tooltip in one headless run (row 14); cause not confirmed.

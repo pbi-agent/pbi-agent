@@ -20,6 +20,7 @@ import { Input } from "../ui/input";
 import { Kbd } from "../ui/kbd";
 import { Skeleton } from "../ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { TruncatedText } from "../TruncatedText";
 import { EmptyState } from "../shared/EmptyState";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { SidebarSearchField } from "./SidebarSearchField";
@@ -239,9 +240,13 @@ export function SessionSidebar({
                           onResumeSession(session.session_id);
                         }}
                       >
-                        <span className="block w-full min-w-0 truncate text-sm font-medium text-foreground group-hover/session:pr-7 group-data-active/session:text-primary group-data-menu-open/session:pr-7">
+                        <TruncatedText
+                          tooltipSide="right"
+                          transitionKey={session.title ? session.session_id : undefined}
+                          className="block w-full text-sm font-medium text-foreground group-hover/session:pr-7 group-data-active/session:text-primary group-data-menu-open/session:pr-7"
+                        >
                           {session.title || "Untitled session"}
-                        </span>
+                        </TruncatedText>
                         <div className="flex min-w-0 items-center justify-start gap-2 text-xs text-muted-foreground">
                           <time className="inline-flex min-h-6 items-center whitespace-nowrap">{formatDate(session.updated_at)}</time>
                           {isProcessing ? (
