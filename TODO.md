@@ -1,1 +1,3 @@
 - [ ] Include `/status` session usage dashboard (PR #392, merged 4998e974 on master after v0.51.0) in next release (v0.52.0)
+- [x] Web terminal tab (PTY over WebSocket), Run-in-terminal for bash snippets, background-tasks icon → ActivityIcon
+- [ ] Web terminal: Windows uses pipes (no PTY) — interactive prompts limited; consider pywinpty

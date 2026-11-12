@@ -12,6 +12,12 @@ import remarkGfm from "remark-gfm";
 import { CodeBlock } from "@/components/ui/code-block";
 import { cn } from "@/lib/utils";
 import { CopyShortcut } from "./CopyShortcut";
+import { PlayIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  SHELL_SNIPPET_LANGUAGES,
+  useTerminalStore,
+} from "@/components/terminal/terminalStore";
 
 const CopyableSnippetContext = createContext(false);
 
@@ -191,10 +197,12 @@ function CopyableSnippet({
   children,
   kind,
   text,
+  inlineCopy = false,
 }: {
   children: ReactNode;
   kind: SnippetKind;
   text: string;
+  inlineCopy?: boolean;
 }) {
   const insideCopyableSnippet = useContext(CopyableSnippetContext);
   if (insideCopyableSnippet || text.trim().length === 0) {
@@ -209,7 +217,7 @@ function CopyableSnippet({
       )}
       data-markdown-copyable-snippet={kind}
     >
-      <div className={cn(
+      {inlineCopy ? null : <div className={cn(
         "pointer-events-none absolute z-10 flex opacity-0 transition-opacity group-focus-within/snippet:pointer-events-auto group-focus-within/snippet:opacity-100 group-hover/snippet:pointer-events-auto group-hover/snippet:opacity-100",
         kind === "code" ? "top-1 right-1.5" : "top-2 right-2",
       )}>
@@ -218,11 +226,29 @@ function CopyableSnippet({
           ariaLabel="Copy snippet"
           size={kind === "code" ? "icon-xs" : "icon-sm"}
         />
-      </div>
+      </div>}
       <CopyableSnippetContext.Provider value>
         {children}
       </CopyableSnippetContext.Provider>
     </div>
+  );
+}
+
+function RunInTerminalButton({ command }: { command: string }) {
+  const runCommand = useTerminalStore((state) => state.runCommand);
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="xs"
+      aria-label="Run snippet in terminal"
+      title="Run in terminal"
+      data-run-in-terminal=""
+      onClick={() => runCommand(command)}
+    >
+      <PlayIcon data-icon="inline-start" aria-hidden="true" />
+      Run
+    </Button>
   );
 }
 
@@ -234,15 +260,29 @@ function MarkdownCodeSnippet({
   text: string;
 }) {
   const languageLabel = language ?? "text";
+  const runnable = language !== undefined && SHELL_SNIPPET_LANGUAGES.has(language);
   return (
-    <CopyableSnippet kind="code" text={text}>
+    <CopyableSnippet kind="code" text={text} inlineCopy={runnable}>
       <div
         className="overflow-hidden rounded-md border border-border bg-muted"
         data-markdown-code-snippet
         data-language={languageLabel}
       >
-        <div className="flex min-h-8 items-center border-b border-border py-2 pr-10 pl-3">
+        <div
+          className={cn(
+            "flex min-h-8 items-center gap-2 border-b border-border py-1 pl-3",
+            runnable ? "pr-1.5" : "pr-10",
+          )}
+        >
           <span className="font-mono text-xs text-muted-foreground" data-markdown-code-language>{languageLabel}</span>
+          {runnable ? (
+            <div className="ml-auto flex items-center gap-1">
+              <div className="pointer-events-none flex opacity-0 transition-opacity group-focus-within/snippet:pointer-events-auto group-focus-within/snippet:opacity-100 group-hover/snippet:pointer-events-auto group-hover/snippet:opacity-100">
+                <CopyShortcut text={text} ariaLabel="Copy snippet" size="icon-xs" />
+              </div>
+              <RunInTerminalButton command={text} />
+            </div>
+          ) : null}
         </div>
         <CodeBlock value={text} language={language} variant="markdown" />
       </div>

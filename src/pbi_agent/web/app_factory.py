@@ -22,8 +22,10 @@ from pbi_agent.web.api import (
     stt_router,
     system_router,
     tasks_router,
+    terminals_router,
 )
 from pbi_agent.web.session_manager import APP_EVENT_STREAM_ID, WebWorkspaceCoordinator
+from pbi_agent.web.terminal import TerminalManager
 
 WEB_DIR = Path(__file__).resolve().parent
 APP_STATIC_DIR = WEB_DIR / "static" / "app"
@@ -39,6 +41,7 @@ def create_app(
     public_url: str | None = None,
 ) -> FastAPI:
     manager = WebWorkspaceCoordinator(settings, runtime_args=runtime_args)
+    terminals = TerminalManager(lambda: manager.workspace_root)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -53,6 +56,7 @@ def create_app(
         except asyncio.CancelledError:
             pass
         finally:
+            terminals.shutdown()
             manager.shutdown()
 
     app = FastAPI(
@@ -63,6 +67,7 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.manager = manager
+    app.state.terminals = terminals
     app.state.sse_shutdown_event = asyncio.Event()
     app.state.public_url = public_url
     app.state.debug = debug
@@ -110,6 +115,7 @@ def create_app(
     app.include_router(board_router)
     app.include_router(stt_router)
     app.include_router(events_router)
+    app.include_router(terminals_router)
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI route handler

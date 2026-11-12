@@ -8,6 +8,7 @@ from .routers import (
     stt_router,
     system_router,
     tasks_router,
+    terminals_router,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "stt_router",
     "system_router",
     "tasks_router",
+    "terminals_router",
 ]

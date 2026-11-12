@@ -9,6 +9,7 @@ from .routes.provider_auth import router as provider_auth_router
 from .routes.stt import router as stt_router
 from .routes.system import router as system_router
 from .routes.tasks import router as tasks_router
+from .routes.terminals import router as terminals_router
 
 __all__ = [
     "board_router",
@@ -20,4 +21,5 @@ __all__ = [
     "stt_router",
     "system_router",
     "tasks_router",
+    "terminals_router",
 ]
