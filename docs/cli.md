@@ -192,6 +192,34 @@ sub_agents: confidence-checker,fixer
 
 `allowed_tools` accepts comma-separated built-in tool groups: `read-image`, `write`, `web`, `sub-agent`, and `shell`. `skills`, `commands`, and `sub_agents` are comma-separated scalar lists. See [Project Sub-agents](/customization/sub-agents). Public agent catalogs are discovered from `agents/*.md` by default. If a repository keeps agent files under `.agents/agents/`, target that directory explicitly with a local path or GitHub tree URL.
 
+## `pbi-agent kits`
+
+Install a kit: a packaged setup of skills, commands, sub-agents, MCP servers, and instructions. See [Kits](/customization/kits).
+
+```bash
+pbi-agent kits add
+pbi-agent kits add --kit coding
+pbi-agent kits add --kit coding --list
+pbi-agent kits add owner/repo
+pbi-agent kits add ./kits/powerbi --force
+```
+
+### `pbi-agent kits add [source]`
+
+Copies the kit into the current workspace once: skills, commands, and sub-agents into `.agents/`, MCP servers merged into `.agents/mcp.json`, and instructions appended to `AGENTS.md`. Items that already exist are kept unless `--force` is set.
+
+- Omitting `source` uses the official `pbi-agent/kits` catalog from `https://github.com/pbi-agent/kits`.
+- `pbi-agent kits add` lists the official catalog and exits.
+- `pbi-agent kits add --kit NAME` installs one named kit from the selected catalog.
+- A source without a `kits/` directory is installed as a single kit.
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `source` | `pbi-agent/kits` when omitted | Local directory, GitHub `owner/repo`, GitHub repository URL, or GitHub tree URL. |
+| `--kit NAME` | none | Select one kit from a catalog that holds several kits. |
+| `--list` | `false` | List the kits in a catalog, or show what one kit would install, without writing anything. |
+| `--force` | `false` | Replace existing items that the kit also provides. |
+
 ## `pbi-agent init`
 
 Create a starter `AGENTS.md` with project guidance in the current workspace.

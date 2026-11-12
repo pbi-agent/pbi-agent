@@ -786,6 +786,57 @@ def build_parser() -> argparse.ArgumentParser:
         help="Replace an existing local project agent install.",
     )
 
+    kits_parser = add_command_parser(
+        "kits",
+        "Install kits: packaged skills, commands, sub-agents, MCP servers, "
+        "and instructions.",
+    )
+    kits_subparsers = kits_parser.add_subparsers(
+        dest="kits_action",
+        required=True,
+        metavar="<action>",
+    )
+    kits_add_parser = kits_subparsers.add_parser(
+        "add",
+        prog="pbi-agent kits add",
+        description=(
+            "Copy a kit from the official catalog, a local directory, or a GitHub "
+            "repository into the current workspace: skills, commands, and "
+            "sub-agents into .agents/, MCP servers into .agents/mcp.json, and "
+            "instructions into AGENTS.md."
+        ),
+        help="Install a kit into the current workspace.",
+        formatter_class=CleanHelpFormatter,
+    )
+    kits_add_parser.add_argument(
+        "source",
+        nargs="?",
+        default=None,
+        help=(
+            "Optional source. Omit to use the official pbi-agent/kits catalog. "
+            "Supports local directories, owner/repo, repository URLs, and tree "
+            "URLs."
+        ),
+    )
+    kits_add_parser.add_argument(
+        "--kit",
+        default=None,
+        help="Select one kit from a catalog that holds several kits.",
+    )
+    kits_add_parser.add_argument(
+        "--list",
+        action="store_true",
+        help=(
+            "List the kits in a catalog, or show what one kit would install, "
+            "without writing anything."
+        ),
+    )
+    kits_add_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Replace existing items that the kit also provides.",
+    )
+
     config_parser = add_command_parser(
         "config", "Manage saved providers and model profiles."
     )

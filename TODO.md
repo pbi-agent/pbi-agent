@@ -23,3 +23,7 @@
 - [ ] Topbar session title is hidden when the topbar is narrower than 36rem (phones, narrow split with a right panel); title animation still plays on a rename made elsewhere (other tab/CLI), since the frontend cannot tell who changed the title.
 - [x] Code-review fixes for session-title UI (8 of 10 findings; 761 web tests, lint, typecheck, build, headless Chromium).
 - [ ] Keyboard focus on a clipped sidebar title that also scrolls the list into view showed no tooltip in one headless run (row 14); cause not confirmed.
+
+- [x] #169 kits: `pbi-agent kits add <source> [--list] [--force]` one-shot copy of skills/commands/agents/MCP servers/instructions; docs + 8 tests.
+- [x] #169 kits: default catalog `pbi-agent/kits` (public repo created, kits `coding`, `powerbi`, `research`, `customize`), `--kit NAME`, catalog listing; live-tested against GitHub.
+- [ ] #169 kits follow-ups (not built): no web UI/`/kits`; hooks and Python extensions not packaged; no kit ships MCP servers yet; kit files in `pbi-agent/kits` are copies of the skills/commands/agents catalogs and need manual re-sync.

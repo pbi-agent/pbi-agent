@@ -134,6 +134,7 @@ export default defineConfig({
               { text: 'Hooks', link: '/customization/hooks' },
               { text: 'Workspace Reload', link: '/customization/reload' },
               { text: 'MCP Servers', link: '/customization/mcp' },
+              { text: 'Kits', link: '/customization/kits' },
               { text: 'File Constraints', link: '/customization/file-constraints' }
             ]
           },

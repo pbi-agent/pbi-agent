@@ -274,8 +274,12 @@ def test_mcp_http_real_sdk_requests_and_cleanup(
     requests: list[httpx.Request] = []
     clients: list[httpx.AsyncClient] = []
     if failure and failure.startswith("timeout:"):
-        monkeypatch.setattr("pbi_agent.mcp.pool.MCP_CONNECT_TIMEOUT_SECONDS", 0.1)
-        monkeypatch.setattr("pbi_agent.mcp.pool.MCP_CALL_TOOL_TIMEOUT_SECONDS", 0.1)
+        # Shorten only the timeout under test: a 0.1 s connect timeout on a
+        # healthy startup is lost to a GC pause in a full-suite run.
+        if failure.endswith("tools/call"):
+            monkeypatch.setattr("pbi_agent.mcp.pool.MCP_CALL_TOOL_TIMEOUT_SECONDS", 0.1)
+        else:
+            monkeypatch.setattr("pbi_agent.mcp.pool.MCP_CONNECT_TIMEOUT_SECONDS", 0.1)
 
     async def respond(request: httpx.Request) -> httpx.Response:
         requests.append(request)

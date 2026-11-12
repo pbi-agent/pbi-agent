@@ -191,6 +191,41 @@ def _handle_agents_add_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_kits_command(args: argparse.Namespace) -> int:  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint
+    from pbi_agent.kits.installer import (
+        DEFAULT_KITS_SOURCE,
+        KitInstallError,
+        KitSelectionRequiredError,
+        install_kit,
+        render_kit_listing,
+        render_kit_result,
+    )
+
+    if args.kits_action != "add":
+        print(f"Error: unknown kits action {args.kits_action!r}", file=sys.stderr)
+        return 2
+
+    # `kits add` alone browses the official catalog; nothing is installed.
+    list_only = args.list or (args.source is None and args.kit is None)
+    try:
+        result = install_kit(
+            args.source or DEFAULT_KITS_SOURCE,
+            kit_name=args.kit,
+            force=args.force,
+            dry_run=list_only,
+            workspace=Path.cwd().resolve(),
+        )
+    except KitSelectionRequiredError as exc:
+        if list_only:
+            return render_kit_listing(exc.listing)
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    except KitInstallError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    return render_kit_result(result)
+
+
 def _handle_mcp_flag(args: argparse.Namespace) -> int:  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint
     from rich.console import Console
     from rich.table import Table
