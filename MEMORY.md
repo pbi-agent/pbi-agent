@@ -15,7 +15,6 @@ Entry shape: rule/fact — why/evidence — `[verified YYYY-MM-DD]` or `[unverif
 - ChatGPT/Copilot: never replay `reasoning_text`+`reasoning_opaque` on tool-call messages (422). See `providers.md`.
 
 ## Open Follow-Ups
-- Release: `/status` usage dashboard (PR #392, 4998e974) is on master but not in v0.51.0; ship in next release. [verified 2026-11-12]
 - Follow-ups: post-delivery interrupt removes the accepted live user item; accepted steers should stay. (`web.md`)
 - ChatGPT continuation: live-unverified recovered-ID reuse, delayed/encrypted-reasoning recovery, proactive replay. (`providers.md`)
 - Packaging: transitive security minima are lock-only, not in published runtime metadata. (`tooling.md`)
