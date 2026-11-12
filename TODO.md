@@ -1,2 +1,3 @@
-- [x] #393: Remove duplicated raw-output path from notices, retaining background completion access
-- [x] Update regression tests and run Python validation (88 tests, Ruff, basedpyright)
+- [x] Fix CLI welcome model truncation with wrapping metadata
+- [x] Add regression coverage (26 targeted tests passed)
+- [x] Run Python static validation (Ruff check/format and basedpyright passed)
