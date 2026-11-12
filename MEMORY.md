@@ -41,3 +41,4 @@ Entry shape: rule/fact — why/evidence — `[verified YYYY-MM-DD]` or `[unverif
 - Snippet Run button: ghost→outline variant (ghost hover = bg-muted, invisible on muted snippet header; lint forbids Button color overrides). Web tests/lint/types/build green.
 - Bash snippet header: Run pinned top-right, hover-revealed copy shortcut inline to its left (non-shell snippets keep floating copy). Web tests/lint/types/build green.
 - /review fixes: terminal WS now requires trusted Host (IP literal/localhost or `--url` host) to block DNS rebinding; manager prunes exited detached terminals. Terminal+serve tests, Ruff/format/basedpyright green.
+- Background tasks topbar toggle icon: `ActivityIcon` → `LayersIcon` (SessionPage). Web tests/lint/typecheck/build green.
