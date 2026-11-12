@@ -2502,15 +2502,15 @@ describe("SettingsPage", () => {
 
     expect(
       within(openAiCard as HTMLElement).getByText("Model profiles"),
-    ).toHaveAttribute("data-slot", "badge");
+    ).toHaveAttribute("data-slot", "badge-label");
     expect(within(openAiCard as HTMLElement).getByText("STT")).toHaveAttribute(
       "data-slot",
-      "badge",
+      "badge-label",
     );
 
     expect(
       within(chatGptCard as HTMLElement).getByText("Model profiles"),
-    ).toHaveAttribute("data-slot", "badge");
+    ).toHaveAttribute("data-slot", "badge-label");
     expect(
       within(chatGptCard as HTMLElement).queryByText("STT"),
     ).not.toBeInTheDocument();
@@ -2520,14 +2520,14 @@ describe("SettingsPage", () => {
     ).not.toBeInTheDocument();
     expect(
       within(elevenLabsCard as HTMLElement).getByText("STT"),
-    ).toHaveAttribute("data-slot", "badge");
+    ).toHaveAttribute("data-slot", "badge-label");
     expect(
       within(elevenLabsCard as HTMLElement).queryByText("STT-only"),
     ).not.toBeInTheDocument();
 
     expect(
       within(xaiAccountCard as HTMLElement).getByText("Model profiles"),
-    ).toHaveAttribute("data-slot", "badge");
+    ).toHaveAttribute("data-slot", "badge-label");
     expect(
       within(xaiAccountCard as HTMLElement).queryByText("STT"),
     ).not.toBeInTheDocument();
@@ -2570,10 +2570,10 @@ describe("SettingsPage", () => {
     ).not.toBeInTheDocument();
     expect(
       within(deepgramOption as HTMLElement).getByText("STT"),
-    ).toHaveAttribute("data-slot", "badge");
+    ).toHaveAttribute("data-slot", "badge-label");
     expect(
       within(elevenLabsOption as HTMLElement).getByText("STT"),
-    ).toHaveAttribute("data-slot", "badge");
+    ).toHaveAttribute("data-slot", "badge-label");
   });
 
   it("disables adding model profiles when only STT-only providers exist", async () => {
@@ -2639,9 +2639,9 @@ describe("SettingsPage", () => {
     await openSettingsTab(user, "Model Profiles");
 
     const badges = await screen.findAllByText("Tools: All tools");
-    expect(badges[0]).toHaveAttribute("data-slot", "badge");
-    expect(badges[0]).toHaveAttribute("data-size", "meta");
-    expect(badges[0]).toHaveAttribute("data-variant", "secondary");
+    const badge = badges[0].closest('[data-slot="badge"]');
+    expect(badge).toHaveAttribute("data-size", "meta");
+    expect(badge).toHaveAttribute("data-variant", "secondary");
   });
 
   it("labels the read-image tool group on profile cards", async () => {

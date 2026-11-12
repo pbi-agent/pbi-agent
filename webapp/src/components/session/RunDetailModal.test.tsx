@@ -108,7 +108,7 @@ describe("RunDetailModal", () => {
 
     renderWithProviders(<RunDetailModal runSessionId="run-1" onClose={vi.fn()} />);
 
-    const status = await screen.findByText("completed");
+    const status = (await screen.findByText("completed")).closest('[data-slot="badge"]');
     expect(status).toHaveAttribute("data-variant", "completed");
     expect(status).toHaveAttribute("data-size", "meta");
     expect(status).toHaveAttribute("data-run-status");
@@ -161,11 +161,11 @@ describe("RunDetailModal", () => {
 
     renderWithProviders(<RunDetailModal runSessionId="run-1" onClose={vi.fn()} />);
 
-    const okBadge = await screen.findByText("ok");
+    const okBadge = (await screen.findByText("ok")).closest('[data-slot="badge"]');
     expect(okBadge).toHaveAttribute("data-variant", "completed");
     expect(okBadge).toHaveAttribute("data-size", "meta");
     expect(okBadge).toHaveAttribute("data-event-status");
-    expect(okBadge.querySelector('[data-slot="badge-dot"]')).toBeInTheDocument();
+    expect(okBadge?.querySelector('[data-slot="badge-dot"]')).toBeInTheDocument();
     expect(screen.queryByText("200")).not.toBeInTheDocument();
   });
 
@@ -177,7 +177,7 @@ describe("RunDetailModal", () => {
 
     renderWithProviders(<RunDetailModal runSessionId="run-1" onClose={vi.fn()} />);
 
-    const status = await screen.findByText("completed");
+    const status = (await screen.findByText("completed")).closest('[data-slot="badge"]');
     expect(status).toHaveAttribute("data-variant", "completed");
   });
 
@@ -235,7 +235,7 @@ describe("RunDetailModal", () => {
 
     renderWithProviders(<RunDetailModal runSessionId="run-1" onClose={vi.fn()} />);
 
-    const status = await screen.findByText("interrupted");
+    const status = (await screen.findByText("interrupted")).closest('[data-slot="badge"]');
     expect(status).toHaveAttribute("data-variant", "completed");
     expect(screen.getByText("Session interrupted.")).toBeInTheDocument();
   });

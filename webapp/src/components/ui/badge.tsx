@@ -5,7 +5,7 @@ import { Slot } from "radix-ui"
 import { cn } from "@/lib/utils"
 
 const badgeVariants = cva(
-  "group/badge inline-flex min-h-6 w-fit shrink-0 items-center justify-center gap-1 rounded-4xl border border-transparent px-2 py-0.5 text-xs leading-normal font-medium whitespace-nowrap transition-all focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3!",
+  "group/badge inline-flex min-h-6 w-fit shrink-0 items-center justify-center gap-1 rounded-4xl border border-transparent px-2 py-0.5 text-xs leading-normal font-medium whitespace-nowrap transition-all focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3! [&>span:not([data-slot=badge-dot])]:[text-box:trim-both_cap_alphabetic]",
   {
     variants: {
       variant: {
@@ -34,7 +34,7 @@ const badgeVariants = cva(
       },
       size: {
         default: "",
-        meta: "h-5 min-h-5 px-2 pt-px pb-0 font-mono text-[0.6875rem] leading-none has-data-[slot=badge-dot]:pl-1.5",
+        meta: "h-6 px-2 py-0 font-mono text-[0.6875rem] leading-none",
       },
     },
     defaultVariants: {
@@ -48,6 +48,33 @@ const statusDotClassName: Record<string, string> = {
   running: "bg-sky-500",
   completed: "bg-emerald-500",
   failed: "bg-rose-500",
+}
+
+// Text children are grouped into a label span so the base class can trim its
+// line box to cap-height/baseline (`text-box`). Flex centering then centers the
+// glyphs themselves, independent of the font's ascent/descent metrics.
+function wrapTextChildren(children: React.ReactNode): React.ReactNode {
+  const result: React.ReactNode[] = []
+  let text: (string | number)[] = []
+  const flush = () => {
+    if (text.length === 0) return
+    result.push(
+      <span key={`label-${result.length}`} data-slot="badge-label">
+        {text}
+      </span>
+    )
+    text = []
+  }
+  for (const child of React.Children.toArray(children)) {
+    if (typeof child === "string" || typeof child === "number") {
+      text.push(child)
+    } else {
+      flush()
+      result.push(child)
+    }
+  }
+  flush()
+  return result
 }
 
 function Badge({
@@ -91,7 +118,7 @@ function Badge({
           aria-hidden="true"
         />
       ) : null}
-      {children}
+      {wrapTextChildren(children)}
     </Comp>
   )
 }

@@ -22,7 +22,7 @@ export function MetaBadge({
       className={cn(truncate && "max-w-full min-w-0 justify-start overflow-hidden", className)}
       {...props}
     >
-      <span className={cn("whitespace-nowrap", truncate && "min-w-0 truncate", labelClassName)}>
+      <span className={cn("whitespace-nowrap", truncate && "min-w-0 overflow-x-clip text-ellipsis", labelClassName)}>
         {children}
       </span>
     </Badge>
