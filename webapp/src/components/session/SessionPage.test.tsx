@@ -55,6 +55,10 @@ vi.mock("../../hooks/useLiveSessionEvents", () => ({
   useLiveSessionEvents: vi.fn(),
 }));
 
+vi.mock("../terminal/TerminalPanel", () => ({
+  TerminalPanel: () => <div>Terminal panel</div>,
+}));
+
 vi.mock("./ConnectionBadge", () => ({
   ConnectionBadge: ({ connection }: { connection: string }) => <div>Connection {connection}</div>,
 }));
@@ -773,6 +777,30 @@ describe("SessionPage", () => {
       "aria-expanded",
       "true",
     );
+  });
+
+  it.each([
+    ["workspace explorer", "/sessions"],
+    ["background tasks", "/sessions/session-1"],
+    ["terminal", "/sessions"],
+  ])("keeps the chat filling its panel when toggling %s", async (panel, route) => {
+    const user = userEvent.setup();
+    renderSessionRoute(route);
+
+    for (let cycle = 0; cycle < 2; cycle += 1) {
+      await user.click(await screen.findByRole("button", { name: `Open ${panel}` }));
+
+      // Panel.className styles the library's inner content wrapper. It must
+      // distribute height to the chat, rather than size it to its contents.
+      const chatPanel = screen.getByTestId("session-main").firstElementChild;
+      expect(chatPanel).toHaveClass("flex", "min-h-0", "flex-col");
+      expect(chatPanel?.firstElementChild).toHaveClass("flex-1", "min-h-0", "flex-col");
+      expect(screen.getByText("Composer input enabled true")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: `Close ${panel}` }));
+      expect(screen.queryByTestId("session-main")).not.toBeInTheDocument();
+      expect(screen.getByText("Composer input enabled true")).toBeInTheDocument();
+    }
   });
 
   it("polls the file tree slowly while the workspace explorer is closed", async () => {
