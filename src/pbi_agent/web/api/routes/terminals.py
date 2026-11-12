@@ -139,7 +139,8 @@ async def terminal_socket(websocket: WebSocket) -> None:
                     _clamp(str(payload.get("rows")), 24),
                 )
             elif kind == "close":
-                manager.close(terminal.terminal_id)
+                # Closing waits on the shell; keep it off the event loop.
+                await asyncio.to_thread(manager.close, terminal.terminal_id)
                 break
     except (WebSocketDisconnect, RuntimeError):
         pass
