@@ -71,6 +71,53 @@ describe("SessionSidebar", () => {
     expect(tooltip).toHaveTextContent("Ctrl+Shift+O");
   });
 
+  it("shows the full title in a tooltip only when the title is truncated", async () => {
+    const user = userEvent.setup();
+    renderSidebar();
+
+    const title = screen.getByText("Planning session");
+    await user.hover(title);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    await user.unhover(title);
+
+    Object.defineProperty(title, "scrollWidth", { configurable: true, value: 400 });
+    Object.defineProperty(title, "clientWidth", { configurable: true, value: 200 });
+    await user.hover(title);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Planning session");
+  });
+
+  it("fades in a title that changes for the same session, but not on first render", () => {
+    const props = {
+      isLoading: false,
+      activeSessionId: null,
+      onNewSession: vi.fn(),
+      onResumeSession: vi.fn(),
+      onUpdateSession: vi.fn().mockResolvedValue(undefined),
+      onDeleteSession: vi.fn(),
+      searchQuery: "",
+      onSearchQueryChange: vi.fn(),
+    };
+    const tree = (title: string) => (
+      <MemoryRouter>
+        <TooltipProvider>
+          <SessionSidebar {...props} sessions={[makeSession({ title })]} />
+        </TooltipProvider>
+      </MemoryRouter>
+    );
+    const { rerender } = render(tree("fix the login bug please, it breaks"));
+
+    expect(screen.getByText("fix the login bug please, it breaks")).not.toHaveAttribute(
+      "data-text-transition",
+    );
+
+    rerender(tree("Fix login bug"));
+
+    const generated = screen.getByText("Fix login bug");
+    expect(generated).toHaveAttribute("data-text-transition");
+    expect(generated).toHaveClass("animate-in", "fade-in-0");
+    expect(screen.queryByText("fix the login bug please, it breaks")).not.toBeInTheDocument();
+  });
+
   it("renders a session search box and forwards edits", () => {
     const props = renderSidebar();
 

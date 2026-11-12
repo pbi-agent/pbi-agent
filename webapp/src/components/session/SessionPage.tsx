@@ -12,6 +12,7 @@ import {
   PanelRightIcon,
   SquareTerminalIcon,
   LayersIcon,
+  ChevronRightIcon,
 } from "lucide-react";
 import { AppSidebarLayout } from "../AppSidebar";
 import {
@@ -82,6 +83,7 @@ import {
   workspaceFileTreeQueryKey,
 } from "./workspaceFileTreeQueries";
 import { WorkspaceBadge } from "../WorkspaceBadge";
+import { TruncatedText } from "../TruncatedText";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import {
@@ -768,11 +770,19 @@ export function SessionPage({
     workspaceFileTreeKey,
   ]);
 
-  const activeSessionRecord = useMemo(() => {
+  const loadedSessionRecord = useMemo(() => {
     if (!routeSessionId) return null;
     return (
       sessionDetailQuery.data?.session
       ?? sessionsQuery.data?.find((session) => session.session_id === routeSessionId)
+      ?? null
+    );
+  }, [routeSessionId, sessionDetailQuery.data?.session, sessionsQuery.data]);
+
+  const activeSessionRecord = useMemo(() => {
+    if (!routeSessionId) return null;
+    return (
+      loadedSessionRecord
       ?? {
         session_id: routeSessionId,
         directory: workspaceRoot ?? "",
@@ -790,7 +800,7 @@ export function SessionPage({
         updated_at: "",
       }
     );
-  }, [routeSessionId, sessionDetailQuery.data?.session, sessionsQuery.data, workspaceRoot]);
+  }, [routeSessionId, loadedSessionRecord, workspaceRoot]);
 
   const modelProfiles = configQuery.data?.model_profiles ?? [];
   const routeProfileId = routeSessionId ? activeSessionRecord?.profile_id ?? "" : "";
@@ -1112,6 +1122,20 @@ export function SessionPage({
     ? selectedSubAgent?.sessionUsage ?? selectedSubAgent?.turnUsage?.usage ?? null
     : sessionState?.sessionUsage ?? sessionState?.turnUsage?.usage ?? null;
 
+  // Nothing is shown until the session record has loaded, so "Untitled
+  // session" does not flash first. The transition key is only set once a real
+  // title exists: a later title change (the generated title replacing the
+  // first-message placeholder) fades in, the first title does not.
+  const subAgentTitle = isSubAgentRoute ? selectedSubAgent?.title ?? null : null;
+  const topbarSessionTitle = loadedSessionRecord
+    ? [loadedSessionRecord.title || "Untitled session", subAgentTitle]
+        .filter(Boolean)
+        .join(" › ")
+    : null;
+  const topbarTitleTransitionKey = loadedSessionRecord?.title
+    ? [loadedSessionRecord.session_id, routeSubAgentId].filter(Boolean).join("/")
+    : undefined;
+
   const sessionPanel = (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       {statusOpen ? (
@@ -1125,12 +1149,14 @@ export function SessionPage({
       ) : null}
       <div
         data-session-topbar=""
-        className={cn(
-          "flex h-12 min-h-12 shrink-0 items-center justify-between gap-3 border-b bg-sidebar px-4",
-          !isSidebarOpen && "md:grid md:grid-cols-3",
-        )}
+        className="@container flex h-12 min-h-12 shrink-0 items-center justify-between gap-3 border-b bg-sidebar px-4"
       >
-        <div className="flex min-w-0 items-center gap-2">
+        <div
+          className={cn(
+            "flex min-w-0 items-center gap-2",
+            !isSidebarOpen && "@xl:min-w-fit @xl:flex-1",
+          )}
+        >
           <ConnectionBadge connection={topbarConnection} />
           <ProfileSelector
             selectedProfileId={selectedProfileId}
@@ -1145,13 +1171,40 @@ export function SessionPage({
         {!isSidebarOpen ? (
           <div
             data-session-topbar-workspace=""
-            className="hidden max-w-md min-w-0 items-center justify-center justify-self-center overflow-hidden md:flex"
-            aria-label="Current workspace"
+            className="hidden min-w-0 items-center justify-center gap-1.5 overflow-hidden @xl:flex"
           >
-            <WorkspaceBadge tooltipSide="bottom" />
+            <div
+              className={cn(
+                "min-w-0 items-center",
+                topbarSessionTitle ? "hidden max-w-48 shrink-0 @3xl:flex" : "flex",
+              )}
+              aria-label="Current workspace"
+            >
+              <WorkspaceBadge variant="text" tooltipSide="bottom" />
+            </div>
+            {topbarSessionTitle ? (
+              <>
+                <ChevronRightIcon
+                  className="hidden size-3.5 shrink-0 text-muted-foreground @3xl:block"
+                  aria-hidden="true"
+                />
+                <TruncatedText
+                  data-session-topbar-title=""
+                  transitionKey={topbarTitleTransitionKey}
+                  className="text-sm text-foreground"
+                >
+                  {topbarSessionTitle}
+                </TruncatedText>
+              </>
+            ) : null}
           </div>
         ) : null}
-        <div className="flex shrink-0 items-center justify-end gap-2">
+        <div
+          className={cn(
+            "flex shrink-0 items-center justify-end gap-2",
+            !isSidebarOpen && "@xl:flex-1",
+          )}
+        >
           {!isSubAgentRoute ? (
             <>
               <div

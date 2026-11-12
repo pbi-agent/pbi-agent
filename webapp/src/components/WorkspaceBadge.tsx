@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { fetchBootstrap } from "../api";
+import { cn } from "../lib/utils";
 import { MetaBadge } from "./MetaBadge";
 import { WorkspaceSwitcherDialog } from "./WorkspaceSwitcherDialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
@@ -10,6 +11,8 @@ type WorkspaceBadgeProps = {
   textClassName?: string;
   tooltipSide?: "top" | "right" | "bottom" | "left";
   tooltipAlign?: "start" | "center" | "end";
+  /** "text" renders a plain breadcrumb-style label instead of a badge. */
+  variant?: "badge" | "text";
 };
 
 export function WorkspaceBadge({
@@ -17,6 +20,7 @@ export function WorkspaceBadge({
   textClassName,
   tooltipSide = "right",
   tooltipAlign = "center",
+  variant = "badge",
 }: WorkspaceBadgeProps) {
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const bootstrapQuery = useQuery({
@@ -36,16 +40,28 @@ export function WorkspaceBadge({
 
   if (!workspaceBadgeLabel) return null;
 
+  const isText = variant === "text";
   const workspaceBadge = (
     <button
       type="button"
-      className="min-w-0 rounded-full text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      className={cn(
+        "min-w-0 text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+        isText
+          ? "truncate rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground"
+          : "rounded-full",
+        isText && className,
+        isText && textClassName,
+      )}
       onClick={() => setSwitcherOpen(true)}
       aria-label="Switch workspace"
     >
-      <MetaBadge truncate className={className} labelClassName={textClassName}>
-        {workspaceBadgeLabel}
-      </MetaBadge>
+      {isText ? (
+        workspaceBadgeLabel
+      ) : (
+        <MetaBadge truncate className={className} labelClassName={textClassName}>
+          {workspaceBadgeLabel}
+        </MetaBadge>
+      )}
     </button>
   );
 

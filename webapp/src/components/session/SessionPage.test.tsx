@@ -730,10 +730,64 @@ describe("SessionPage", () => {
     const sidebar = screen.getByRole("complementary", { name: "Application sidebar" });
 
     expect(workspaceLabel.closest("[data-session-topbar-workspace]")).toBeInTheDocument();
-    const workspaceBadge = workspaceLabel.closest('[data-size="meta"]');
-    expect(workspaceBadge).toHaveAttribute("data-variant", "secondary");
+    expect(workspaceLabel).toHaveAccessibleName("Switch workspace");
+    expect(workspaceLabel.closest('[data-slot="badge"]')).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
     expect(within(sidebar).queryByText("workspace/demo")).not.toBeInTheDocument();
+  });
+
+  it("shows the session title in the session topbar only when the sidebar is collapsed", async () => {
+    renderSessionRoute("/sessions/session-1");
+
+    const topbar = getSessionTopbar();
+    await waitFor(() => expect(fetchSessionDetail).toHaveBeenCalled());
+    expect(topbar.querySelector("[data-session-topbar-title]")).not.toBeInTheDocument();
+
+    act(() => {
+      useSidebarStore.setState({ isOpen: false });
+    });
+
+    const title = await within(topbar).findByText("Planning session");
+    expect(title).toHaveAttribute("data-session-topbar-title");
+    expect(title.closest("[data-session-topbar-workspace]")).toBeInTheDocument();
+  });
+
+  it("keeps the topbar title empty until the session record has loaded", async () => {
+    act(() => {
+      useSidebarStore.setState({ isOpen: false });
+    });
+    vi.mocked(fetchSessions).mockResolvedValue([]);
+    vi.mocked(fetchSessionDetail).mockReturnValue(new Promise<SessionDetailPayload>(() => {}));
+
+    renderSessionRoute("/sessions/session-1");
+
+    const topbar = getSessionTopbar();
+    await within(topbar).findByText("workspace/demo");
+    expect(topbar.querySelector("[data-session-topbar-title]")).not.toBeInTheDocument();
+    expect(within(topbar).queryByText("Untitled session")).not.toBeInTheDocument();
+  });
+
+  it("fades in a topbar title that replaces the previous one for the same session", async () => {
+    act(() => {
+      useSidebarStore.setState({ isOpen: false });
+    });
+    const { queryClient } = renderSessionRoute("/sessions/session-1");
+    const topbar = getSessionTopbar();
+    const placeholder = await within(topbar).findByText("Planning session");
+    expect(placeholder).not.toHaveAttribute("data-text-transition");
+
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ title: "Generated title" }),
+      history_items: [],
+      active_live_session: null,
+    } satisfies SessionDetailPayload);
+    vi.mocked(fetchSessions).mockResolvedValue([makeSessionRecord({ title: "Generated title" })]);
+    await act(async () => {
+      await queryClient.invalidateQueries();
+    });
+
+    const generated = await within(topbar).findByText("Generated title");
+    expect(generated).toHaveAttribute("data-text-transition");
   });
 
   it("does not duplicate the workspace badge in the session topbar when the sidebar is open", async () => {
@@ -1348,9 +1402,9 @@ describe("SessionPage", () => {
     const workspaceLabel = await within(topbar).findByText("Sandbox · ada/project");
     expect(within(topbar).queryByText("workspace/d0918d973e2e241d")).not.toBeInTheDocument();
 
-    const workspaceBadge = workspaceLabel.closest('[data-size="meta"]') as HTMLElement;
-    expect(workspaceBadge).toHaveAttribute("data-variant", "secondary");
-    expect(workspaceBadge).toHaveClass("max-w-full", "overflow-hidden");
+    const workspaceBadge = workspaceLabel;
+    expect(workspaceBadge).toHaveAccessibleName("Switch workspace");
+    expect(workspaceBadge).toHaveClass("min-w-0", "truncate");
     await user.hover(workspaceBadge);
     expect(await screen.findByRole("tooltip")).toHaveTextContent("/Users/ada/project");
   });
