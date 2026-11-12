@@ -322,6 +322,7 @@ def run_single_turn(
         title=_session_title_for_user_turn(user_input),
         directory_key=workspace_directory_key,
     )
+    _bind_session(display, session_id)
     tracer = RunTracer.start(
         store=store,
         session_id=session_id,

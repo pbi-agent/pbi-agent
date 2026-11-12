@@ -938,7 +938,7 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
                 exit_code=live_session.exit_code,
                 fatal_error=live_session.fatal_error,
                 metadata={
-                    "source": "web",
+                    "source": getattr(self, "_run_source", "web"),
                     "directory": self._directory_key,
                     "workspace_root": str(self._workspace_root),
                     "workspace_display_path": self._workspace_context.display_path,

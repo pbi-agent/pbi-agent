@@ -34,3 +34,4 @@ Entry shape: rule/fact — why/evidence — `[verified YYYY-MM-DD]` or `[unverif
 ### 2026-11-12
 - #393: raw-output notices reference `raw_output_path` instead of repeating the file path; background completion text renders a separate path field. 88 targeted tests + Ruff/format/basedpyright passed.
 - CLI welcome: moved model/reasoning from clipped Rich panel subtitle into wrapping body; regression coverage at 32/80/160 columns. 26 targeted tests + Ruff/format/basedpyright passed.
+- CLI `run` now goes through `web/session/headless.py::HeadlessSessionChannel` (same LiveSessionState/WebDisplay/`web_session` run + `web_event` persistence as web), console rendered via `TeeDisplay`; CLI sessions open in web UI with identical timeline. `run` default profile = `config.web.active_profile_id` when no flags (already, verified). Pre-existing failure: `test_execute_tool_calls_serializes_compressed_shell_output` (fails on clean tree too).

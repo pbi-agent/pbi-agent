@@ -58,22 +58,34 @@ def _run_single_turn_command(
     from pbi_agent.agent.error_formatting import format_user_facing_error
     from pbi_agent.agent.session import run_single_turn
     from pbi_agent.display.console_display import ConsoleDisplay
+    from pbi_agent.web.session.headless import HeadlessSessionChannel
 
     runtime = _coerce_runtime(settings)
-    display = cast(
+    console = cast(
         DisplayProtocol,
         cast(Any, ConsoleDisplay)(verbose=runtime.settings.verbose),
     )
+    # CLI runs go through the same live-session channel as the web UI so the
+    # saved session has the identical persisted timeline structure.
+    channel = HeadlessSessionChannel(
+        runtime,
+        source="cli",
+        session_id=resume_session_id,
+        include_tool_history=include_tool_history,
+        renderer=console,
+    )
 
     try:
-        outcome = run_single_turn(
-            prompt,
-            runtime,
-            display,
-            single_turn_hint=single_turn_hint,
-            image_paths=image_paths,
-            resume_session_id=resume_session_id,
-            include_tool_history=include_tool_history,
+        outcome = channel.run(
+            lambda display: run_single_turn(
+                prompt,
+                runtime,
+                display,
+                single_turn_hint=single_turn_hint,
+                image_paths=image_paths,
+                resume_session_id=resume_session_id,
+                include_tool_history=include_tool_history,
+            )
         )
     except KeyboardInterrupt:
         return 130
