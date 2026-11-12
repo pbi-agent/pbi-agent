@@ -11,7 +11,7 @@ import {
   MessageCircleQuestionMark,
   PanelRightIcon,
   SquareTerminalIcon,
-  ActivityIcon,
+  LayersIcon,
 } from "lucide-react";
 import { AppSidebarLayout } from "../AppSidebar";
 import {
@@ -1274,7 +1274,7 @@ export function SessionPage({
                     onPressedChange={(pressed) =>
                       setSidePanel(pressed ? "background" : null)}
                   >
-                    <ActivityIcon aria-hidden="true" />
+                    <LayersIcon aria-hidden="true" />
                     {runningBackgroundTaskCount > 0 && !backgroundPanelOpen ? (
                       <span
                         aria-hidden="true"
