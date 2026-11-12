@@ -22,6 +22,7 @@ from .catalogs import (
     _handle_agents_command,
     _handle_agents_flag,
     _handle_commands_command,
+    _handle_kits_command,
     _handle_mcp_flag,
     _handle_skills_command,
 )
@@ -68,6 +69,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "commands":
         return _handle_commands_command(args)
+
+    if args.command == "kits":
+        return _handle_kits_command(args)
 
     if args.command == "init":
         result = init_agents_file(force=args.force)

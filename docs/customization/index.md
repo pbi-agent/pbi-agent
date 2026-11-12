@@ -21,6 +21,7 @@ tools without changing global provider settings.
 | [Project sub-agents](/customization/sub-agents) | `.agents/agents/*.md` | Define specialist child agents for the `sub_agent` tool. |
 | [Workspace reload](/customization/reload) | `/reload` | Refresh prompt files and project catalogs in an active session. |
 | [MCP servers](/customization/mcp) | `.agents/mcp.json` | Expose project-local MCP tools to the model. |
+| [Kits](/customization/kits) | `pbi-agent kits add <source>` | Install a packaged setup of skills, commands, sub-agents, MCP servers, and instructions. |
 | [File constraints](/customization/file-constraints) | prompt files | Size, encoding, empty-file, and unreadable-file behavior. |
 
 ## Prompt file composition
