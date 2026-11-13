@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import os
 import stat
+from datetime import date
 from pathlib import Path
 
 import pytest
 
+from pbi_agent.agent import system_prompt as system_prompt_module
 from pbi_agent.agent.session.shared import _turn_instructions
 from pbi_agent.agent.system_prompt import (
     _MAX_FILE_BYTES,
@@ -217,10 +219,60 @@ def test_get_system_prompt_without_agents_md(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     prompt = get_system_prompt()
     _assert_builtin_prompt_base(prompt)
-    assert prompt.endswith("</tool_usage_rules>")
+    assert "</tool_usage_rules>\n\n<system_info>" in prompt
     assert "<project_rules>" not in prompt
     assert "<workspace_memory>" not in prompt
     assert "<available_skills>" not in prompt
+
+
+class _FixedDate(date):
+    @classmethod
+    def today(cls) -> date:
+        return cls(2026, 3, 5)
+
+
+@pytest.mark.parametrize(
+    ("system", "os_name", "env", "expected_os", "expected_shell"),
+    [
+        ("Linux", "posix", {}, "Linux", "sh"),
+        ("Darwin", "posix", {"PBI_AGENT_SHELL_EXECUTABLE": "/bin/zsh"}, "macOS", "zsh"),
+        (
+            "Windows",
+            "nt",
+            {"COMSPEC": "C:\\Windows\\System32\\cmd.exe"},
+            "Windows",
+            "cmd.exe",
+        ),
+    ],
+)
+def test_system_info_reports_date_os_and_shell(
+    monkeypatch, system, os_name, env, expected_os, expected_shell
+):
+    monkeypatch.setattr(system_prompt_module, "date", _FixedDate)
+    monkeypatch.setattr(system_prompt_module.platform, "system", lambda: system)
+    monkeypatch.setattr(system_prompt_module.os, "name", os_name)
+    monkeypatch.delenv("PBI_AGENT_SHELL_EXECUTABLE", raising=False)
+    monkeypatch.delenv("COMSPEC", raising=False)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+
+    expected = (
+        "<system_info>\n"
+        "Date: 05-Mar-2026\n"
+        f"OS: {expected_os}\n"
+        f"Shell: {expected_shell}\n"
+        "</system_info>"
+    )
+    prompt = system_prompt_module._append_system_info("Base.", shell_active=True)
+
+    assert prompt == f"Base.\n\n{expected}"
+
+
+def test_system_info_omits_shell_when_shell_tool_disabled(tmp_path):
+    prompt = get_system_prompt(cwd=tmp_path, excluded_tools={"shell"})
+
+    assert "<system_info>\nDate: " in prompt
+    assert "\nShell: " not in prompt
 
 
 def test_get_system_prompt_with_agents_md(tmp_path, monkeypatch):
@@ -248,9 +300,11 @@ def test_get_system_prompt_with_agents_and_memory_orders_sections(tmp_path):
     assert prompt.index("</project_rules>") < prompt.index("<skill_loading_rules>")
     assert prompt.index("</available_skills>") < prompt.index("<active_command>")
     assert prompt.index("</active_command>") < prompt.index("<workspace_memory>")
-    assert prompt.endswith(
+    assert (
         "<workspace_memory>\nRemember the release note.\n</workspace_memory>"
+        "\n\n<system_info>" in prompt
     )
+    assert prompt.endswith("</system_info>")
 
 
 def test_global_user_profile_is_in_main_and_sub_agent_prompts(tmp_path):
@@ -318,7 +372,11 @@ def test_get_sub_agent_system_prompt_with_memory_md(tmp_path):
     assert "<project_rules>" not in prompt
     assert "<workspace_memory>\nSub-agent memory.\n</workspace_memory>" in prompt
     assert prompt.index("</available_skills>") < prompt.index("<workspace_memory>")
-    assert prompt.endswith("<workspace_memory>\nSub-agent memory.\n</workspace_memory>")
+    assert (
+        "<workspace_memory>\nSub-agent memory.\n</workspace_memory>\n\n<system_info>"
+        in prompt
+    )
+    assert prompt.endswith("</system_info>")
 
 
 def test_get_sub_agent_system_prompt_without_agents_md(tmp_path, monkeypatch):
