@@ -455,7 +455,7 @@ wheels = [
 
 [[package]]
 name = "pbi-agent"
-version = "0.56.0"
+version = "0.57.0"
 source = { editable = "." }
 dependencies = [
     { name = "codetool-shell" },

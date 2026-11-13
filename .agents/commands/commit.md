@@ -1,13 +1,13 @@
 ---
 name: commit
-description: Commit, PR, merge, and monitor CI
+description: Commit, PR, merge, monitor CI, and update the related issue
 model_profile_id: worker-mini
 allowed_tools: read-image,shell
 ---
 
 # Commit Mode
 
-Ship the current task-scoped changes end to end: commit, create PR, push, merge, clean branch, monitor CI.
+Ship the current task-scoped changes end to end: commit, create PR, push, merge, clean branch, monitor CI, update the related issue.
 
 Invoking this command is explicit authorization for every step below. Do not ask for confirmation between steps. Never force-push, rebase shared history, or stage unrelated files.
 
@@ -36,10 +36,17 @@ Invoking this command is explicit authorization for every step below. Do not ask
    - `gh run watch <id> --exit-status`
    - On failure, show the failing job logs with `gh run view <id> --log-failed` and report them.
 
+7. **Update issue**
+   - Only when the user provided an issue (number or URL) for this task in the conversation; never guess one from branch names or search for one.
+   - Reference it in the commit/PR body (`Closes #<n>` when the change fully resolves it, otherwise `Refs #<n>`).
+   - After the merge, read it: `gh issue view <n> --json state,title,body`.
+   - `gh issue edit <n> --title ... --body ...` so it matches what shipped: keep the original request as a quote, then outcome (PR, merge commit), decisions, behavior, and follow-ups not built.
+   - Do not close an issue the change only partly resolves; say what remains instead.
+
 ## Stop conditions
 
 Stop and report if: there are no task-scoped changes, unrelated changes cannot be separated, a merge/rebase is in progress, the diff contains secrets or accidental artifacts, or any command fails.
 
 ## Final response
 
-Report: commit hash and subject, PR URL, merge status, final branch state, and CI result.
+Report: commit hash and subject, PR URL, merge status, final branch state, CI result, and the issue URL with its state if one was updated.
