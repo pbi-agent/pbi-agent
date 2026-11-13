@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -455,7 +455,7 @@ wheels = [
 
 [[package]]
 name = "pbi-agent"
-version = "0.61.0"
+version = "0.62.0"
 source = { editable = "." }
 dependencies = [
     { name = "codetool-shell" },
