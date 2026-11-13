@@ -1,5 +1,3 @@
-- [x] Apply consistent scrolling to all Settings add dialogs
-- [x] Cover long Skills/Agents catalogs and shared form layout
-- [x] Run frontend tests, lint, typecheck, and production build
-
-- [x] Browser-check Settings add dialogs and long-list scrolling
+- [x] Remove 15 redundant Claude catalog entries and verify uniqueness
+- [x] Add catalog uniqueness regression; 92 focused pricing/capability tests pass
+- [x] Run full Python quality checks and test suite (4 skips)
