@@ -1591,6 +1591,9 @@ export function SessionPage({
     </div>
   );
 
+  const sidePanelVisible =
+    sidePanel !== null && (fileTreeOpen || terminalPanelOpen || !isSubAgentRoute);
+
   return (
     <AppSidebarLayout>
       <section
@@ -1602,27 +1605,28 @@ export function SessionPage({
         data-debug-event-cursor={sessionState?.lastEventSeq ?? undefined}
         data-debug-connection={sessionState?.connection ?? undefined}
       >
-        {sidePanel !== null && (fileTreeOpen || terminalPanelOpen || !isSubAgentRoute) ? (
-          <ResizablePanelGroup
-            direction="horizontal"
-            className="min-h-0 flex-1 overflow-hidden"
+        {/* The chat always lives in the same panel so opening or closing a
+            side panel never remounts it (which would drop composer state). */}
+        <ResizablePanelGroup
+          direction="horizontal"
+          className="min-h-0 flex-1 overflow-hidden"
+        >
+          <ResizablePanel
+            id="session-main"
+            // Panel styles its inner wrapper; keep the chat growing to full height.
+            className="flex min-h-0 flex-col"
+            defaultSize="50%"
+            minSize="30%"
           >
-            <ResizablePanel
-              id="session-main"
-              // Panel styles its inner wrapper; keep the chat growing to full height.
-              className="flex min-h-0 flex-col"
-              defaultSize="50%"
-              minSize="30%"
-
-            >
-              {sessionPanel}
-            </ResizablePanel>
+            {sessionPanel}
+          </ResizablePanel>
+          {sidePanelVisible ? (
+            <>
             <ResizableHandle withHandle />
             <ResizablePanel
               id="session-files"
               defaultSize="50%"
               minSize="25%"
-
             >
               {fileTreeOpen ? (
                 <WorkspaceFileTreePanel
@@ -1642,8 +1646,9 @@ export function SessionPage({
                 />
               )}
             </ResizablePanel>
-          </ResizablePanelGroup>
-        ) : sessionPanel}
+            </>
+          ) : null}
+        </ResizablePanelGroup>
       </section>
     </AppSidebarLayout>
   );

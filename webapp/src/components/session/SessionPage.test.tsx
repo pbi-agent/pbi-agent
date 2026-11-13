@@ -841,8 +841,14 @@ describe("SessionPage", () => {
     const user = userEvent.setup();
     renderSessionRoute(route);
 
+    await screen.findByRole("button", { name: `Open ${panel}` });
+    // Toggling must not remount the chat: the composer would lose its draft.
+    const composerNode = screen.getByText("Composer input enabled true");
+
     for (let cycle = 0; cycle < 2; cycle += 1) {
       await user.click(await screen.findByRole("button", { name: `Open ${panel}` }));
+      expect(screen.getByTestId("session-files")).toBeInTheDocument();
+      expect(screen.getByText("Composer input enabled true")).toBe(composerNode);
 
       // Panel.className styles the library's inner content wrapper. It must
       // distribute height to the chat, rather than size it to its contents.
@@ -852,8 +858,8 @@ describe("SessionPage", () => {
       expect(screen.getByText("Composer input enabled true")).toBeInTheDocument();
 
       await user.click(screen.getByRole("button", { name: `Close ${panel}` }));
-      expect(screen.queryByTestId("session-main")).not.toBeInTheDocument();
-      expect(screen.getByText("Composer input enabled true")).toBeInTheDocument();
+      expect(screen.queryByTestId("session-files")).not.toBeInTheDocument();
+      expect(screen.getByText("Composer input enabled true")).toBe(composerNode);
     }
   });
 

@@ -43,3 +43,6 @@
 - [x] Composer tag highlights styled as padded pills matching timeline tags (ring + offset outline; Composer tests, lint, typecheck, build, headless Chromium)
 - [ ] Composer pills: two tags separated by a single space touch (3px painted outside each box, no layout space available)
 - [x] Skill tags violet (`usage-violet`) in composer and timeline (session tests, lint, typecheck, build, headless Chromium)
+
+- [x] Composer keeps unsent text when toggling top-right panels or switching sessions (stable panel tree + in-memory draft; web tests, lint, typecheck, build, headless Chromium)
+- [ ] Composer draft: pending images and reply snippets are still dropped on route changes (kept on panel toggles); draft is one shared text, not per session

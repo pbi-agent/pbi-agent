@@ -266,6 +266,30 @@ describe("Composer", () => {
     expect(screen.getByRole("button", { name: "Start dictation" })).toBeEnabled();
   });
 
+  it("keeps unsent text when the composer is unmounted and mounted again", async () => {
+    const user = userEvent.setup();
+    const first = renderComposer();
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "half written");
+    first.unmount();
+
+    renderComposer();
+
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("half written");
+  });
+
+  it("does not bring back a sent message after a remount", async () => {
+    const user = userEvent.setup();
+    const first = renderComposer();
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "send me");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue(""));
+    first.unmount();
+
+    renderComposer();
+
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("");
+  });
+
   it("shows dictation for an empty composer and send for non-empty text", async () => {
     const user = userEvent.setup();
     renderComposer();

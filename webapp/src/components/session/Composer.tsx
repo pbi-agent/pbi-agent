@@ -20,6 +20,7 @@ import { searchSlashCommands } from "../../api";
 import type { AgentMentionItem, FileMentionItem, QueuedFollowUp, SkillMentionItem, SlashCommandItem } from "../../types";
 import { cn } from "../../lib/utils";
 import { serializeReplyMessage, type ReplySnippet } from "../../lib/replySnippets";
+import { getComposerDraft, setComposerDraft } from "../../lib/composerDraft";
 import { ReplySnippetCard } from "./ReplySnippetCard";
 import { createWavRecorder, type WavRecorder } from "../../lib/audioRecorder";
 import { DictationWaveform } from "./DictationWaveform";
@@ -431,12 +432,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   onInterrupt,
 }, ref) {
   const showStopButton = canInterrupt;
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(getComposerDraft);
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
   const [replySnippets, setReplySnippets] = useState<ReplySnippet[]>([]);
   const [attachmentMessage, setAttachmentMessage] = useState<string | null>(null);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
-  const [cursorIndex, setCursorIndex] = useState(0);
+  const [cursorIndex, setCursorIndex] = useState(() => getComposerDraft().length);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [historyDraft, setHistoryDraft] = useState<string | null>(null);
   const [dictationState, setDictationState] = useState<ComposerDictationState>("idle");
@@ -596,6 +597,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   useEffect(() => {
     syncHighlightScroll();
   }, [input, syncHighlightScroll]);
+
+  useEffect(() => {
+    setComposerDraft(input);
+  }, [input]);
+
+  // A draft restored on mount needs the textarea grown to fit it.
+  useEffect(() => {
+    autoResize();
+  }, [autoResize]);
 
   const applyInputState = useCallback(
     (nextInput: string, nextCursor: number) => {
