@@ -245,3 +245,28 @@ export function formatSpanDuration(ms: number): string {
   const whole = Math.round(seconds);
   return `${Math.floor(whole / 60)}m ${whole % 60}s`;
 }
+
+export type SpanTokens = { input: number; output: number; cached: number; reasoning: number };
+
+/** Token usage of a model call or an agent run; null for spans without usage. */
+export function spanTokens(span: TraceSpan): SpanTokens | null {
+  if (span.type === "agent" && span.run) {
+    const run = span.run;
+    if (!run.input_tokens && !run.output_tokens) return null;
+    return {
+      input: run.input_tokens,
+      output: run.output_tokens,
+      cached: run.cached_input_tokens,
+      reasoning: run.reasoning_tokens,
+    };
+  }
+  const event = span.event;
+  if (span.type !== "chat" || !event || event.event_type !== "model_call") return null;
+  if (event.prompt_tokens == null && event.completion_tokens == null) return null;
+  return {
+    input: event.prompt_tokens ?? 0,
+    output: event.completion_tokens ?? 0,
+    cached: event.cached_input_tokens ?? 0,
+    reasoning: event.reasoning_tokens ?? 0,
+  };
+}

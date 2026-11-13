@@ -170,6 +170,25 @@ describe("RunDetailModal", () => {
     expect(await screen.findByText("No events recorded for this run.")).toBeInTheDocument();
   });
 
+  it("shows token usage on model call spans but not tool spans", async () => {
+    mockFetchRunDetail.mockResolvedValue({
+      run: makeRun({ agent_name: "main" }),
+      child_runs: [],
+      events: [
+        makeEvent({ event_type: "model_call", model: "gpt-x", prompt_tokens: 12500, completion_tokens: 340, cached_input_tokens: 9000 }),
+        makeEvent({ step_index: 2, event_type: "tool_call", tool_name: "shell", duration_ms: 10 }),
+      ],
+    });
+
+    renderWithProviders(<RunDetailModal runSessionId="run-1" onClose={vi.fn()} />);
+
+    const cell = await screen.findByLabelText("12.5k input, 340 output tokens");
+    expect(cell).toHaveTextContent("12.5k in · 340 out");
+    expect(cell).toHaveAttribute("title", expect.stringContaining("Cached: 9,000 tokens"));
+    const toolRow = screen.getByText("shell").closest("button");
+    expect(toolRow?.querySelector("[data-slot=trace-tokens]")).toHaveTextContent("");
+  });
+
   it("collapses and expands child spans", async () => {
     const user = userEvent.setup();
     mockFetchRunDetail.mockResolvedValue({
