@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, File, Query, Response, UploadFile
+from fastapi import Path as FastAPIPath
 from fastapi.responses import FileResponse
 
 from pbi_agent.media import detect_image_mime_type
@@ -31,6 +32,7 @@ from pbi_agent.web.api.schemas.system import (
     BackgroundTaskOutputModel,
     BackgroundTaskOutputResponse,
     BootstrapResponse,
+    ChildRunDetailModel,
     CreateSessionRequest,
     DailyBucketModel,
     DashboardOverviewModel,
@@ -49,6 +51,7 @@ from pbi_agent.web.api.schemas.system import (
     MentionSuggestionSearchResponse,
     NewSessionRequest,
     ObservabilityEventModel,
+    ObservabilityEventSummaryModel,
     PromptEnhancementRequest,
     PromptEnhancementResponse,
     ProviderBreakdownModel,
@@ -543,10 +546,40 @@ def get_run_detail(
     return RunSessionDetailResponse(
         run=model_from_payload(RunSessionModel, payload["run"]),
         events=[
-            model_from_payload(ObservabilityEventModel, item)
+            model_from_payload(ObservabilityEventSummaryModel, item)
             for item in payload["events"]
         ],
+        child_runs=[
+            ChildRunDetailModel(
+                run=model_from_payload(RunSessionModel, child["run"]),
+                events=[
+                    model_from_payload(ObservabilityEventSummaryModel, item)
+                    for item in child["events"]
+                ],
+                parent_tool_call_id=child["parent_tool_call_id"],
+            )
+            for child in payload["child_runs"]
+        ],
     )
+
+
+@router.get(
+    "/runs/{run_session_id}/events/{step_index}",
+    response_model=ObservabilityEventModel,
+)
+def get_run_event(
+    run_session_id: RunSessionIdPath,
+    step_index: Annotated[int, FastAPIPath(ge=0)],
+    manager: SessionManagerDep,
+    scope: ScopeQuery = "workspace",
+) -> ObservabilityEventModel:
+    try:
+        payload = manager.get_run_event(
+            run_session_id, step_index, global_scope=(scope == "global")
+        )
+    except KeyError as exc:
+        raise not_found("Run event not found.") from exc
+    return model_from_payload(ObservabilityEventModel, payload)
 
 
 @router.get("/dashboard/stats", response_model=DashboardStatsResponse)

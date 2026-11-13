@@ -507,7 +507,7 @@ class RunSessionModel(BaseModel):
     metadata: Any | None
 
 
-class ObservabilityEventModel(BaseModel):
+class ObservabilityEventSummaryModel(BaseModel):
     run_session_id: str
     session_id: str | None
     step_index: int
@@ -517,13 +517,8 @@ class ObservabilityEventModel(BaseModel):
     provider: str | None
     model: str | None
     url: str | None
-    request_config: Any | None
-    request_payload: Any | None
-    response_payload: Any | None
     tool_name: str | None
     tool_call_id: str | None
-    tool_input: Any | None
-    tool_output: Any | None
     tool_duration_ms: int | None
     prompt_tokens: int | None
     completion_tokens: int | None
@@ -533,6 +528,15 @@ class ObservabilityEventModel(BaseModel):
     status_code: int | None
     success: bool | None
     error_message: str | None
+    has_payload: bool
+
+
+class ObservabilityEventModel(ObservabilityEventSummaryModel):
+    request_config: Any | None
+    request_payload: Any | None
+    response_payload: Any | None
+    tool_input: Any | None
+    tool_output: Any | None
     metadata: Any | None
 
 
@@ -540,9 +544,16 @@ class SessionRunsResponse(BaseModel):
     runs: list[RunSessionModel]
 
 
+class ChildRunDetailModel(BaseModel):
+    run: RunSessionModel
+    events: list[ObservabilityEventSummaryModel]
+    parent_tool_call_id: str | None
+
+
 class RunSessionDetailResponse(BaseModel):
     run: RunSessionModel
-    events: list[ObservabilityEventModel]
+    events: list[ObservabilityEventSummaryModel]
+    child_runs: list[ChildRunDetailModel]
 
 
 # -- Dashboard / observability aggregation --------------------------------

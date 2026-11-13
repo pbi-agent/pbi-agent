@@ -61,6 +61,8 @@ export type ChannelListResponse = { telegram: TelegramChannelConfigView };
 
 export type ChannelRuntimeStatusModel = { state: string; error?: string | null };
 
+export type ChildRunDetailModel = { run: RunSessionModel; events: ObservabilityEventSummaryModel[]; parent_tool_call_id: string | null };
+
 export type CommandCandidateRequest = { source?: string | null };
 
 export type CommandCandidateViewModel = { name: string; command_id: string; slash_alias: string; description: string; model_profile_id: string | null; subpath: string | null };
@@ -177,7 +179,9 @@ export type ModelProfileViewModel = { id: string; name: string; provider_id: str
 
 export type NewSessionRequest = { profile_id?: string | null };
 
-export type ObservabilityEventModel = { run_session_id: string; session_id: string | null; step_index: number; event_type: string; timestamp: string; duration_ms: number | null; provider: string | null; model: string | null; url: string | null; request_config: unknown | null; request_payload: unknown | null; response_payload: unknown | null; tool_name: string | null; tool_call_id: string | null; tool_input: unknown | null; tool_output: unknown | null; tool_duration_ms: number | null; prompt_tokens: number | null; completion_tokens: number | null; total_tokens: number | null; cached_input_tokens: number | null; reasoning_tokens: number | null; status_code: number | null; success: boolean | null; error_message: string | null; metadata: unknown | null };
+export type ObservabilityEventModel = { run_session_id: string; session_id: string | null; step_index: number; event_type: string; timestamp: string; duration_ms: number | null; provider: string | null; model: string | null; url: string | null; tool_name: string | null; tool_call_id: string | null; tool_duration_ms: number | null; prompt_tokens: number | null; completion_tokens: number | null; total_tokens: number | null; cached_input_tokens: number | null; reasoning_tokens: number | null; status_code: number | null; success: boolean | null; error_message: string | null; has_payload: boolean; request_config: unknown | null; request_payload: unknown | null; response_payload: unknown | null; tool_input: unknown | null; tool_output: unknown | null; metadata: unknown | null };
+
+export type ObservabilityEventSummaryModel = { run_session_id: string; session_id: string | null; step_index: number; event_type: string; timestamp: string; duration_ms: number | null; provider: string | null; model: string | null; url: string | null; tool_name: string | null; tool_call_id: string | null; tool_duration_ms: number | null; prompt_tokens: number | null; completion_tokens: number | null; total_tokens: number | null; cached_input_tokens: number | null; reasoning_tokens: number | null; status_code: number | null; success: boolean | null; error_message: string | null; has_payload: boolean };
 
 export type PendingUserQuestionModel = { question_id: string; question: string; suggestions: string[]; recommended_suggestion_index?: 0 };
 
@@ -249,7 +253,7 @@ export type ResolvedRuntimeViewModel = { provider: string; provider_id: string; 
 
 export type RunFilterValuesResponse = { statuses: string[]; providers: string[]; models: string[] };
 
-export type RunSessionDetailResponse = { run: RunSessionModel; events: ObservabilityEventModel[] };
+export type RunSessionDetailResponse = { run: RunSessionModel; events: ObservabilityEventSummaryModel[]; child_runs: ChildRunDetailModel[] };
 
 export type RunSessionModel = { run_session_id: string; session_id: string | null; parent_run_session_id: string | null; agent_name: string | null; agent_type: string | null; provider: string | null; provider_id: string | null; profile_id: string | null; model: string | null; reasoning_effort: string | null; status: "started" | "completed" | "interrupted" | "failed" | "starting" | "running" | "waiting_for_input" | "ended" | "stale"; started_at: string; ended_at: string | null; total_duration_ms: number | null; input_tokens: number; cached_input_tokens: number; cache_write_tokens: number; cache_write_1h_tokens: number; output_tokens: number; reasoning_tokens: number; provider_total_tokens: number; estimated_cost_usd: number; total_tool_calls: number; total_api_calls: number; error_count: number; kind?: string; task_id?: string | null; project_dir?: string | null; last_event_seq?: number; snapshot?: unknown | null; exit_code?: number | null; fatal_error?: string | null; metadata: unknown | null };
 
@@ -503,6 +507,7 @@ export type ApiOperationResponses = {
   "GET /api/provider-auth/{provider_id}/usage-limits": ProviderUsageLimitsResponse;
   "GET /api/runs": AllRunsResponse;
   "GET /api/runs/{run_session_id}": RunSessionDetailResponse;
+  "GET /api/runs/{run_session_id}/events/{step_index}": ObservabilityEventModel;
   "GET /api/sessions": SessionsResponse;
   "POST /api/sessions": SessionResponse;
   "POST /api/sessions/expand-input": ExpandInputResponse;
@@ -602,6 +607,7 @@ export type ApiOperationPathParams = {
   "POST /api/provider-auth/{provider_id}/refresh": { provider_id: string };
   "GET /api/provider-auth/{provider_id}/usage-limits": { provider_id: string };
   "GET /api/runs/{run_session_id}": { run_session_id: string };
+  "GET /api/runs/{run_session_id}/events/{step_index}": { run_session_id: string; step_index: number };
   "DELETE /api/sessions/{session_id}": { session_id: string };
   "GET /api/sessions/{session_id}": { session_id: string };
   "PATCH /api/sessions/{session_id}": { session_id: string };
@@ -639,6 +645,7 @@ export type ApiOperationQueryParams = {
   "GET /api/mentions/search": { q?: string; limit?: number; refresh?: boolean };
   "GET /api/runs": { limit?: number; offset?: number; status?: string | null; provider?: string | null; model?: string | null; start_date?: string | null; end_date?: string | null; sort_by?: string; sort_dir?: string; scope?: string };
   "GET /api/runs/{run_session_id}": { scope?: string };
+  "GET /api/runs/{run_session_id}/events/{step_index}": { scope?: string };
   "GET /api/sessions": { limit?: number; q?: string | null };
   "GET /api/skills/search": { q?: string; limit?: number };
   "GET /api/slash-commands/search": { q?: string; limit?: number };

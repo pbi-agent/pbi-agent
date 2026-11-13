@@ -1293,6 +1293,7 @@ def run_sub_agent_task(
     parent_tool_availability_overridden: bool = False,
     parent_context: ParentContextSnapshot | None = None,
     parent_tracer: RunTracer | None = None,
+    parent_tool_call_id: str | None = None,
     workspace_root: Path | None = None,
     workspace_directory_key: str | None = None,
     intent: str | None = None,
@@ -1462,6 +1463,11 @@ def run_sub_agent_task(
                 metadata={
                     **_run_reasoning_metadata(child_settings),
                     "include_context": include_context,
+                    **(
+                        {"parent_tool_call_id": parent_tool_call_id}
+                        if parent_tool_call_id
+                        else {}
+                    ),
                 },
             )
             if parent_tracer is not None

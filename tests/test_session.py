@@ -1959,13 +1959,17 @@ def test_run_sub_agent_task_creates_nested_run_session(tmp_path, monkeypatch) ->
             parent_turn_usage=TokenUsage(model="gpt-5"),
             tool_catalog=ToolCatalog.from_builtin_registry(),
             parent_tracer=parent_tracer,
+            parent_tool_call_id="call_sub_1",
         )
         parent_tracer.finish(status="completed")
         runs = store.list_run_sessions(session_id)
+        children = store.list_descendant_run_sessions(runs[0].run_session_id)
 
     assert result["status"] == "completed"
     assert len(runs) == 2
     assert runs[1].parent_run_session_id == runs[0].run_session_id
+    assert [child.run_session_id for child in children] == [runs[1].run_session_id]
+    assert json.loads(runs[1].metadata_json)["parent_tool_call_id"] == "call_sub_1"
 
 
 def test_run_sub_agent_task_reports_missing_model_profile_as_sub_agent_failure(

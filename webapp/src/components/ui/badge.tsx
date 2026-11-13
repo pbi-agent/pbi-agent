@@ -31,6 +31,16 @@ const badgeVariants = cva(
           "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 [a]:hover:bg-emerald-500/20",
         failed:
           "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 [a]:hover:bg-rose-500/20",
+        "trace-agent":
+          "bg-trace-agent/15 font-semibold tracking-wide text-trace-agent uppercase",
+        "trace-chat":
+          "bg-trace-chat/15 font-semibold tracking-wide text-trace-chat uppercase",
+        "trace-tool":
+          "bg-trace-tool/15 font-semibold tracking-wide text-trace-tool uppercase",
+        "trace-error":
+          "bg-trace-error/15 font-semibold tracking-wide text-trace-error uppercase",
+        "trace-event":
+          "bg-muted font-semibold tracking-wide text-muted-foreground uppercase",
       },
       size: {
         default: "",

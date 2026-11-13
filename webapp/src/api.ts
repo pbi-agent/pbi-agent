@@ -44,7 +44,6 @@ import type {
   MaintenanceConfig,
   MentionSuggestionSearchPayload,
   ModelProfileView,
-  ObservabilityEvent,
   ProviderAuthFlowResponse,
   ProviderAuthLogoutResponse,
   ProviderAuthResponse,
@@ -52,6 +51,8 @@ import type {
   ProviderUsageLimitsResponse,
   ProviderView,
   RunFilterValuesPayload,
+  ObservabilityEvent,
+  RunDetail,
   RunSession,
   SessionDetailPayload,
   SessionRecord,
@@ -102,10 +103,7 @@ type MaintenanceConfigResponsePayload = {
 };
 type UserProfileResponsePayload = ApiResponse<"PUT /api/config/profile">;
 type SessionRunsResponsePayload = { runs: RunSession[] };
-type RunDetailResponsePayload = {
-  run: RunSession;
-  events: ObservabilityEvent[];
-};
+type RunDetailResponsePayload = RunDetail;
 type DashboardStatsQuery = ApiQueryParams<"GET /api/dashboard/stats"> & {
   scope?: "workspace" | "global";
 };
@@ -1614,7 +1612,7 @@ export async function fetchSessionRuns(sessionId: string): Promise<RunSession[]>
 export async function fetchRunDetail(
   runSessionId: string,
   scope?: "workspace" | "global",
-): Promise<{ run: RunSession; events: ObservabilityEvent[] }> {
+): Promise<RunDetail> {
   const qs = queryString("GET /api/runs/{run_session_id}", { scope });
   return apiRequest<
     "GET /api/runs/{run_session_id}",
@@ -1623,6 +1621,24 @@ export async function fetchRunDetail(
     "GET /api/runs/{run_session_id}",
     `${pathFor("GET /api/runs/{run_session_id}", {
       run_session_id: runSessionId,
+    })}${qs}`,
+  );
+}
+
+export async function fetchRunEvent(
+  runSessionId: string,
+  stepIndex: number,
+  scope?: "workspace" | "global",
+): Promise<ObservabilityEvent> {
+  const qs = queryString("GET /api/runs/{run_session_id}/events/{step_index}", { scope });
+  return apiRequest<
+    "GET /api/runs/{run_session_id}/events/{step_index}",
+    ObservabilityEvent
+  >(
+    "GET /api/runs/{run_session_id}/events/{step_index}",
+    `${pathFor("GET /api/runs/{run_session_id}/events/{step_index}", {
+      run_session_id: runSessionId,
+      step_index: stepIndex,
     })}${qs}`,
   );
 }

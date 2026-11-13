@@ -358,6 +358,7 @@ def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
         parent_tracer=None,
         workspace_root=None,
         workspace_directory_key=None,
+        parent_tool_call_id=None,
         **_kwargs: object,
     ) -> dict[str, object]:
         del (
@@ -374,6 +375,7 @@ def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
         captured["tool_catalog"] = tool_catalog
         captured["agent_type"] = agent_type
         captured["include_context"] = include_context
+        captured["parent_tool_call_id"] = parent_tool_call_id
         captured["parent_tool_availability_overridden"] = (
             parent_tool_availability_overridden
         )
@@ -397,6 +399,7 @@ def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
             turn_usage=TokenUsage(model="gpt-5"),
             tool_catalog=ToolCatalog.from_builtin_registry(),
             tool_availability_overridden=True,
+            tool_call_id="call_sub_1",
             parent_context=ParentContextSnapshot(
                 provider="openai",
                 continuation_id="resp_parent",
@@ -406,6 +409,7 @@ def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
 
     assert result == {"status": "completed", "final_output": "done"}
     assert captured == {
+        "parent_tool_call_id": "call_sub_1",
         "task_instruction": "Review the auth changes",
         "tool_catalog": ANY,
         "agent_type": "code-reviewer",

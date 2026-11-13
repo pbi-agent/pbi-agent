@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   BotIcon,
@@ -11,9 +11,8 @@ import {
   TriangleAlertIcon,
   WrenchIcon,
 } from "lucide-react";
-import { fetchRunDetail } from "../../api";
-import type { ObservabilityEvent, RunSession } from "../../types";
-import { cn } from "../../lib/utils";
+import { fetchRunDetail, fetchRunEvent } from "../../api";
+import type { ObservabilityEventSummary, RunDetail, RunSession } from "../../types";
 import { Button } from "../ui/button";
 import { Separator } from "../ui/separator";
 import { FormDialog } from "../ui/form-dialog";
@@ -21,6 +20,16 @@ import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { CopyShortcut } from "../shared/CopyShortcut";
 import { Alert, AlertDescription } from "../ui/alert";
 import { StatusPill } from "../shared/StatusPill";
+import { Badge } from "../ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
+import { TruncatedText } from "../TruncatedText";
+import {
+  buildRunTrace,
+  countSpans,
+  formatSpanDuration,
+  type TraceSpan,
+  type TraceSpanType,
+} from "./runTrace";
 
 export function RunDetailModal({
   runSessionId,
@@ -60,7 +69,7 @@ export function RunDetailModal({
         ) : detailQuery.data ? (
           <>
             <RunSummary run={detailQuery.data.run} />
-            <EventTimeline events={detailQuery.data.events} />
+            <TraceTimeline detail={detailQuery.data} scope={scope} />
           </>
         ) : null}
       </div>
@@ -74,7 +83,7 @@ function isRunActive(status: string): boolean {
 
 function RunSummary({ run }: { run: RunSession }) {
   const durationLabel = run.total_duration_ms != null
-    ? formatDurationLong(run.total_duration_ms)
+    ? formatSpanDuration(run.total_duration_ms)
     : "--";
   const costLabel = run.estimated_cost_usd > 0
     ? `$${run.estimated_cost_usd.toFixed(4)}`
@@ -206,8 +215,50 @@ function KpiCell({
   );
 }
 
-function EventTimeline({ events }: { events: ObservabilityEvent[] }) {
-  if (events.length === 0) {
+type RunScope = "workspace" | "global" | undefined;
+
+type TraceUi = {
+  scope: RunScope;
+  /** Span ids whose children are collapsed. */
+  collapsed: ReadonlySet<string>;
+  /** Span ids whose payload details are open. */
+  detailsOpen: ReadonlySet<string>;
+  toggleCollapsed: (spanId: string) => void;
+  toggleDetails: (spanId: string) => void;
+};
+
+const TraceUiContext = createContext<TraceUi | null>(null);
+
+function useTraceUi(): TraceUi {
+  const ui = useContext(TraceUiContext);
+  if (!ui) throw new Error("Trace rows must render inside TraceTimeline.");
+  return ui;
+}
+
+function toggled(ids: ReadonlySet<string>, id: string): Set<string> {
+  const next = new Set(ids);
+  if (!next.delete(id)) next.add(id);
+  return next;
+}
+
+function TraceTimeline({ detail, scope }: { detail: RunDetail; scope: RunScope }) {
+  const root = useMemo(() => buildRunTrace(detail), [detail]);
+  // Row state lives here, keyed by span id, so it survives a parent row being
+  // collapsed (which unmounts its children) and rows moving while a run is live.
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  const [detailsOpen, setDetailsOpen] = useState<ReadonlySet<string>>(() => new Set());
+  const ui = useMemo<TraceUi>(
+    () => ({
+      scope,
+      collapsed,
+      detailsOpen,
+      toggleCollapsed: (spanId) => setCollapsed((ids) => toggled(ids, spanId)),
+      toggleDetails: (spanId) => setDetailsOpen((ids) => toggled(ids, spanId)),
+    }),
+    [scope, collapsed, detailsOpen],
+  );
+
+  if (root.children.length === 0 && root.status !== "running") {
     return (
       <div className="p-5 text-center text-sm text-muted-foreground">
         No events recorded for this run.
@@ -216,117 +267,180 @@ function EventTimeline({ events }: { events: ObservabilityEvent[] }) {
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-2">
-      <h3 className="text-sm font-semibold text-foreground">Events ({events.length})</h3>
-      <div className="flex min-w-0 flex-col gap-1">
-        {events.map((event) => (
-          <EventRow key={`${event.run_session_id}-${event.step_index}`} event={event} />
-        ))}
+    <TraceUiContext.Provider value={ui}>
+      <div className="@container/trace flex min-w-0 flex-col gap-2">
+        <h3 className="text-sm font-semibold text-foreground">Trace ({countSpans(root)})</h3>
+        <TraceRow span={root} isRoot />
+      </div>
+    </TraceUiContext.Provider>
+  );
+}
+
+const SPAN_TYPE_LABEL: Record<TraceSpanType, string> = {
+  agent: "Agent",
+  chat: "Chat",
+  tool: "Tool",
+  hook: "Hook",
+  error: "Error",
+  event: "Event",
+};
+
+const SPAN_TYPE_VARIANT = {
+  agent: "trace-agent",
+  chat: "trace-chat",
+  tool: "trace-tool",
+  hook: "trace-event",
+  error: "trace-error",
+  event: "trace-event",
+} as const satisfies Record<TraceSpanType, string>;
+
+function TraceRow({ span, isRoot = false }: { span: TraceSpan; isRoot?: boolean }) {
+  const ui = useTraceUi();
+  const childrenOpen = !ui.collapsed.has(span.id);
+  const event = span.event;
+  const hasChildren = span.children.length > 0;
+  const hasDetails = event != null && (event.has_payload || Boolean(event.error_message));
+  const showDetails = hasDetails && ui.detailsOpen.has(span.id);
+
+  return (
+    <Collapsible open={childrenOpen} onOpenChange={() => ui.toggleCollapsed(span.id)}>
+      <div
+        data-slot="trace-span"
+        data-span-type={span.type}
+        data-root={isRoot ? "" : undefined}
+        className="min-w-0 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm transition-colors duration-200 animate-in fade-in slide-in-from-bottom-1 hover:border-border hover:bg-muted/50 motion-reduce:animate-none data-root:border-trace-bar/60"
+      >
+        <div className="flex items-center gap-1 pr-4 pl-2">
+          {hasChildren ? (
+            <CollapsibleTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`${childrenOpen ? "Collapse" : "Expand"} ${span.label}`}
+              >
+                <ChevronRightIcon
+                  data-open={childrenOpen ? "true" : "false"}
+                  className="transition-transform data-[open=true]:rotate-90"
+                  aria-hidden="true"
+                />
+              </Button>
+            </CollapsibleTrigger>
+          ) : (
+            <span className="size-7 shrink-0" aria-hidden="true" />
+          )}
+          <button
+            type="button"
+            className="flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50 enabled:cursor-pointer in-data-root:min-h-16"
+            onClick={() => ui.toggleDetails(span.id)}
+            aria-expanded={hasDetails ? showDetails : undefined}
+            disabled={!hasDetails}
+          >
+            <TruncatedText className="min-w-0 flex-1 truncate text-base font-medium text-foreground in-data-root:font-semibold">
+              {span.label}
+            </TruncatedText>
+            {span.status === "failed" ? (
+              <StatusPill status="failed" size="meta" data-span-status="">fail</StatusPill>
+            ) : span.status === "running" && !isRoot ? (
+              <StatusPill status="running" size="meta" data-span-status="">running</StatusPill>
+            ) : null}
+            <span className="flex w-16 shrink-0 justify-center">
+              <Badge variant={SPAN_TYPE_VARIANT[span.type]} size="meta">
+                {SPAN_TYPE_LABEL[span.type]}
+              </Badge>
+            </span>
+            <span className="w-20 shrink-0 font-mono text-sm whitespace-nowrap text-muted-foreground tabular-nums">
+              {span.durationMs != null ? formatSpanDuration(span.durationMs) : ""}
+            </span>
+            <span
+              data-slot="trace-bar-track"
+              className="relative h-2 w-32 shrink-0 @max-lg/trace:hidden @3xl/trace:w-64"
+              aria-hidden="true"
+            >
+              {span.bar ? (
+                <span
+                  data-slot="trace-bar"
+                  className="absolute inset-y-0 left-(--trace-bar-offset) w-(--trace-bar-width) origin-left animate-trace-bar rounded-full bg-trace-bar shadow-sm shadow-trace-bar/60 motion-reduce:animate-none"
+                  style={{
+                    "--trace-bar-offset": `${(span.bar.offset * 100).toFixed(2)}%`,
+                    "--trace-bar-width": `${(span.bar.width * 100).toFixed(2)}%`,
+                  } as React.CSSProperties}
+                />
+              ) : null}
+            </span>
+          </button>
+        </div>
+
+        {showDetails ? <SpanDetails event={event} /> : null}
+      </div>
+
+      {hasChildren ? (
+        <CollapsibleContent animated>
+          <div className="flex min-w-0 flex-col gap-2 pt-2 pl-5 @2xl/trace:pl-8">
+            {span.children.map((child) => (
+              <TraceRow key={child.id} span={child} />
+            ))}
+          </div>
+        </CollapsibleContent>
+      ) : null}
+    </Collapsible>
+  );
+}
+
+function SpanDetails({ event }: { event: ObservabilityEventSummary }) {
+  const { scope } = useTraceUi();
+  // Payloads can be large, so they are fetched per event when a row is opened.
+  // A recorded event never changes, so it is fetched once.
+  const payloadQuery = useQuery({
+    queryKey: ["run-event", event.run_session_id, event.step_index, scope],
+    queryFn: () => fetchRunEvent(event.run_session_id, event.step_index, scope),
+    enabled: event.has_payload,
+    staleTime: Infinity,
+  });
+  const full = payloadQuery.data;
+
+  return (
+    <div className="flex min-w-0 flex-col gap-3 border-t border-border p-3">
+      {event.error_message ? (
+        <PayloadSection label="Error" value={event.error_message} variant="error" />
+      ) : null}
+      {payloadQuery.isLoading ? (
+        <div className="flex items-center justify-center p-3">
+          <LoadingSpinner size="sm" />
+        </div>
+      ) : payloadQuery.isError ? (
+        <div className="text-sm text-destructive">Failed to load event details.</div>
+      ) : null}
+      {full ? (
+        <>
+          {full.tool_input != null ? <PayloadSection label="Tool Input" value={full.tool_input} /> : null}
+          {full.tool_output != null ? <PayloadSection label="Tool Output" value={full.tool_output} /> : null}
+          {full.request_payload != null ? <PayloadSection label="Request" value={full.request_payload} /> : null}
+          {full.response_payload != null ? <PayloadSection label="Response" value={full.response_payload} /> : null}
+          {full.request_config != null ? <PayloadSection label="Config" value={full.request_config} /> : null}
+          {hasContent(full.metadata) ? <PayloadSection label="Metadata" value={full.metadata} /> : null}
+        </>
+      ) : null}
+
+      <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-muted-foreground">
+        <span>Step: #{event.step_index}</span>
+        {event.provider ? <span>Provider: {event.provider}</span> : null}
+        {event.url ? <span className="break-all">URL: {event.url}</span> : null}
+        {event.tool_call_id ? <span>Call ID: {event.tool_call_id}</span> : null}
+        {event.prompt_tokens != null ? <span>Prompt: {fmt(event.prompt_tokens)} tok</span> : null}
+        {event.completion_tokens != null ? <span>Completion: {fmt(event.completion_tokens)} tok</span> : null}
+        {event.total_tokens != null && event.total_tokens > 0 ? (
+          <span>Total: {fmt(event.total_tokens)} tok</span>
+        ) : null}
+        <span>Time: {formatFullTimestamp(event.timestamp)}</span>
       </div>
     </div>
   );
 }
 
-const EVENT_TYPE_CLASS_NAME: Record<string, string> = {
-  api: "text-primary",
-  tool: "text-primary",
-  error: "text-destructive",
-  lifecycle: "text-foreground",
-  step: "text-muted-foreground",
-  default: "text-muted-foreground",
-};
-
-function EventRow({ event }: { event: ObservabilityEvent }) {
-  const [expanded, setExpanded] = useState(false);
-
-  const typeModifier = eventTypeModifier(event.event_type);
-  const hasPayload = Boolean(
-    event.request_payload
-    || event.response_payload
-    || event.tool_input
-    || event.tool_output
-    || event.error_message
-    || event.request_config
-    || event.metadata,
-  );
-
-  return (
-    <div
-      data-event-type={typeModifier}
-      className="min-w-0 overflow-hidden rounded-md border border-border bg-card"
-    >
-      <Button
-        type="button"
-        variant="ghost"
-        className="w-full justify-start"
-        onClick={() => { if (hasPayload) setExpanded((v) => !v); }}
-        aria-expanded={hasPayload ? expanded : undefined}
-        disabled={!hasPayload}
-      >
-        <span className="font-mono text-xs text-muted-foreground">#{event.step_index}</span>
-        <span className={cn("font-mono text-xs font-medium", EVENT_TYPE_CLASS_NAME[typeModifier])}>
-          {event.event_type}
-        </span>
-
-        {event.tool_name ? (
-          <span className="truncate font-mono text-xs text-foreground">{event.tool_name}</span>
-        ) : null}
-
-        <span className="flex-1" />
-
-        {event.success === false ? (
-          <StatusPill status="failed" size="meta" data-event-status="">fail</StatusPill>
-        ) : event.success === true ? (
-          <StatusPill status="completed" size="meta" data-event-status="">ok</StatusPill>
-        ) : null}
-
-        {event.duration_ms != null ? (
-          <span className="font-mono text-xs text-muted-foreground">{formatDurationShort(event.duration_ms)}</span>
-        ) : event.tool_duration_ms != null ? (
-          <span className="font-mono text-xs text-muted-foreground">{formatDurationShort(event.tool_duration_ms)}</span>
-        ) : null}
-
-        {event.total_tokens != null && event.total_tokens > 0 ? (
-          <span className="font-mono text-xs text-muted-foreground">{fmt(event.total_tokens)}</span>
-        ) : null}
-
-        {hasPayload ? (
-          <ChevronRightIcon
-            data-open={expanded ? "true" : "false"}
-            className="text-muted-foreground transition-transform data-[open=true]:rotate-90"
-            aria-hidden="true"
-          />
-        ) : null}
-      </Button>
-
-      {expanded && hasPayload ? (
-        <div className="flex min-w-0 flex-col gap-3 border-t border-border p-3">
-          {event.error_message ? (
-            <PayloadSection label="Error" value={event.error_message} variant="error" />
-          ) : null}
-          {event.tool_name ? (
-            <>
-              {event.tool_input != null ? <PayloadSection label="Tool Input" value={event.tool_input} /> : null}
-              {event.tool_output != null ? <PayloadSection label="Tool Output" value={event.tool_output} /> : null}
-            </>
-          ) : null}
-          {event.request_payload != null ? <PayloadSection label="Request" value={event.request_payload} /> : null}
-          {event.response_payload != null ? <PayloadSection label="Response" value={event.response_payload} /> : null}
-          {event.request_config != null ? <PayloadSection label="Config" value={event.request_config} /> : null}
-          {event.metadata != null ? <PayloadSection label="Metadata" value={event.metadata} /> : null}
-
-          <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-muted-foreground">
-            {event.provider ? <span>Provider: {event.provider}</span> : null}
-            {event.url ? <span className="break-all">URL: {event.url}</span> : null}
-            {event.tool_call_id ? <span>Call ID: {event.tool_call_id}</span> : null}
-            {event.prompt_tokens != null ? <span>Prompt: {fmt(event.prompt_tokens)} tok</span> : null}
-            {event.completion_tokens != null ? <span>Completion: {fmt(event.completion_tokens)} tok</span> : null}
-            <span>Time: {formatFullTimestamp(event.timestamp)}</span>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
+function hasContent(value: unknown): boolean {
+  if (value == null) return false;
+  return typeof value !== "object" || Object.keys(value).length > 0;
 }
 
 function PayloadSection({
@@ -353,29 +467,6 @@ function PayloadSection({
       </div>
     </div>
   );
-}
-
-function eventTypeModifier(eventType: string): string {
-  if (eventType.includes("error") || eventType === "run_error") return "error";
-  if (eventType.includes("tool")) return "tool";
-  if (eventType.includes("model") || eventType === "api_call") return "api";
-  if (eventType === "run_start" || eventType === "run_end") return "lifecycle";
-  if (eventType.includes("step")) return "step";
-  return "default";
-}
-
-function formatDurationLong(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  const s = ms / 1000;
-  if (s < 60) return `${s.toFixed(1)}s`;
-  const m = Math.floor(s / 60);
-  const rs = Math.round(s % 60);
-  return `${m}m ${rs}s`;
-}
-
-function formatDurationShort(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 function fmt(n: number): string {

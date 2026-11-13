@@ -11578,19 +11578,100 @@ def test_get_run_detail_returns_observability_events(tmp_path, monkeypatch) -> N
         "run_start",
         "model_call",
     ]
-    assert payload["events"][0]["request_config"] == {"provider": "openai"}
-    assert payload["events"][0]["metadata"] == {"origin": "test"}
-    assert payload["events"][1]["request_payload"] == {"input": "Hello"}
-    assert payload["events"][1]["response_payload"] == {
+    assert [event["has_payload"] for event in payload["events"]] == [True, True]
+    assert "request_payload" not in payload["events"][1]
+    assert "metadata" not in payload["events"][0]
+    assert payload["events"][1]["success"] is True
+    assert payload["events"][1]["status_code"] == 200
+    assert payload["events"][1]["total_tokens"] == 20
+
+    with TestClient(app) as client:
+        start_event = client.get(f"/api/runs/{run_session_id}/events/0")
+        model_event = client.get(f"/api/runs/{run_session_id}/events/1")
+        missing_event = client.get(f"/api/runs/{run_session_id}/events/7")
+        missing_run = client.get("/api/runs/missing-run/events/0")
+
+    assert start_event.status_code == 200
+    assert start_event.json()["request_config"] == {"provider": "openai"}
+    assert start_event.json()["metadata"] == {"origin": "test"}
+    assert model_event.json()["has_payload"] is True
+    assert model_event.json()["request_payload"] == {"input": "Hello"}
+    assert model_event.json()["response_payload"] == {
         "output": "Hi",
         "usage": {
             "prompt_tokens_details": {"cached_tokens": 12},
             "completion_tokens_details": {"reasoning_tokens": 6},
         },
     }
-    assert payload["events"][1]["success"] is True
-    assert payload["events"][1]["status_code"] == 200
-    assert payload["events"][1]["total_tokens"] == 20
+    assert missing_event.status_code == 404
+    assert missing_run.status_code == 404
+    assert payload["child_runs"] == []
+
+
+def test_get_run_detail_returns_descendant_runs(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path), "openai", "gpt-5.4", "Saved session"
+        )
+
+        def create_run(parent: str | None, name: str, metadata=None) -> str:
+            run_id = store.create_run_session(
+                session_id=session_id,
+                parent_run_session_id=parent,
+                agent_name=name,
+                agent_type="session_turn" if parent is None else "default",
+                provider="openai",
+                provider_id="default",
+                profile_id="analysis",
+                model="gpt-5.4",
+                metadata=metadata,
+            )
+            store.update_run_session(run_id, status="completed", total_duration_ms=5)
+            return run_id
+
+        root_id = create_run(None, "main")
+        child_id = create_run(root_id, "child", {"parent_tool_call_id": "call_1"})
+        grandchild_id = create_run(child_id, "grandchild")
+        unrelated_id = create_run(None, "other")
+        store.add_observability_event(
+            run_session_id=child_id,
+            session_id=session_id,
+            step_index=0,
+            event_type="tool_call",
+            tool_name="shell",
+            tool_call_id="call_2",
+            duration_ms=3,
+            success=True,
+        )
+        store.add_observability_event(
+            run_session_id=child_id,
+            session_id=session_id,
+            step_index=-1,
+            event_type="web_event",
+            metadata={"type": "input_state", "payload": {}, "seq": 1},
+        )
+
+    with TestClient(app) as client:
+        response = client.get(f"/api/runs/{root_id}")
+
+    assert response.status_code == 200
+    child_runs = response.json()["child_runs"]
+    assert [item["run"]["run_session_id"] for item in child_runs] == [
+        child_id,
+        grandchild_id,
+    ]
+    assert unrelated_id not in {item["run"]["run_session_id"] for item in child_runs}
+    assert child_runs[0]["parent_tool_call_id"] == "call_1"
+    assert child_runs[0]["run"]["parent_run_session_id"] == root_id
+    assert [event["event_type"] for event in child_runs[0]["events"]] == ["tool_call"]
+    assert child_runs[0]["events"][0]["has_payload"] is False
+    assert child_runs[1]["parent_tool_call_id"] is None
+    assert child_runs[1]["run"]["parent_run_session_id"] == child_id
+    assert child_runs[1]["events"] == []
 
 
 def test_get_run_detail_returns_live_observability_summary_for_started_run(
