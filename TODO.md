@@ -34,3 +34,5 @@
 - [x] #149 nested trace timeline in Run Detail modal: span tree with waterfall bars, sub-agent runs nested by tool call id, payloads loaded per event, in-flight spans, review findings addressed (787 web tests, full pytest, Ruff/format/basedpyright, lint/typecheck/build, headless Chromium dark/light/620px).
 - [ ] #149 not verified live: a new run whose sub-agent carries `parent_tool_call_id` (covered by unit/API tests only; existing DB runs predate it and show sub-agents under the parent run).
 - [ ] #149 follow-ups (not built): parallel tool calls overlap in the waterfall (no lanes); in-flight non-sub-agent tool calls are invisible until they return (no start event recorded); sub-agent AGENT rows have no detail panel; truncated-label tooltip may not show on rows without details (disabled button).
+
+- [x] Release v0.57.0 (#419, PRs #414–#418): validated, merged, PyPI + GitHub Release published
