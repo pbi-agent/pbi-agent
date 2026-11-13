@@ -437,5 +437,7 @@ def _sandbox_inner_command(args: argparse.Namespace) -> list[str]:
             command.extend(["--session-id", args.session_id])
         if args.include_tool_history:
             command.append("--include-tool-history")
+        if getattr(args, "show_steps", False):
+            command.append("--show-steps")
         return command
     raise ConfigError(f"Unknown sandbox command '{sandbox_command}'.")

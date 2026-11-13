@@ -269,3 +269,45 @@ def test_welcome_without_metadata() -> None:
     assert "single-turn" in output
     assert "model:" not in output
     assert "reasoning:" not in output
+
+
+def test_final_response_only_prints_only_last_assistant_message() -> None:
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    display = ConsoleDisplay(stdout=stdout, stderr=stderr, final_response_only=True)
+
+    display.welcome(interactive=False, model="gpt-x")
+    display.render_thinking("pondering", title="Thinking")
+    display.render_markdown("Let me inspect the files.")
+    display.tool_execution_start([])
+    display.function_start(1)
+    display.function_result("shell", True, arguments={"command": "ls"})
+    display.tool_group_end()
+    sub_agent = display.begin_sub_agent(task_instruction="Explore")
+    sub_agent.render_markdown("sub-agent chatter")
+    display.render_markdown("Final answer part one.")
+    display.render_markdown("Part two.")
+    display.turn_usage(TokenUsage(), elapsed_seconds=1.0)
+
+    assert stdout.getvalue() == ""
+
+    display.flush_final_response()
+
+    output = stdout.getvalue()
+    assert "Final answer part one." in output
+    assert "Part two." in output
+    for hidden in ("gpt-x", "pondering", "inspect the files", "ls", "sub-agent"):
+        assert hidden not in output
+    display.error("boom")
+    assert "Error: boom" in stderr.getvalue()
+
+
+def test_flush_final_response_is_noop_when_showing_steps() -> None:
+    display, stdout, _ = _display()
+
+    display.render_markdown("Visible immediately")
+    before = stdout.getvalue()
+    display.flush_final_response()
+
+    assert "Visible immediately" in before
+    assert stdout.getvalue() == before

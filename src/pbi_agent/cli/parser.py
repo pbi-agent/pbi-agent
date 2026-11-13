@@ -265,7 +265,7 @@ def build_parser() -> argparse.ArgumentParser:
         )
 
     run_parser = add_command_parser("run", "Run a single prompt turn.")
-    run_parser.add_argument("--prompt", required=True, help="User prompt.")
+    run_parser.add_argument("-p", "--prompt", required=True, help="User prompt.")
     run_parser.add_argument(
         "--image",
         dest="images",
@@ -287,6 +287,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-tool-history",
         action="store_true",
         help="Include prior tool calls and results when resuming a session.",
+    )
+    run_parser.add_argument(
+        "--show-steps",
+        action="store_true",
+        help=(
+            "Display all intermediate steps (thinking, tool calls, usage). "
+            "By default only the final response is printed."
+        ),
     )
     run_parser.add_argument(
         "--allowed-tools",
@@ -451,7 +459,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run a single prompt turn inside the Docker sandbox.",
         formatter_class=CleanHelpFormatter,
     )
-    sandbox_run_parser.add_argument("--prompt", required=True, help="User prompt.")
+    sandbox_run_parser.add_argument(
+        "-p", "--prompt", required=True, help="User prompt."
+    )
     sandbox_run_parser.add_argument(
         "--image",
         dest="images",
@@ -473,6 +483,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-tool-history",
         action="store_true",
         help="Include prior tool calls and results when resuming a session.",
+    )
+    sandbox_run_parser.add_argument(
+        "--show-steps",
+        action="store_true",
+        help=(
+            "Display all intermediate steps (thinking, tool calls, usage). "
+            "By default only the final response is printed."
+        ),
     )
 
     sessions_parser = add_command_parser(
