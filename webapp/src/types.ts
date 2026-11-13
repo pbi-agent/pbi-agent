@@ -17,6 +17,7 @@ import type {
   BackgroundTaskOutputModel,
   RunSessionModel,
   SessionRecordModel,
+  LocalSttStatusResponse,
   SkillCandidateViewModel,
   SkillCandidatesResponse,
   SkillInstallResponse,
@@ -928,3 +929,7 @@ export type RunFilterValuesPayload = {
   providers: string[];
   models: string[];
 };
+
+/** `stt_provider_id` of the built-in on-device engine (no saved provider). */
+export const LOCAL_STT_PROVIDER_ID = "@local";
+export type LocalSttStatus = LocalSttStatusResponse;

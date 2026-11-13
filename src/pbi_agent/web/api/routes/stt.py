@@ -8,8 +8,11 @@ from typing import cast
 from fastapi import APIRouter, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
-from pbi_agent.stt import SttError, SttInputError, transcribe_wav_bytes
-from pbi_agent.web.api.schemas.stt import SttTranscriptionResponse
+from pbi_agent.stt import SttError, SttInputError, local, transcribe_wav_bytes
+from pbi_agent.web.api.schemas.stt import (
+    LocalSttStatusResponse,
+    SttTranscriptionResponse,
+)
 
 router = APIRouter(prefix="/api/stt", tags=["stt"])
 
@@ -29,6 +32,27 @@ async def transcribe_stt(request: Request) -> SttTranscriptionResponse:
     except SttError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     return SttTranscriptionResponse(text=text)
+
+
+@router.get("/local", response_model=LocalSttStatusResponse)
+def get_local_stt_status() -> LocalSttStatusResponse:
+    return _local_status_response()
+
+
+@router.post("/local/download", response_model=LocalSttStatusResponse)
+def download_local_stt() -> LocalSttStatusResponse:
+    local.start_download()
+    return _local_status_response()
+
+
+def _local_status_response() -> LocalSttStatusResponse:
+    current = local.status()
+    return LocalSttStatusResponse(
+        state=current.state,
+        downloaded_bytes=current.downloaded_bytes,
+        total_bytes=current.total_bytes,
+        error=current.error,
+    )
 
 
 async def _read_single_file_upload(request: Request) -> _UploadedFile:

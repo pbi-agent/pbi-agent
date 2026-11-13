@@ -234,6 +234,13 @@ def isolate_local_session_titles(monkeypatch: pytest.MonkeyPatch, tmp_path) -> N
 
 
 @pytest.fixture(autouse=True)
+def isolate_local_stt(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    # Never read or download the real speech model from tests.
+    monkeypatch.setenv("PBI_AGENT_STT_MODEL_DIR", str(tmp_path / "stt-model"))
+    monkeypatch.setattr("pbi_agent.stt.local._last_error", None)
+
+
+@pytest.fixture(autouse=True)
 def isolate_web_uploads(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setattr(uploads, "_UPLOADS_ROOT", tmp_path / "web_uploads")
 

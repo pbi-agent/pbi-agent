@@ -88,6 +88,9 @@ RUNTIME_PROVIDER_KINDS = (
     "generic",
 )
 STT_PROVIDER_KINDS = ("openai", "xai", "google", "deepgram", "elevenlabs")
+# Speech-to-text selection for the built-in on-device engine. "@" cannot appear
+# in a saved provider ID, so it never collides with one.
+LOCAL_STT_PROVIDER_ID = "@local"
 PROVIDER_KINDS = (
     *MODEL_PROFILE_PROVIDER_KINDS,
     "deepgram",
@@ -1412,8 +1415,8 @@ def select_stt_provider(
     expected_revision: str | None = None,
 ) -> tuple[str | None, str]:
     config = load_internal_config()
-    if provider_id is None:
-        config.web.stt_provider_id = None
+    if provider_id is None or provider_id == LOCAL_STT_PROVIDER_ID:
+        config.web.stt_provider_id = provider_id
     else:
         provider = _provider_map(config).get(slugify(provider_id))
         if provider is None:

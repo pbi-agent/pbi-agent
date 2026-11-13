@@ -30,6 +30,7 @@ from pbi_agent.commands.project_installer import (
     resolve_default_commands_source,
 )
 from pbi_agent.config import (
+    LOCAL_STT_PROVIDER_ID,
     OPENAI_REASONING_MODES,
     OPENAI_SERVICE_TIERS,
     PROVIDER_KINDS,
@@ -93,6 +94,7 @@ from pbi_agent.skills.state import (
     set_skill_enabled,
     skill_enabled_map,
 )
+from pbi_agent.stt import local as local_stt
 from pbi_agent.web.session.serializers import (
     _config_sort_key,
     _resolved_runtime_view,
@@ -539,6 +541,8 @@ class ConfigurationMixin:
         stt_provider_id, revision = select_stt_provider(
             provider_id, expected_revision=expected_revision
         )
+        if stt_provider_id == LOCAL_STT_PROVIDER_ID:
+            local_stt.start_download()
         return {
             "stt_provider_id": stt_provider_id,
             "config_revision": revision,

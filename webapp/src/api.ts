@@ -66,6 +66,7 @@ import type {
   WorkspacePickerPayload,
   WorkspaceSwitchPayload,
   BackgroundTaskOutput,
+  LocalSttStatus,
 } from "./types";
 
 type SessionListResponsePayload = { sessions: SessionRecord[] };
@@ -1542,6 +1543,21 @@ export async function setPromptEnhancementProfile(
       headers: { "If-Match": configRevision },
       body: jsonBody("PUT /api/config/prompt-enhancement-profile", payload),
     },
+  );
+}
+
+export async function fetchLocalSttStatus(): Promise<LocalSttStatus> {
+  return apiRequest<"GET /api/stt/local", LocalSttStatus>(
+    "GET /api/stt/local",
+    "/api/stt/local",
+  );
+}
+
+export async function startLocalSttDownload(): Promise<LocalSttStatus> {
+  return apiRequest<"POST /api/stt/local/download", LocalSttStatus>(
+    "POST /api/stt/local/download",
+    "/api/stt/local/download",
+    { method: "POST" },
   );
 }
 

@@ -31,6 +31,7 @@ The CLI calls `load_dotenv()` during settings resolution, so a local `.env` file
 | `PBI_AGENT_SERVICE_TIER` | none | OpenAI service tier: `auto`, `default`, `flex`, or `priority`. Only valid with the OpenAI provider. |
 | `PBI_AGENT_LOCAL_TITLES` | `1` | Set to `0` to turn off local session titles in the web UI, including the background download of the title model and llama.cpp build. |
 | `PBI_AGENT_TITLE_MODEL_DIR` | `~/.pbi-agent/title-model` | Directory for the downloaded title model and llama.cpp build. |
+| `PBI_AGENT_STT_MODEL_DIR` | `~/.pbi-agent/stt-model` | Directory for the downloaded on-device speech model and sherpa-onnx build. See [Speech-to-text](/speech-to-text#on-device-speech-to-text). |
 
 Settings resolution happens in two phases:
 

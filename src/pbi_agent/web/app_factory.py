@@ -12,7 +12,13 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from pbi_agent import session_titles
-from pbi_agent.config import ResolvedRuntime, Settings
+from pbi_agent.config import (
+    LOCAL_STT_PROVIDER_ID,
+    ResolvedRuntime,
+    Settings,
+    load_internal_config,
+)
+from pbi_agent.stt import local as local_stt
 from pbi_agent.web.api import (
     board_router,
     channels_router,
@@ -31,6 +37,16 @@ from pbi_agent.web.terminal import TerminalManager
 WEB_DIR = Path(__file__).resolve().parent
 APP_STATIC_DIR = WEB_DIR / "static" / "app"
 LOGO_PATH = WEB_DIR / "static" / "logo.jpg"
+
+
+def _resume_local_stt_download() -> None:
+    """Finish an interrupted model download when the local engine is selected."""
+    try:
+        selected = load_internal_config().web.stt_provider_id
+    except Exception:
+        return
+    if selected == LOCAL_STT_PROVIDER_ID:
+        local_stt.ensure_assets()
 
 
 def create_app(
@@ -56,6 +72,11 @@ def create_app(
             target=session_titles.ensure_assets,
             daemon=True,
             name="pbi-agent-web-title-assets",
+        ).start()
+        threading.Thread(
+            target=_resume_local_stt_download,
+            daemon=True,
+            name="pbi-agent-web-stt-assets",
         ).start()
         try:
             yield

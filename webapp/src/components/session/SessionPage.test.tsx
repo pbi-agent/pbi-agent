@@ -12,6 +12,7 @@ import {
   expandSessionInput,
   fetchBootstrap,
   fetchConfigBootstrap,
+  fetchLocalSttStatus,
   fetchSessionDetail,
   fetchSessions,
   fetchWorkspaceFilePreview,
@@ -306,6 +307,7 @@ vi.mock("../../api", async (importOriginal) => {
     expandSessionInput: vi.fn(),
     fetchBootstrap: vi.fn(),
     fetchConfigBootstrap: vi.fn(),
+    fetchLocalSttStatus: vi.fn(),
     fetchSessionDetail: vi.fn(),
     fetchSessions: vi.fn(),
     fetchWorkspaceFilePreview: vi.fn(),
@@ -1300,6 +1302,38 @@ describe("SessionPage", () => {
         "X Account does not support speech-to-text. Choose another provider in Settings.",
       );
     });
+  });
+
+  it("enables dictation with the on-device model only once it is installed", async () => {
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({ stt_provider_id: "@local" }),
+    );
+    vi.mocked(fetchLocalSttStatus).mockResolvedValue({
+      state: "downloading",
+      downloaded_bytes: 257_500_000,
+      total_bytes: 515_000_000,
+      error: null,
+    });
+
+    const view = renderSessionRoute("/sessions/session-1");
+
+    await waitFor(() => {
+      expect(screen.getByText(/Composer dictation reason/)).toHaveTextContent(
+        "The on-device speech model is downloading (50%).",
+      );
+    });
+    expect(screen.getByText("Composer dictation available false")).toBeInTheDocument();
+    view.unmount();
+
+    vi.mocked(fetchLocalSttStatus).mockResolvedValue({
+      state: "ready",
+      downloaded_bytes: 515_000_000,
+      total_bytes: 515_000_000,
+      error: null,
+    });
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Composer dictation available true")).toBeInTheDocument();
   });
 
   it("passes a Settings reason when no STT provider is selected", async () => {

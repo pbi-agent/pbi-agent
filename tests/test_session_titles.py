@@ -12,9 +12,9 @@ from unittest.mock import patch
 
 import pytest
 
-from pbi_agent import session_titles
+from pbi_agent import local_assets, session_titles
+from pbi_agent.local_assets import Asset
 from pbi_agent.session_store import SessionStore
-from pbi_agent.session_titles import Asset
 from pbi_agent.web.session_manager import WebSessionManager
 
 FAKE_COMPLETION = """#!{python}
@@ -80,7 +80,7 @@ def test_download_resumes_partial_file_and_verifies(tmp_path: Path) -> None:
     requests: list[str | None] = []
 
     with patch("urllib.request.urlopen", _serve(data, requests)):
-        session_titles._download(_asset(data), destination, tmp_path / "lock")
+        local_assets.download(_asset(data), destination, tmp_path / "lock")
 
     assert requests == ["bytes=1200-"]
     assert destination.read_bytes() == data
@@ -93,7 +93,7 @@ def test_download_restarts_when_server_ignores_range(tmp_path: Path) -> None:
     destination.with_name("file.bin.part").write_bytes(b"stale")
 
     with patch("urllib.request.urlopen", _serve(data, [], honor_range=False)):
-        session_titles._download(_asset(data), destination, tmp_path / "lock")
+        local_assets.download(_asset(data), destination, tmp_path / "lock")
 
     assert destination.read_bytes() == data
 
@@ -107,7 +107,7 @@ def test_download_rejects_checksum_mismatch(tmp_path: Path) -> None:
         patch("urllib.request.urlopen", _serve(data, [])),
         pytest.raises(ValueError, match="checksum mismatch"),
     ):
-        session_titles._download(asset, destination, tmp_path / "lock")
+        local_assets.download(asset, destination, tmp_path / "lock")
 
     assert not destination.exists()
     assert not destination.with_name("file.bin.part").exists()

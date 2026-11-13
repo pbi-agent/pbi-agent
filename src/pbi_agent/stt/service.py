@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 from pbi_agent.auth.models import AUTH_MODE_API_KEY
 from pbi_agent.config import (
+    LOCAL_STT_PROVIDER_ID,
     PROVIDER_API_KEY_ENVS,
     ConfigError,
     ProviderConfig,
@@ -21,6 +22,8 @@ from pbi_agent.stt.base import (
     SttConfigurationError,
 )
 from pbi_agent.stt.registry import get_stt_backend
+
+LOCAL_STT_BACKEND_KIND = "local"
 
 
 def transcribe_wav_bytes(wav_bytes: bytes) -> str:
@@ -47,6 +50,10 @@ def resolve_selected_stt_provider() -> ResolvedSttProvider:
     if not provider_id:
         raise SttConfigurationError(
             "No speech-to-text provider configured. Select an STT provider in settings."
+        )
+    if provider_id == LOCAL_STT_PROVIDER_ID:
+        return ResolvedSttProvider(
+            provider_id=LOCAL_STT_PROVIDER_ID, kind=LOCAL_STT_BACKEND_KIND, api_key=""
         )
 
     providers = {provider.id: provider for provider in config.providers}
