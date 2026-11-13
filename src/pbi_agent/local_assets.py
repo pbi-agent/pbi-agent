@@ -83,7 +83,7 @@ def download(asset: Asset, destination: Path, lock_file: Path) -> None:
     if part.stat().st_size != asset.size or digest.hexdigest() != asset.sha256:
         part.unlink(missing_ok=True)
         raise ValueError(f"checksum mismatch for {asset.url}")
-    os.replace(part, destination)
+    _replace(part, destination)
 
 
 def _fetch(asset: Asset, part: Path, lock_file: Path) -> None:
@@ -108,7 +108,8 @@ def _fetch(asset: Asset, part: Path, lock_file: Path) -> None:
 def extract(archive: Path, destination: Path) -> None:
     staging = destination.with_name(destination.name + ".tmp")
     shutil.rmtree(staging, ignore_errors=True)
-    staging.mkdir(parents=True)
+    # A staging directory a locked file kept alive is reused, not fatal.
+    staging.mkdir(parents=True, exist_ok=True)
     if archive.name.endswith(".zip"):
         with zipfile.ZipFile(archive) as bundle:
             root = staging.resolve()
@@ -119,5 +120,40 @@ def extract(archive: Path, destination: Path) -> None:
     else:
         with tarfile.open(archive) as bundle:
             bundle.extractall(staging, filter="data")
-    shutil.rmtree(destination, ignore_errors=True)
-    os.replace(staging, destination)
+    _replace(staging, destination)
+
+
+def _replace(source: Path, destination: Path) -> None:
+    """Move ``source`` to ``destination``, replacing it.
+
+    Windows refuses to rename a file or directory while another process holds
+    a handle inside it (``WinError 5``/``32``); antivirus and the search
+    indexer open freshly written executables. Copying only needs read access,
+    so the move falls back to a copy, and ``source`` is removed best effort.
+    A half-finished copy is deleted so an existing destination stays complete.
+    """
+    if destination.is_dir():
+        shutil.rmtree(destination, ignore_errors=True)
+    try:
+        os.replace(source, destination)
+        return
+    except PermissionError:
+        _log.debug("%s is busy; copying it to %s instead.", source, destination)
+    try:
+        if source.is_dir():
+            shutil.copytree(source, destination, dirs_exist_ok=True)
+        else:
+            shutil.copy2(source, destination)
+    except BaseException:
+        if destination.is_dir():
+            shutil.rmtree(destination, ignore_errors=True)
+        else:
+            destination.unlink(missing_ok=True)
+        raise
+    if source.is_dir():
+        shutil.rmtree(source, ignore_errors=True)
+    else:
+        try:
+            source.unlink()
+        except OSError:
+            pass
