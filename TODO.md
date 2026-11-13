@@ -53,16 +53,18 @@
 - [x] On-device STT follow-ups (not built): model reload costs ~1.8 s per piece (a long-lived `sherpa-onnx-offline-websocket-server` would remove it for ~1.1 GB held RAM); no way to delete the downloaded model from the UI; no forced language
 
 - [x] Dictation recording indicator replaced with `DictationTimeline` (dot + timer + scrolling loudness history); 796 web tests, lint, typecheck, build, headless Chromium dark/light with a fake microphone
-- [ ] Dictation timeline: checked only with Chromium's synthetic beep input, not a real voice; bar sensitivity (`NOISE_FLOOR`, 0.7 curve) may need tuning on a real microphone
+- [x] Dictation timeline: checked only with Chromium's synthetic beep input, not a real voice; bar sensitivity (`NOISE_FLOOR`, 0.7 curve) may need tuning on a real microphone
 
 - [x] Release v0.58.0 (#423, PRs #420–#422): validated, merged, PyPI + GitHub Release published
 
 - [x] Session topbar TODO shortcut (ListTodo toggle + Alt+Shift+T) opening a right side-panel tab (like files/tasks/terminal) that renders workspace `TODO.md` files (tabs when several, status icons for `[ ]`/`[x]`/`[>]`/`[!]`/`[-]`, counts, 3 s live refresh); 804 web tests, lint, typecheck, build, headless Chromium dark/light
-- [ ] TODO shortcut: button only appears when the file tree index lists a `TODO.md` (gitignored or truncated-index files are missed); Alt+Shift+T still opens the panel empty state
+- [x] TODO shortcut: button only appears when the file tree index lists a `TODO.md` (gitignored or truncated-index files are missed); Alt+Shift+T still opens the panel empty state
 - [x] TODO panel: status count badges are filter toggles (one active at a time, click again to clear; parents of matching sub-items stay dimmed); 805 web tests, lint, typecheck, build, headless Chromium
 - [x] Release v0.59.0 (#425, PR #424 TODO panel + status filters): validated, merged, PyPI + GitHub Release published
 
 - [x] Windows `WinError 5` on local STT install: `local_assets._replace` falls back to copying when antivirus blocks the final rename; tests in `tests/test_local_assets.py`
-- [ ] Confirm the copy fallback on a real Windows host (copy fallback + best-effort cleanup of the locked `.tmp`)
+- [x] Confirm the copy fallback on a real Windows host (copy fallback + best-effort cleanup of the locked `.tmp`)
 - [x] Release v0.60.0 (#428, PRs #426 system_info + #427 Windows copy fallback): validated, merged, PyPI + GitHub Release published
 - [x] `pbi-agent run`: default to final response only; `--show-steps` shows all intermediate steps (run + sandbox run, docs/cli.md, tests)
+- [x] Release v0.61.0 (#430; PR #429 run final-response-only, `--show-steps`, `-p`)
+- [x] Silence Vulture `ready_assets` findings: `@pytest.mark.usefixtures("ready_assets")` in `tests/test_session_titles.py`

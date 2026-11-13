@@ -180,14 +180,16 @@ def test_clean_title(raw: str, expected: str) -> None:
     assert session_titles.clean_title(raw) == expected
 
 
-def test_generate_title_runs_llama_completion(ready_assets: Path) -> None:
+@pytest.mark.usefixtures("ready_assets")
+def test_generate_title_runs_llama_completion() -> None:
     assert (
         session_titles.generate_title("please fix the login bug") == "Generated title"
     )
     assert [p.name for p in session_titles.assets_root().glob("*.txt")] == []
 
 
-def test_generate_title_returns_none_on_failure(ready_assets: Path) -> None:
+@pytest.mark.usefixtures("ready_assets")
+def test_generate_title_returns_none_on_failure() -> None:
     assert session_titles.generate_title("explode") is None
     assert session_titles.generate_title("   ") is None
 
@@ -243,15 +245,17 @@ def _submit_first_message(
     return record.title
 
 
+@pytest.mark.usefixtures("ready_assets")
 def test_first_message_title_is_replaced_by_generated_title(
-    ready_assets: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     title = _submit_first_message(tmp_path, monkeypatch, "please fix the login bug")
     assert title == "Generated title"
 
 
+@pytest.mark.usefixtures("ready_assets")
 def test_generated_title_does_not_overwrite_manual_rename(
-    ready_assets: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     title = _submit_first_message(
         tmp_path, monkeypatch, "please fix the login bug", rename=True
@@ -282,8 +286,9 @@ def test_first_message_title_stays_truncated_without_model(
     assert title == "please fix the login bug"
 
 
+@pytest.mark.usefixtures("ready_assets")
 def test_slash_command_title_is_not_sent_to_model(
-    ready_assets: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     assert _submit_first_message(tmp_path, monkeypatch, "/compact") == "/compact"
 
