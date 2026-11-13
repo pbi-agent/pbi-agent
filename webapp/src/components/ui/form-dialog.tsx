@@ -116,7 +116,7 @@ export function FormDialog({
           contentClassName,
         )}
       >
-        <DialogHeader className="pr-10">
+        <DialogHeader className="shrink-0 pr-10">
           {icon ? <div className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">{icon}</div> : null}
           <DialogTitle>{title}</DialogTitle>
           {description ? (
