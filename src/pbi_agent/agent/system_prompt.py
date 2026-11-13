@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import os
+import platform
 import sys
 from collections.abc import Iterable
+from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -35,6 +38,21 @@ _SUB_AGENT_PROMPT = """
 _MAX_FILE_BYTES = 1_000_000  # 1 MB
 _MEMORY_MAX_LINES = 200
 _MEMORY_MAX_BYTES = 25_000
+_MONTH_ABBREVIATIONS = (
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+)
+_OS_LABELS = {"Darwin": "macOS"}
 
 
 def _warn(message: str) -> None:
@@ -233,6 +251,31 @@ def _append_workspace_memory(base_prompt: str, cwd: Path | None = None) -> str:
         return base_prompt
     memory = cap_workspace_memory(memory)
     return f"{base_prompt}\n\n<workspace_memory>\n{memory}\n</workspace_memory>"
+
+
+def _shell_label() -> str:
+    """Name the interpreter the `shell` tool runs commands with."""
+    from pbi_agent.tools.shell import SHELL_EXECUTABLE_ENV
+
+    executable = os.environ.get(SHELL_EXECUTABLE_ENV)
+    if not executable:
+        executable = os.environ.get("COMSPEC", "cmd.exe") if os.name == "nt" else "sh"
+    return executable.replace("\\", "/").rsplit("/", 1)[-1]
+
+
+def _append_system_info(base_prompt: str, *, shell_active: bool) -> str:
+    """Append ``<system_info>``: current date, host OS, and `shell` tool shell."""
+    today = date.today()
+    system = platform.system()
+    lines = [
+        "<system_info>",
+        f"Date: {today.day:02d}-{_MONTH_ABBREVIATIONS[today.month - 1]}-{today.year}",
+        f"OS: {_OS_LABELS.get(system, system)}",
+    ]
+    if shell_active:
+        lines.append(f"Shell: {_shell_label()}")
+    lines.append("</system_info>")
+    return f"{base_prompt}\n\n" + "\n".join(lines)
 
 
 def _warn_skills_need_shell(
@@ -447,7 +490,8 @@ def get_system_prompt(
             workspace_directory_key=workspace_directory_key,
         )
     prompt = _append_active_command(prompt, active_command_instructions)
-    return _append_workspace_memory(prompt, cwd)
+    prompt = _append_workspace_memory(prompt, cwd)
+    return _append_system_info(prompt, shell_active="shell" in active_names)
 
 
 def get_sub_agent_system_prompt(
@@ -502,4 +546,5 @@ def get_sub_agent_system_prompt(
             source_label=agent_source_label,
             workspace_directory_key=workspace_directory_key,
         )
-    return _append_workspace_memory(prompt, cwd)
+    prompt = _append_workspace_memory(prompt, cwd)
+    return _append_system_info(prompt, shell_active="shell" in active_names)
