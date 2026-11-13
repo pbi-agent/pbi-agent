@@ -3,10 +3,13 @@ import {
   createContext,
   isValidElement,
   useContext,
+  useMemo,
   type ReactElement,
   type ReactNode,
 } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown, { type Components, type Options } from "react-markdown";
+
+type PluggableList = NonNullable<Options["remarkPlugins"]>;
 import remarkGfm from "remark-gfm";
 
 import { CodeBlock } from "@/components/ui/code-block";
@@ -415,18 +418,32 @@ const copyableMarkdownComponents: Components = {
   },
 };
 
+const GFM_PLUGINS: PluggableList = [remarkGfm];
+
 export function MarkdownContent({
   content,
   copyable = false,
+  remarkPlugins,
+  components,
 }: {
   content: string;
   copyable?: boolean;
+  /** Extra remark plugins, run after GFM. */
+  remarkPlugins?: PluggableList;
+  /** Element overrides layered on top of the default renderers. */
+  components?: Components;
 }) {
+  const defaults = copyable ? copyableMarkdownComponents : baseMarkdownComponents;
+  const plugins = useMemo(
+    () => (remarkPlugins ? [...GFM_PLUGINS, ...remarkPlugins] : GFM_PLUGINS),
+    [remarkPlugins],
+  );
+  const mergedComponents = useMemo(
+    () => (components ? { ...defaults, ...components } : defaults),
+    [components, defaults],
+  );
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={copyable ? copyableMarkdownComponents : baseMarkdownComponents}
-    >
+    <ReactMarkdown remarkPlugins={plugins} components={mergedComponents}>
       {content}
     </ReactMarkdown>
   );

@@ -13,6 +13,7 @@ import {
   SquareTerminalIcon,
   LayersIcon,
   ChevronRightIcon,
+  ListTodoIcon,
 } from "lucide-react";
 import { AppSidebarLayout } from "../AppSidebar";
 import {
@@ -40,6 +41,7 @@ import {
   uploadSavedSessionImages,
 } from "../../api";
 import { BackgroundTasksPanel } from "./BackgroundTasksPanel";
+import { TodoPanel, findTodoFilePaths } from "./TodoPanel";
 import { TerminalPanel } from "../terminal/TerminalPanel";
 import { useTerminalStore } from "../terminal/terminalStore";
 import { LOCAL_STT_PROVIDER_ID } from "../../types";
@@ -119,6 +121,7 @@ type SubAgentDisplayMap = Record<string, {
 const EMPTY_TIMELINE_ITEMS: TimelineItem[] = [];
 const TOOL_HISTORY_SHORTCUT = "Alt+Shift+H";
 const WORKSPACE_EXPLORER_SHORTCUT = "Alt+Shift+E";
+const TODO_SHORTCUT = "Alt+Shift+T";
 const NEW_SESSION_COMMAND = "/new";
 
 function normalizeSessionCommand(value: string): string {
@@ -259,12 +262,13 @@ export function SessionPage({
   const composerRef = useRef<ComposerHandle>(null);
   const submitInFlightRef = useRef(false);
   const [directSubmitPending, setDirectSubmitPending] = useState(false);
-  const [sidePanel, setSidePanel] = useState<"files" | "background" | "terminal" | null>(
+  const [sidePanel, setSidePanel] = useState<"files" | "background" | "terminal" | "todo" | null>(
     () => (useTerminalStore.getState().open ? "terminal" : null),
   );
   const fileTreeOpen = sidePanel === "files";
   const backgroundPanelOpen = sidePanel === "background";
   const terminalPanelOpen = sidePanel === "terminal";
+  const todoPanelOpen = sidePanel === "todo";
   const terminalRequestedOpen = useTerminalStore((state) => state.open);
   const setTerminalRequestedOpen = useTerminalStore((state) => state.setOpen);
   useEffect(() => {
@@ -293,6 +297,7 @@ export function SessionPage({
   );
   const toolHistoryShortcutLabel = formatAltShiftShortcut("H");
   const workspaceExplorerShortcutLabel = formatAltShiftShortcut("E");
+  const todoShortcutLabel = formatAltShiftShortcut("T");
 
   const routeSessionKey = routeSessionId
     ? getSavedSessionKey(routeSessionId)
@@ -352,6 +357,15 @@ export function SessionPage({
     () =>
       workspaceFileTreeSummaryQuery.data?.items.filter((item) => item.git_status != null).length
       ?? 0,
+    [workspaceFileTreeSummaryQuery.data?.items],
+  );
+  const todoFilePaths = useMemo(
+    () =>
+      findTodoFilePaths(
+        (workspaceFileTreeSummaryQuery.data?.items ?? [])
+          .filter((item) => item.git_status !== "D")
+          .map((item) => item.path),
+      ),
     [workspaceFileTreeSummaryQuery.data?.items],
   );
   const showWorkspaceFileTreeChangeDot = !fileTreeOpen && changedWorkspaceFileCount > 0;
@@ -635,6 +649,20 @@ export function SessionPage({
       window.removeEventListener("keydown", handleWorkspaceExplorerShortcut, true);
     };
   }, [setFileTreeOpen]);
+
+  useEffect(() => {
+    const handleTodoShortcut = (event: KeyboardEvent) => {
+      if (!matchesAltShiftShortcut(event, "t")) return;
+
+      event.preventDefault();
+      setSidePanel((current) => (current === "todo" ? null : "todo"));
+    };
+
+    window.addEventListener("keydown", handleTodoShortcut, true);
+    return () => {
+      window.removeEventListener("keydown", handleTodoShortcut, true);
+    };
+  }, []);
 
   useEffect(() => {
     const handleNewSessionShortcut = (event: KeyboardEvent) => {
@@ -1339,6 +1367,31 @@ export function SessionPage({
                 {workspaceExplorerTooltip}
               </TooltipContent>
             </Tooltip>
+            {todoFilePaths.length > 0 ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Toggle
+                    type="button"
+                    variant="default"
+                    size="default"
+                    data-topbar-control="todo"
+                    pressed={todoPanelOpen}
+                    aria-label={todoPanelOpen ? "Close TODO" : "Open TODO"}
+                    aria-keyshortcuts={TODO_SHORTCUT}
+                    aria-expanded={todoPanelOpen}
+                    aria-controls="todo-panel"
+                    onPressedChange={(pressed) =>
+                      setSidePanel(pressed ? "todo" : null)}
+                  >
+                    <ListTodoIcon aria-hidden="true" />
+                  </Toggle>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="end">
+                  {`TODO${todoFilePaths.length > 1 ? ` (${todoFilePaths.length} files)` : ""}. `
+                    + `${todoShortcutLabel} to ${todoPanelOpen ? "close" : "open"}.`}
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
             {!isSubAgentRoute ? (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -1624,7 +1677,8 @@ export function SessionPage({
   );
 
   const sidePanelVisible =
-    sidePanel !== null && (fileTreeOpen || terminalPanelOpen || !isSubAgentRoute);
+    sidePanel !== null
+    && (fileTreeOpen || terminalPanelOpen || todoPanelOpen || !isSubAgentRoute);
 
   return (
     <AppSidebarLayout>
@@ -1667,6 +1721,12 @@ export function SessionPage({
                 />
               ) : terminalPanelOpen ? (
                 <TerminalPanel onClose={() => setSidePanel(null)} />
+              ) : todoPanelOpen ? (
+                <TodoPanel
+                  paths={todoFilePaths}
+                  workspaceKey={workspaceQueryKey}
+                  onClose={() => setSidePanel(null)}
+                />
               ) : (
                 <BackgroundTasksPanel
                   sessionId={routeSessionId ?? sessionState?.sessionId ?? null}
