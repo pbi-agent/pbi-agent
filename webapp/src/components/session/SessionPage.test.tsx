@@ -720,6 +720,71 @@ describe("SessionPage", () => {
     });
   });
 
+  it("shows a TODO shortcut only when the workspace has a TODO.md and opens it", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchWorkspaceFileTree).mockResolvedValue({
+      items: [
+        { path: "README.md", kind: "file" },
+        { path: "TODO.md", kind: "file" },
+      ],
+      scan_status: "ready",
+      is_stale: false,
+      file_count: 2,
+      index_generation: "test-generation",
+      index_revision: 1,
+      truncated: false,
+      search_approximated: false,
+      error: null,
+    });
+    vi.mocked(fetchWorkspaceFilePreview).mockResolvedValue({
+      path: "TODO.md",
+      content: "- [x] Done item\n- [ ] Next item\n",
+      size_bytes: 32,
+      truncated: false,
+      error: null,
+    });
+
+    renderSessionRoute("/sessions/session-1");
+
+    const topbar = getSessionTopbar();
+    const toggle = await within(topbar).findByRole("button", { name: "Open TODO" });
+    expect(toggle).toHaveAttribute("data-topbar-control", "todo");
+    expect(toggle).toHaveAttribute("aria-keyshortcuts", "Alt+Shift+T");
+
+    await user.click(toggle);
+
+    const panel = await screen.findByRole("complementary", { name: "TODO" });
+    expect(await within(panel).findByText("Next item")).toBeInTheDocument();
+    expect(fetchWorkspaceFilePreview).toHaveBeenCalledWith("TODO.md");
+    expect(within(topbar).getByRole("button", { name: "Close TODO" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    // Opening another side panel replaces the TODO panel, like the other tabs.
+    await user.click(within(topbar).getByRole("button", { name: "Open terminal" }));
+    expect(screen.queryByRole("complementary", { name: "TODO" })).not.toBeInTheDocument();
+
+    await user.keyboard("{Alt>}{Shift>}T{/Shift}{/Alt}");
+    expect(await screen.findByRole("complementary", { name: "TODO" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Close TODO panel" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("complementary", { name: "TODO" })).not.toBeInTheDocument();
+    });
+  });
+
+  it("hides the TODO shortcut when the workspace has no TODO.md", async () => {
+    renderSessionRoute("/sessions/session-1");
+
+    const topbar = getSessionTopbar();
+    await within(topbar).findByRole("button", { name: /workspace explorer/i });
+    await waitFor(() => {
+      expect(fetchWorkspaceFileTree).toHaveBeenCalled();
+    });
+    expect(within(topbar).queryByRole("button", { name: "Open TODO" })).not.toBeInTheDocument();
+  });
+
   it("shows the workspace badge in the session topbar when the sidebar is collapsed", async () => {
     act(() => {
       useSidebarStore.setState({ isOpen: false });
