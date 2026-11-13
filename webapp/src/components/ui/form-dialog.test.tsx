@@ -39,6 +39,22 @@ describe("FormDialog", () => {
     expect(screen.getByRole("button", { name: "Save" })).toHaveAttribute("data-variant", "default");
   });
 
+  it.each([true, false])("keeps the header outside the scrollable body (form: %s)", (withForm) => {
+    renderFormDialog(withForm ? {} : { onSubmit: undefined });
+
+    const dialog = screen.getByRole("dialog", { name: "Edit profile" });
+    expect(dialog).toHaveClass("flex", "max-h-dvh", "flex-col", "overflow-hidden");
+    const header = screen.getByRole("heading", { name: "Edit profile" })
+      .closest('[data-slot="dialog-header"]');
+    expect(header).toHaveClass("shrink-0");
+    const body = screen.getByRole("textbox", { name: "Name" })
+      .closest("[data-form-dialog-body]");
+    expect(body).toHaveClass("min-h-0", "flex-1", "overflow-y-auto");
+    expect(body?.parentElement).toHaveClass("flex", "min-h-0", "flex-1", "flex-col");
+    expect(body).not.toContainElement(header as HTMLElement);
+    expect(body).not.toContainElement(screen.getByRole("button", { name: "Save" }));
+  });
+
   it("submits through the form", async () => {
     const onSubmit = vi.fn((event: FormEvent<HTMLFormElement>) => event.preventDefault());
     renderFormDialog({ onSubmit });
