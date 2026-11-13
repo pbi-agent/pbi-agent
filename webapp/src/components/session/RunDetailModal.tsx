@@ -27,6 +27,7 @@ import {
   buildRunTrace,
   countSpans,
   formatSpanDuration,
+  spanTokens,
   type TraceSpan,
   type TraceSpanType,
 } from "./runTrace";
@@ -352,6 +353,7 @@ function TraceRow({ span, isRoot = false }: { span: TraceSpan; isRoot?: boolean 
             <span className="w-20 shrink-0 font-mono text-sm whitespace-nowrap text-muted-foreground tabular-nums">
               {span.durationMs != null ? formatSpanDuration(span.durationMs) : ""}
             </span>
+            <SpanTokensCell span={span} />
             <span
               data-slot="trace-bar-track"
               className="relative h-2 w-32 shrink-0 @max-lg/trace:hidden @3xl/trace:w-64"
@@ -384,6 +386,28 @@ function TraceRow({ span, isRoot = false }: { span: TraceSpan; isRoot?: boolean 
         </CollapsibleContent>
       ) : null}
     </Collapsible>
+  );
+}
+
+function SpanTokensCell({ span }: { span: TraceSpan }) {
+  const tokens = spanTokens(span);
+  const title = tokens
+    ? [
+        `Input: ${tokens.input.toLocaleString()} tokens`,
+        `Cached: ${tokens.cached.toLocaleString()} tokens`,
+        `Output: ${tokens.output.toLocaleString()} tokens`,
+        `Reasoning: ${tokens.reasoning.toLocaleString()} tokens`,
+      ].join("\n")
+    : undefined;
+  return (
+    <span
+      data-slot="trace-tokens"
+      className="w-44 shrink-0 truncate pr-2 text-right font-mono text-xs whitespace-nowrap text-muted-foreground tabular-nums @max-md/trace:hidden"
+      title={title}
+      aria-label={tokens ? `${fmt(tokens.input)} input, ${fmt(tokens.output)} output tokens` : undefined}
+    >
+      {tokens ? `${fmt(tokens.input)} in · ${fmt(tokens.output)} out` : ""}
+    </span>
   );
 }
 
