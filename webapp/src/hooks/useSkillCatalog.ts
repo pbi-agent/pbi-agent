@@ -1,40 +1,59 @@
 import { useEffect, useState } from "react";
 import { searchSkillMentions } from "../api";
 
-let catalogPromise: Promise<Set<string>> | null = null;
-let catalogNames: Set<string> | null = null;
+type SkillCatalog = {
+  names: Set<string>;
+  /** Workspace-relative `SKILL.md` path → skill name. */
+  namesByPath: Map<string, string>;
+};
 
-function loadSkillCatalog(): Promise<Set<string>> {
-  if (catalogNames) return Promise.resolve(catalogNames);
+const EMPTY_CATALOG: SkillCatalog = { names: new Set(), namesByPath: new Map() };
+
+let catalogPromise: Promise<SkillCatalog> | null = null;
+let catalog: SkillCatalog | null = null;
+
+function loadSkillCatalog(): Promise<SkillCatalog> {
+  if (catalog) return Promise.resolve(catalog);
   catalogPromise ??= searchSkillMentions("", 200)
     .then((result) => {
-      catalogNames = new Set(result.items.map((item) => item.name));
-      return catalogNames;
+      catalog = {
+        names: new Set(result.items.map((item) => item.name)),
+        namesByPath: new Map(result.items.map((item) => [item.path, item.name])),
+      };
+      return catalog;
     })
     .catch(() => {
-      catalogNames = new Set();
-      return catalogNames;
+      catalog = EMPTY_CATALOG;
+      return catalog;
     });
   return catalogPromise;
 }
 
-export function useSkillCatalog(): Set<string> {
-  const [skillNames, setSkillNames] = useState<Set<string>>(() => catalogNames ?? new Set());
+function useLoadedSkillCatalog(): SkillCatalog {
+  const [loaded, setLoaded] = useState<SkillCatalog>(() => catalog ?? EMPTY_CATALOG);
 
   useEffect(() => {
     let cancelled = false;
-    void loadSkillCatalog().then((names) => {
-      if (!cancelled) setSkillNames(names);
+    void loadSkillCatalog().then((next) => {
+      if (!cancelled) setLoaded(next);
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  return skillNames;
+  return loaded;
+}
+
+export function useSkillCatalog(): Set<string> {
+  return useLoadedSkillCatalog().names;
+}
+
+export function useSkillNamesByPath(): Map<string, string> {
+  return useLoadedSkillCatalog().namesByPath;
 }
 
 export function resetSkillCatalogForTest(): void {
   catalogPromise = null;
-  catalogNames = null;
+  catalog = null;
 }

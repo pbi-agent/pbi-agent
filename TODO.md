@@ -36,3 +36,10 @@
 - [ ] #149 follow-ups (not built): parallel tool calls overlap in the waterfall (no lanes); in-flight non-sub-agent tool calls are invisible until they return (no start event recorded); sub-agent AGENT rows have no detail panel; truncated-label tooltip may not show on rows without details (disabled button).
 
 - [x] Release v0.57.0 (#419, PRs #414–#418): validated, merged, PyPI + GitHub Release published
+
+- [x] Composer: tagging a skill `SKILL.md` via `@` inserts the highlighted `$skill-name` tag (788 web tests, lint, typecheck, build)
+- [x] Composer skill tagging verified in headless Chromium against the live server (port 7431)
+- [ ] Composer skill tagging: typed or pasted `@…/SKILL.md` paths stay as file mentions (by design for now)
+- [x] Composer tag highlights styled as padded pills matching timeline tags (ring + offset outline; Composer tests, lint, typecheck, build, headless Chromium)
+- [ ] Composer pills: two tags separated by a single space touch (3px painted outside each box, no layout space available)
+- [x] Skill tags violet (`usage-violet`) in composer and timeline (session tests, lint, typecheck, build, headless Chromium)
