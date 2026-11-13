@@ -60,3 +60,4 @@
 - [x] Session topbar TODO shortcut (ListTodo toggle + Alt+Shift+T) opening a right side-panel tab (like files/tasks/terminal) that renders workspace `TODO.md` files (tabs when several, status icons for `[ ]`/`[x]`/`[>]`/`[!]`/`[-]`, counts, 3 s live refresh); 804 web tests, lint, typecheck, build, headless Chromium dark/light
 - [ ] TODO shortcut: button only appears when the file tree index lists a `TODO.md` (gitignored or truncated-index files are missed); Alt+Shift+T still opens the panel empty state
 - [x] TODO panel: status count badges are filter toggles (one active at a time, click again to clear; parents of matching sub-items stay dimmed); 805 web tests, lint, typecheck, build, headless Chromium
+- [x] Release v0.59.0 (#425, PR #424 TODO panel + status filters): validated, merged, PyPI + GitHub Release published
