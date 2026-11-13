@@ -34,7 +34,7 @@ import {
   useComposerCompletions,
   type CompletionItem,
 } from "../../hooks/useComposerCompletions";
-import { useSkillCatalog } from "../../hooks/useSkillCatalog";
+import { useSkillCatalog, useSkillNamesByPath } from "../../hooks/useSkillCatalog";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import {
@@ -487,6 +487,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const shellInput = input.trimStart();
   const isShellMode = useMemo(() => input.trimStart().startsWith("!"), [input]);
   const skillNames = useSkillCatalog();
+  const skillNamesByPath = useSkillNamesByPath();
   const fileTokens = useMemo(
     () => collectComposerFileTokens(input, isShellMode),
     [input, isShellMode],
@@ -792,15 +793,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         return null;
       }
 
-      const escapedPath = escapeMentionPath(item.path);
+      // Tagging a skill's SKILL.md becomes the `$skill` tag for that skill.
+      const skillName = skillNamesByPath.get(item.path);
       return replaceTextRange(
         currentText,
         currentMention.start,
         currentMention.end,
-        `@${escapedPath}`,
+        skillName ? `$${skillName}` : `@${escapeMentionPath(item.path)}`,
       );
     },
-    [],
+    [skillNamesByPath],
   );
 
   const buildSkillReplacement = useCallback(
@@ -1508,10 +1510,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                   key={`highlight-${index}`}
                   data-highlight={segment.kind}
                   className={cn(
-                    "rounded-sm",
+                    // Same pill as timeline tags. The overlay must keep the
+                    // textarea's glyph positions, so padding and border are
+                    // painted outside the box (ring + offset outline).
+                    "rounded-full box-decoration-clone ring-2 outline outline-offset-2",
                     segment.kind === "skill"
-                      ? "bg-chart-2/15 text-chart-2"
-                      : "bg-primary/15 text-primary",
+                      ? "bg-usage-violet/10 text-usage-violet ring-usage-violet/10 outline-usage-violet/30"
+                      : "bg-primary/10 text-primary ring-primary/10 outline-primary/30",
                   )}
                 >
                   {segment.text}

@@ -132,7 +132,7 @@ function renderUserTextNodes(
           "mx-0.5 inline-flex items-center rounded-full border px-2 py-px align-baseline font-mono text-xs",
           nextMatch.kind === "file"
             ? "border-primary/30 bg-primary/10 text-primary"
-            : "border-border bg-secondary text-secondary-foreground",
+            : "border-usage-violet/30 bg-usage-violet/10 text-usage-violet",
         )}
         data-special-tag={nextMatch.kind}
       >

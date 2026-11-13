@@ -34,3 +34,12 @@
 - [x] #149 nested trace timeline in Run Detail modal: span tree with waterfall bars, sub-agent runs nested by tool call id, payloads loaded per event, in-flight spans, review findings addressed (787 web tests, full pytest, Ruff/format/basedpyright, lint/typecheck/build, headless Chromium dark/light/620px).
 - [ ] #149 not verified live: a new run whose sub-agent carries `parent_tool_call_id` (covered by unit/API tests only; existing DB runs predate it and show sub-agents under the parent run).
 - [ ] #149 follow-ups (not built): parallel tool calls overlap in the waterfall (no lanes); in-flight non-sub-agent tool calls are invisible until they return (no start event recorded); sub-agent AGENT rows have no detail panel; truncated-label tooltip may not show on rows without details (disabled button).
+
+- [x] Release v0.57.0 (#419, PRs #414–#418): validated, merged, PyPI + GitHub Release published
+
+- [x] Composer: tagging a skill `SKILL.md` via `@` inserts the highlighted `$skill-name` tag (788 web tests, lint, typecheck, build)
+- [x] Composer skill tagging verified in headless Chromium against the live server (port 7431)
+- [ ] Composer skill tagging: typed or pasted `@…/SKILL.md` paths stay as file mentions (by design for now)
+- [x] Composer tag highlights styled as padded pills matching timeline tags (ring + offset outline; Composer tests, lint, typecheck, build, headless Chromium)
+- [ ] Composer pills: two tags separated by a single space touch (3px painted outside each box, no layout space available)
+- [x] Skill tags violet (`usage-violet`) in composer and timeline (session tests, lint, typecheck, build, headless Chromium)

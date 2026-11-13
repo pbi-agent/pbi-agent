@@ -693,6 +693,46 @@ describe("Composer", () => {
     expect(textbox).toHaveValue("@code-reviewer-notes.md ");
   });
 
+  it("inserts a highlighted skill tag when a skill file is tagged", async () => {
+    const user = userEvent.setup();
+    vi.mocked(searchSkillMentions).mockResolvedValue({
+      items: [
+        {
+          name: "browser-use",
+          description: "Browser control",
+          path: ".agents/skills/browser-use/SKILL.md",
+        },
+      ],
+    });
+    vi.mocked(searchMentions).mockResolvedValue({
+      ...FILE_INDEX_METADATA,
+      items: [
+        { path: ".agents/skills/browser-use/SKILL.md", kind: "file" },
+        { path: ".agents/skills/browser-use/notes.md", kind: "file" },
+      ],
+      scan_status: "ready",
+      is_stale: false,
+      file_count: 2,
+      error: null,
+    });
+    const { container } = renderComposer();
+
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+    await user.type(textbox, "@browser");
+    await screen.findByText("@.agents/skills/browser-use/SKILL.md");
+    await user.keyboard("{Enter}");
+
+    expect(textbox).toHaveValue("$browser-use ");
+    expect(container.querySelector('[data-highlight="skill"]')).toHaveTextContent(
+      "$browser-use",
+    );
+
+    await user.type(textbox, "@browser");
+    await screen.findByText("@.agents/skills/browser-use/notes.md");
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(textbox).toHaveValue("$browser-use @.agents/skills/browser-use/notes.md ");
+  });
+
   it("preserves globally ranked mixed mention results", async () => {
     const user = userEvent.setup();
     vi.mocked(searchMentions).mockResolvedValue({
