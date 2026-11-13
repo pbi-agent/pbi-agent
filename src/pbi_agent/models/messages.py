@@ -46,10 +46,10 @@ class ModelCatalog:
 
     # ------------------------------------------------------------------
     def _normalize_models(self, models: dict[str, dict]) -> dict[str, dict]:
-        return {key.lower(): entry for key, entry in models.items()}
+        return {_normalize_model_id(key): entry for key, entry in models.items()}
 
     def _find_entry(self, model: str) -> dict | None:
-        normalized_model = model.lower()
+        normalized_model = _normalize_model_id(model)
         if normalized_model in self._models:
             return self._models[normalized_model]
         matching_entries = [
@@ -87,6 +87,14 @@ class ModelCatalog:
         if entry is not None:
             return entry.get("context_window", self._default_context_window)
         return self._default_context_window
+
+
+def _normalize_model_id(model: str) -> str:
+    """Lowercase *model*; Claude version dots map to canonical hyphens."""
+    normalized = model.lower()
+    if normalized.startswith("claude-"):
+        normalized = normalized.replace(".", "-")
+    return normalized
 
 
 # Lazy singleton — avoids file I/O at import time.

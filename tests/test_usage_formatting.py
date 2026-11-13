@@ -92,13 +92,13 @@ def test_gpt_6_astra_pricing(model: str) -> None:
 
 def test_known_model_pricing() -> None:
     pricing = _pricing_for_model("gpt-5.6-sol")
-    assert pricing == (5.00, 6.25, 6.25, 0.50, 30.00)
+    assert pricing == (4.00, 5.00, 5.00, 0.40, 20.00)
 
     pricing = _pricing_for_model("gpt-5.6-terra")
-    assert pricing == (2.50, 3.125, 3.125, 0.25, 15.00)
+    assert pricing == (2.00, 2.50, 2.50, 0.20, 12.00)
 
     pricing = _pricing_for_model("gpt-5.6-luna")
-    assert pricing == (1.00, 1.25, 1.25, 0.10, 6.00)
+    assert pricing == (0.20, 0.25, 0.25, 0.02, 1.20)
 
     pricing = _pricing_for_model("gpt-5.3-codex")
     assert pricing == (1.75, 1.75, 1.75, 0.175, 14.00)
@@ -107,7 +107,7 @@ def test_known_model_pricing() -> None:
     assert pricing == (5.00, 5.00, 5.00, 0.50, 30.00)
 
     pricing = _pricing_for_model("gpt-5.5-pro")
-    assert pricing == (30.00, 30.00, 30.00, 3.00, 180.00)
+    assert pricing == (30.00, 30.00, 30.00, 0.00, 180.00)
 
     pricing = _pricing_for_model("glm-5.2")
     assert pricing == (1.40, 1.40, 1.40, 0.26, 4.40)
@@ -118,10 +118,10 @@ def test_known_model_pricing() -> None:
 
 def test_prefix_matching() -> None:
     pricing = _pricing_for_model("gpt-5.6")
-    assert pricing == (5.00, 6.25, 6.25, 0.50, 30.00)
+    assert pricing == (4.00, 5.00, 5.00, 0.40, 20.00)
 
     pricing = _pricing_for_model("gpt-5.6-terra-2026-04-23")
-    assert pricing == (2.50, 3.125, 3.125, 0.25, 15.00)
+    assert pricing == (2.00, 2.50, 2.50, 0.20, 12.00)
 
     ctx = context_window_for_model("gpt-5.6-luna")
     assert ctx == 1_050_000
@@ -139,7 +139,7 @@ def test_prefix_matching() -> None:
     assert ctx == 1_000_000
 
     pricing = _pricing_for_model("gpt-5.5-pro-2026-04-23")
-    assert pricing == (30.00, 30.00, 30.00, 3.00, 180.00)
+    assert pricing == (30.00, 30.00, 30.00, 0.00, 180.00)
 
     ctx = context_window_for_model("gpt-5.5-pro-2026-04-23")
     assert ctx == 1_000_000
@@ -239,7 +239,7 @@ def test_gpt_5_6_cache_writes_use_the_documented_rate() -> None:
     )
 
     assert usage.non_cached_input_tokens == 50_000
-    assert usage.estimated_cost_usd == pytest.approx(0.7475)
+    assert usage.estimated_cost_usd == pytest.approx(0.558)
 
 
 def test_default_service_tier_no_change() -> None:
@@ -313,3 +313,137 @@ def test_format_session_subtitle_parts_uses_informal_workspace_path(
     subtitle, _ = format_session_subtitle_parts(TokenUsage(model="gpt-5.3-codex"))
 
     assert "workspace/oai-ws" in subtitle
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        ("gpt-6.1-sol", (2, 2.5, 2.5, 0.1, 10)),
+        ("gpt-6.1-terra", (1, 1.25, 1.25, 0.05, 5)),
+        ("gpt-6-luna", (0.1, 0.125, 0.125, 0.01, 0.5)),
+        ("gpt-6-sol", (2, 2.5, 2.5, 0.2, 10)),
+        ("gpt-5.6-sol", (4, 5, 5, 0.4, 20)),
+        ("gpt-5.6-terra", (2, 2.5, 2.5, 0.2, 12)),
+        ("gpt-5.6-luna", (0.2, 0.25, 0.25, 0.02, 1.2)),
+        ("gpt-5.6", (4, 5, 5, 0.4, 20)),
+        ("gpt-5.4-pro", (30, 30, 30, 0, 180)),
+        ("gpt-5.2", (1.75, 1.75, 1.75, 0.175, 14)),
+        ("gpt-5.2-pro", (21, 21, 21, 0, 168)),
+        ("gpt-5.1", (1.25, 1.25, 1.25, 0.125, 10)),
+        ("gpt-5", (1.25, 1.25, 1.25, 0.125, 10)),
+        ("gpt-5-mini", (0.25, 0.25, 0.25, 0.025, 2)),
+        ("gpt-5-nano", (0.05, 0.05, 0.05, 0.005, 0.4)),
+        ("gpt-5-pro", (15, 15, 15, 0, 120)),
+        ("gpt-4.1", (2, 2, 2, 0.5, 8)),
+        ("gpt-4.1-mini", (0.4, 0.4, 0.4, 0.1, 1.6)),
+        ("gpt-4o", (2.5, 2.5, 2.5, 1.25, 10)),
+        ("gpt-4o-mini", (0.15, 0.15, 0.15, 0.075, 0.6)),
+        ("o3-pro", (20, 20, 20, 0, 80)),
+        ("o3", (2, 2, 2, 0.5, 8)),
+        ("gpt-6-cyber", (20, 25, 25, 2, 100)),
+        ("gpt-5.6-cyber", (12.5, 15.625, 15.625, 1.25, 75)),
+        ("gpt-5.5-cyber-preview", (12.5, 12.5, 12.5, 1.25, 75)),
+        ("gpt-6-rosalind", (15, 18.75, 18.75, 1.5, 75)),
+        ("gpt-rosalind-research", (5, 5, 5, 0.5, 25)),
+        ("gpt-rosalind-discovery", (5, 5, 5, 0.5, 25)),
+        ("gpt-6-astra-law", (10, 10, 10, 1, 50)),
+        ("chat-latest", (5, 5, 5, 0.5, 30)),
+        ("gpt-5-search-api", (1.25, 1.25, 1.25, 0.125, 10)),
+    ],
+)
+def test_supplied_standard_text_pricing(
+    model: str, expected: tuple[float, float, float, float, float]
+) -> None:
+    for variant in (model, model.upper(), f"{model}-2026-11-13"):
+        assert _pricing_for_model(variant) == expected
+        usage = TokenUsage(
+            model=variant,
+            input_tokens=4_000_000,
+            cached_input_tokens=1_000_000,
+            cache_write_tokens=1_000_000,
+            cache_write_1h_tokens=1_000_000,
+            output_tokens=1_000_000,
+        )
+        assert usage.estimated_cost_usd == pytest.approx(sum(expected))
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        ("claude-fable-5.2", (8, 10, 16, 0.2, 40)),
+        ("claude-mythos-5.2", (8, 10, 16, 0.2, 40)),
+        ("claude-fable-5.1", (10, 12.5, 20, 0.25, 50)),
+        ("claude-mythos-5.1", (10, 12.5, 20, 0.25, 50)),
+        ("claude-fable-5", (10, 12.5, 20, 1, 50)),
+        ("claude-mythos-5", (10, 12.5, 20, 1, 50)),
+        ("claude-opus-5.5", (4, 5, 8, 0.2, 20)),
+        ("claude-opus-5", (5, 6.25, 10, 0.5, 25)),
+        ("claude-opus-4.8", (5, 6.25, 10, 0.5, 25)),
+        ("claude-opus-4.7", (5, 6.25, 10, 0.5, 25)),
+        ("claude-opus-4.6", (5, 6.25, 10, 0.5, 25)),
+        ("claude-opus-4.5", (5, 6.25, 10, 0.5, 25)),
+        ("claude-opus-4.1", (15, 18.75, 30, 1.5, 75)),
+        ("claude-opus-4", (15, 18.75, 30, 1.5, 75)),
+        ("claude-sonnet-5.5", (2, 2.5, 4, 0.1, 10)),
+        ("claude-sonnet-5", (2, 2.5, 4, 0.2, 10)),
+        ("claude-sonnet-4.6", (3, 3.75, 6, 0.3, 15)),
+        ("claude-sonnet-4.5", (3, 3.75, 6, 0.3, 15)),
+        ("claude-sonnet-4", (3, 3.75, 6, 0.3, 15)),
+        ("claude-haiku-5.5", (0.1, 0.125, 0.2, 0.01, 0.5)),
+        ("claude-haiku-4.5", (1, 1.25, 2, 0.1, 5)),
+    ],
+)
+def test_supplied_claude_standard_pricing(
+    model: str, expected: tuple[float, float, float, float, float]
+) -> None:
+    # Haiku 5.5 uses its <=100k prompt rate; the catalog has no length tiers.
+    for alias in dict.fromkeys((model, model.replace(".", "-"))):
+        suffix = "20261113" if "." in model else "latest"
+        for variant in (alias, alias.upper(), f"{alias}-{suffix}"):
+            assert _pricing_for_model(variant) == expected
+            usage = TokenUsage(
+                model=variant,
+                input_tokens=100_000,
+                cached_input_tokens=25_000,
+                cache_write_tokens=25_000,
+                cache_write_1h_tokens=25_000,
+                output_tokens=25_000,
+            )
+            assert usage.estimated_cost_usd == pytest.approx(sum(expected) * 0.025)
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        ("claude-opus-5.5", (4, 5, 8, 0.2, 20)),
+        ("claude-opus-4.6", (5, 6.25, 10, 0.5, 25)),
+    ],
+)
+def test_dotted_claude_ids_resolve_to_canonical_entries(
+    model: str, expected: tuple[float, float, float, float, float]
+) -> None:
+    assert _pricing_for_model(model) == expected
+    assert context_window_for_model(model) == context_window_for_model(
+        model.replace(".", "-")
+    )
+
+
+def test_bundled_catalog_has_unique_model_entries() -> None:
+    def unique_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, value in pairs:
+            assert key not in result, f"Duplicate JSON key: {key}"
+            result[key] = value
+        return result
+
+    path = Path(__file__).parents[1] / "src/pbi_agent/models/model_catalog.json"
+    data = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_keys)
+    seen: dict[str, str] = {}
+    for model in data["models"]:
+        canonical = model.lower()
+        if canonical.startswith("claude-"):
+            canonical = canonical.replace(".", "-")
+        assert canonical not in seen, (
+            f"Duplicate models: {seen.get(canonical)}, {model}"
+        )
+        seen[canonical] = model
