@@ -145,6 +145,8 @@ export type LiveSessionStartedSseEventModel = { seq: number; created_at: string;
 
 export type LiveSessionUpdatedSseEventModel = { seq: number; created_at: string; type: "live_session_updated"; payload: LiveSessionLifecycleSseEventPayloadModel };
 
+export type LocalSttStatusResponse = { state: "unsupported" | "missing" | "downloading" | "ready" | "failed"; downloaded_bytes: number; total_bytes: number; error: string | null };
+
 export type MaintenanceConfigModel = { retention_days: number };
 
 export type MaintenanceConfigResponse = { maintenance: MaintenanceConfigModel; config_revision: string };
@@ -531,6 +533,8 @@ export type ApiOperationResponses = {
   "POST /api/sessions/{session_id}/tool-calls/{call_id}/interrupt": LiveSessionResponse;
   "GET /api/skills/search": SkillMentionSearchResponse;
   "GET /api/slash-commands/search": SlashCommandSearchResponse;
+  "GET /api/stt/local": LocalSttStatusResponse;
+  "POST /api/stt/local/download": LocalSttStatusResponse;
   "POST /api/stt/transcribe": SttTranscriptionResponse;
   "GET /api/tasks": TasksResponse;
   "POST /api/tasks": TaskResponse;

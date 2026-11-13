@@ -29,6 +29,29 @@ All STT uploads are normalized by pbi-agent to 16 kHz mono WAV before provider
 dispatch. If a provider returns an empty transcript, the composer shows “No
 speech was detected” instead of treating it as a failure.
 
+## On-device speech-to-text
+
+**On this device (Parakeet v3)** transcribes on your own machine: no provider,
+no API key, and audio never leaves the computer. It runs NVIDIA Parakeet TDT
+0.6B v3 (8-bit ONNX) on the CPU with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx).
+
+1. Open **Settings**, then **Speech-to-text**.
+2. Choose **On this device (Parakeet v3)** from **Active default**.
+3. Wait for the download to finish. The section shows progress, and dictation
+   is enabled once the model is installed.
+
+| | |
+| --- | --- |
+| Download | About 515 MB once (model 487 MB, sherpa-onnx build 20–28 MB), about 720 MB on disk under `~/.pbi-agent/stt-model`. Both are pinned by SHA-256. |
+| Platforms | Linux, macOS, and Windows on x64 and arm64. |
+| Languages | 25 European languages, detected automatically: Bulgarian, Croatian, Czech, Danish, Dutch, English, Estonian, Finnish, French, German, Greek, Hungarian, Italian, Latvian, Lithuanian, Maltese, Polish, Portuguese, Romanian, Russian, Slovak, Slovenian, Spanish, Swedish, Ukrainian. |
+| Speed | The model is loaded for each dictation (about 2 seconds), then decoding runs at roughly ten times real time on a recent laptop CPU. |
+| Memory | About 1.1–1.3 GB while transcribing. Recordings longer than 30 seconds are cut at quiet moments and transcribed piece by piece to keep memory bounded. |
+
+If the download is interrupted it resumes the next time the web server starts,
+or from **Retry download** in the same section. Set `PBI_AGENT_STT_MODEL_DIR`
+to store the files elsewhere. The model is licensed CC-BY-4.0 by NVIDIA.
+
 ## Configure STT in the web UI
 
 1. Open **Settings**.
@@ -80,7 +103,7 @@ normal agent turns.
 2. Make sure the composer is empty and not in shell-command mode.
 3. Click the microphone button, or press <kbd>Ctrl</kbd>+<kbd>Space</kbd>.
 4. Allow microphone access in your browser when prompted.
-5. Speak while the waveform is visible.
+5. Speak while the recording timeline and timer are visible.
 6. Click the microphone button again, or press <kbd>Ctrl</kbd>+<kbd>Space</kbd>
    again, to stop recording.
 7. Wait for transcription, edit the inserted text if needed, then send the

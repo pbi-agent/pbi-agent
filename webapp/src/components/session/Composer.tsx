@@ -23,7 +23,7 @@ import { serializeReplyMessage, type ReplySnippet } from "../../lib/replySnippet
 import { getComposerDraft, setComposerDraft } from "../../lib/composerDraft";
 import { ReplySnippetCard } from "./ReplySnippetCard";
 import { createWavRecorder, type WavRecorder } from "../../lib/audioRecorder";
-import { DictationWaveform } from "./DictationWaveform";
+import { DictationTimeline } from "./DictationTimeline";
 import {
   ComposerActionButtons,
   isComposerActionShortcut,
@@ -780,7 +780,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     composerInputAvailable && !isShellMode && actionMenuOpen;
 
   // While recording, the textarea (and its key-capture) is replaced by the
-  // waveform, so the stop shortcut is handled at the document level instead.
+  // recording timeline, so the stop shortcut is handled at the document level instead.
   useEffect(() => {
     if (dictationState !== "recording") return;
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -1501,7 +1501,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         ) : null}
         </InputGroupAddon>
         {dictationState === "recording" ? (
-          <DictationWaveform
+          <DictationTimeline
             getFrequencyData={getDictationFrequencyData}
             label="Recording audio… Ctrl+Space to stop"
           />

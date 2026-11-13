@@ -11,6 +11,7 @@ import {
   fetchAgentCandidates,
   fetchCommandCandidates,
   fetchConfigBootstrap,
+  fetchLocalSttStatus,
   fetchProviderModels,
   fetchProviderAuthFlow,
   fetchProviderUsageLimits,
@@ -27,6 +28,7 @@ import {
   setPromptEnhancementProfile,
   setSkillEnabled,
   setSttProvider,
+  startLocalSttDownload,
   startProviderAuthFlow,
   updateMaintenanceConfig,
   updateModelProfile,
@@ -157,6 +159,8 @@ vi.mock("../../api", async (importOriginal) => {
   return {
     ...actual,
     fetchConfigBootstrap: vi.fn(),
+    fetchLocalSttStatus: vi.fn(),
+    startLocalSttDownload: vi.fn(),
     fetchProviderModels: vi.fn(),
     createProvider: vi.fn(),
     updateProvider: vi.fn(),
@@ -698,6 +702,12 @@ describe("SettingsPage", () => {
     document.documentElement.removeAttribute("data-theme");
     document.documentElement.classList.remove("dark");
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(makeConfigBootstrap());
+    vi.mocked(fetchLocalSttStatus).mockResolvedValue({
+      state: "unsupported",
+      downloaded_bytes: 0,
+      total_bytes: 0,
+      error: null,
+    });
     vi.mocked(createProvider).mockResolvedValue({
       provider: {
         id: "chatgpt-new",
@@ -2401,6 +2411,83 @@ describe("SettingsPage", () => {
     await waitFor(() =>
       expect(setPromptEnhancementProfile).toHaveBeenCalledWith(null, "rev-1"),
     );
+  });
+
+  it("selects the on-device speech model and shows its download", async () => {
+    const user = userEvent.setup();
+    const missing = {
+      state: "missing" as const,
+      downloaded_bytes: 0,
+      total_bytes: 515_000_000,
+      error: null,
+    };
+    vi.mocked(fetchLocalSttStatus).mockResolvedValue(missing);
+    vi.mocked(setSttProvider).mockImplementation(() => {
+      vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+        makeConfigBootstrap({ stt_provider_id: "@local" }),
+      );
+      vi.mocked(fetchLocalSttStatus).mockResolvedValue({
+        ...missing,
+        state: "downloading",
+        downloaded_bytes: 103_000_000,
+      });
+      return Promise.resolve({
+        stt_provider_id: "@local",
+        config_revision: "rev-2",
+      });
+    });
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Speech-to-text");
+    const providerSelect = await screen.findByRole("combobox", {
+      name: /speech-to-text provider/i,
+    });
+    await selectRadixOption(user, providerSelect, "On this device (Parakeet v3)");
+
+    await waitFor(() =>
+      expect(setSttProvider).toHaveBeenCalledWith("@local", "rev-1"),
+    );
+    expect(
+      await screen.findByText(/Downloading the speech model: 20% of 515 MB/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("progressbar", { name: "Speech model download" }),
+    ).toBeInTheDocument();
+  });
+
+  it("retries a failed on-device speech model download", async () => {
+    const user = userEvent.setup();
+    const failed = {
+      state: "failed" as const,
+      downloaded_bytes: 28_000_000,
+      total_bytes: 515_000_000,
+      error: "checksum mismatch",
+    };
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({ stt_provider_id: "@local" }),
+    );
+    vi.mocked(fetchLocalSttStatus).mockResolvedValue(failed);
+    vi.mocked(startLocalSttDownload).mockImplementation(() => {
+      const ready = { ...failed, state: "ready" as const, error: null };
+      vi.mocked(fetchLocalSttStatus).mockResolvedValue(ready);
+      return Promise.resolve(ready);
+    });
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Speech-to-text");
+    expect(
+      await screen.findByText(
+        "The speech model download failed: checksum mismatch.",
+      ),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Retry download" }));
+
+    expect(
+      await screen.findByText(/The speech model is installed/),
+    ).toBeInTheDocument();
+    expect(startLocalSttDownload).toHaveBeenCalledTimes(1);
   });
 
   it("shows speech provider empty state when no STT provider has credentials", async () => {

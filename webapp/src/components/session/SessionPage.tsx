@@ -42,9 +42,11 @@ import {
 import { BackgroundTasksPanel } from "./BackgroundTasksPanel";
 import { TerminalPanel } from "../terminal/TerminalPanel";
 import { useTerminalStore } from "../terminal/terminalStore";
+import { LOCAL_STT_PROVIDER_ID } from "../../types";
 import type {
   HistoryItem,
   LiveSession,
+  LocalSttStatus,
   ModelProfileView,
   ProviderView,
   SessionDetailPayload,
@@ -60,6 +62,10 @@ import {
   useSessionStore,
 } from "../../store";
 import { useSidebarStore } from "../../hooks/useSidebar";
+import {
+  localSttDownloadPercent,
+  useLocalSttStatus,
+} from "../../hooks/useLocalSttStatus";
 import { cn } from "../../lib/utils";
 import {
   projectMainTimelineItems,
@@ -138,6 +144,19 @@ function matchesAltShiftShortcut(event: KeyboardEvent, key: string): boolean {
     && !event.ctrlKey
     && !event.metaKey
   );
+}
+
+function localSttUnavailableReason(status: LocalSttStatus | undefined): string {
+  switch (status?.state) {
+    case undefined:
+      return "Checking the on-device speech model.";
+    case "downloading":
+      return `The on-device speech model is downloading (${localSttDownloadPercent(status)}%).`;
+    case "unsupported":
+      return "On-device speech-to-text is not available on this platform. Choose another provider in Settings.";
+    default:
+      return "The on-device speech model is not installed. Open Speech-to-text in Settings to download it.";
+  }
 }
 
 function providerHasCredentials(provider: ProviderView): boolean {
@@ -816,6 +835,9 @@ export function SessionPage({
           ?? supportsImageInputs
         )
       : supportsImageInputs;
+  const localSttStatus = useLocalSttStatus(
+    configQuery.data?.stt_provider_id === LOCAL_STT_PROVIDER_ID,
+  );
   const dictationAvailability = useMemo(() => {
     const config = configQuery.data;
     if (!config) {
@@ -830,6 +852,16 @@ export function SessionPage({
       return {
         available: false,
         reason: "Choose a speech-to-text provider in Settings to use dictation.",
+      };
+    }
+
+    if (sttProviderId === LOCAL_STT_PROVIDER_ID) {
+      if (localSttStatus?.state === "ready") {
+        return { available: true, reason: null };
+      }
+      return {
+        available: false,
+        reason: localSttUnavailableReason(localSttStatus),
       };
     }
 
@@ -859,7 +891,7 @@ export function SessionPage({
       available: true,
       reason: null,
     };
-  }, [configQuery.data]);
+  }, [configQuery.data, localSttStatus]);
   const profileSelectorDisabled =
     isSubAgentRoute
     || modelProfiles.length === 0

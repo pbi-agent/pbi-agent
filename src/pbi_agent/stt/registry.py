@@ -10,6 +10,7 @@ _DEFAULT_BACKEND_MODULES = (
     "pbi_agent.stt.google",
     "pbi_agent.stt.deepgram",
     "pbi_agent.stt.elevenlabs",
+    "pbi_agent.stt.local",
 )
 _BACKENDS: dict[str, SttBackend] = {}
 _DEFAULTS_LOADED = False

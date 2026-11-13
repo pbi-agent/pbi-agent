@@ -9,23 +9,15 @@ title they already have.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import platform
-import shutil
 import subprocess
-import tarfile
 import tempfile
 import threading
-import time
-import urllib.error
-import urllib.request
-import zipfile
-from dataclasses import dataclass
 from pathlib import Path
 
-from pbi_agent import __version__
+from pbi_agent.local_assets import Asset, claim, download, extract, machine
 
 _log = logging.getLogger(__name__)
 
@@ -38,18 +30,7 @@ MAX_INPUT_CHARS = 6000
 _CONTEXT_TOKENS = 4096
 _MAX_NEW_TOKENS = 32
 _GENERATE_TIMEOUT_SECS = 120
-_DOWNLOAD_TIMEOUT_SECS = 30
-_DOWNLOAD_ATTEMPTS = 5
-_CHUNK_BYTES = 1 << 20
-_LOCK_STALE_SECS = 120
 _END_MARKER = "[end of text]"
-
-
-@dataclass(frozen=True, slots=True)
-class Asset:
-    url: str
-    sha256: str
-    size: int
 
 
 MODEL = Asset(
@@ -99,7 +80,6 @@ _RUNTIMES: dict[tuple[str, str], Asset] = {
         13_434_411,
     ),
 }
-_MACHINES = {"x86_64": "x64", "amd64": "x64", "arm64": "arm64", "aarch64": "arm64"}
 
 _ensure_lock = threading.Lock()
 _generate_lock = threading.Lock()
@@ -126,10 +106,7 @@ def runtime_dir() -> Path:
 
 
 def runtime_asset() -> Asset | None:
-    machine = _MACHINES.get(platform.machine().lower())
-    if machine is None:
-        return None
-    return _RUNTIMES.get((platform.system(), machine))
+    return _RUNTIMES.get((platform.system(), machine() or ""))
 
 
 def binary_path() -> Path | None:
@@ -160,16 +137,16 @@ def ensure_assets() -> None:
         root = assets_root()
         root.mkdir(parents=True, exist_ok=True)
         lock_file = root / "download.lock"
-        if not _claim(lock_file):
+        if not claim(lock_file):
             return  # another pbi-agent process is downloading
         try:
             if binary_path() is None:
                 archive = root / runtime.url.rsplit("/", 1)[-1]
-                _download(runtime, archive, lock_file)
-                _extract(archive, runtime_dir())
+                download(runtime, archive, lock_file)
+                extract(archive, runtime_dir())
                 archive.unlink(missing_ok=True)
             if not model_path().is_file():
-                _download(MODEL, model_path(), lock_file)
+                download(MODEL, model_path(), lock_file)
         finally:
             lock_file.unlink(missing_ok=True)
         _log.info("Local session titles are ready.")
@@ -177,82 +154,6 @@ def ensure_assets() -> None:
         _log.warning("Local session titles unavailable: %s", exc)
     finally:
         _ensure_lock.release()
-
-
-def _claim(lock_file: Path) -> bool:
-    """Cross-process single flight: the downloader refreshes the lock file's
-    mtime, so an old one belongs to a process that died."""
-    try:
-        if time.time() - lock_file.stat().st_mtime < _LOCK_STALE_SECS:
-            return False
-        lock_file.unlink(missing_ok=True)
-    except FileNotFoundError:
-        pass
-    try:
-        os.close(os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
-    except FileExistsError:
-        return False
-    return True
-
-
-def _download(asset: Asset, destination: Path, lock_file: Path) -> None:
-    """Resumable download to ``<destination>.part``; renamed into place only
-    after the size and SHA-256 match."""
-    part = destination.with_name(destination.name + ".part")
-    for attempt in range(1, _DOWNLOAD_ATTEMPTS + 1):
-        try:
-            _fetch(asset, part, lock_file)
-            break
-        except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
-            if attempt == _DOWNLOAD_ATTEMPTS:
-                raise
-            _log.debug("Download of %s interrupted (%s); resuming.", asset.url, exc)
-            time.sleep(min(2**attempt, 30))
-    digest = hashlib.sha256()
-    with part.open("rb") as handle:
-        while chunk := handle.read(_CHUNK_BYTES):
-            digest.update(chunk)
-    if part.stat().st_size != asset.size or digest.hexdigest() != asset.sha256:
-        part.unlink(missing_ok=True)
-        raise ValueError(f"checksum mismatch for {asset.url}")
-    os.replace(part, destination)
-
-
-def _fetch(asset: Asset, part: Path, lock_file: Path) -> None:
-    offset = part.stat().st_size if part.exists() else 0
-    if offset > asset.size:
-        part.unlink()
-        offset = 0
-    if offset == asset.size:
-        return
-    headers = {"User-Agent": f"pbi-agent/{__version__}"}
-    if offset:
-        headers["Range"] = f"bytes={offset}-"
-    request = urllib.request.Request(asset.url, headers=headers)
-    with urllib.request.urlopen(request, timeout=_DOWNLOAD_TIMEOUT_SECS) as response:
-        resumed = offset > 0 and response.status == 206
-        with part.open("ab" if resumed else "wb") as handle:
-            while chunk := response.read(_CHUNK_BYTES):
-                handle.write(chunk)
-                lock_file.touch()
-
-
-def _extract(archive: Path, destination: Path) -> None:
-    staging = destination.with_name(destination.name + ".tmp")
-    shutil.rmtree(staging, ignore_errors=True)
-    staging.mkdir(parents=True)
-    if archive.name.endswith(".zip"):
-        with zipfile.ZipFile(archive) as bundle:
-            root = staging.resolve()
-            for member in bundle.namelist():
-                if not (staging / member).resolve().is_relative_to(root):
-                    raise ValueError(f"unsafe path in archive: {member}")
-            bundle.extractall(staging)
-    else:
-        with tarfile.open(archive) as bundle:
-            bundle.extractall(staging, filter="data")
-    shutil.rmtree(destination, ignore_errors=True)
-    os.replace(staging, destination)
 
 
 def clean_title(raw: str) -> str:
