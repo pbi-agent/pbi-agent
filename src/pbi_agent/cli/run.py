@@ -41,6 +41,7 @@ def _handle_run_command(  # pyright: ignore[reportUnusedFunction] - imported by 
             image_paths=list(args.images or []),
             resume_session_id=args.session_id,
             include_tool_history=bool(args.include_tool_history),
+            show_steps=bool(getattr(args, "show_steps", False)),
         )
     finally:
         os.chdir(original_cwd)
@@ -54,6 +55,7 @@ def _run_single_turn_command(
     image_paths: list[str] | None = None,
     resume_session_id: str | None = None,
     include_tool_history: bool = False,
+    show_steps: bool = False,
 ) -> int:
     from pbi_agent.agent.error_formatting import format_user_facing_error
     from pbi_agent.agent.session import run_single_turn
@@ -61,10 +63,11 @@ def _run_single_turn_command(
     from pbi_agent.web.session.headless import HeadlessSessionChannel
 
     runtime = _coerce_runtime(settings)
-    console = cast(
-        DisplayProtocol,
-        cast(Any, ConsoleDisplay)(verbose=runtime.settings.verbose),
+    console_display = cast(Any, ConsoleDisplay)(
+        verbose=runtime.settings.verbose,
+        final_response_only=not show_steps,
     )
+    console = cast(DisplayProtocol, console_display)
     # CLI runs go through the same live-session channel as the web UI so the
     # saved session has the identical persisted timeline structure.
     channel = HeadlessSessionChannel(
@@ -94,6 +97,7 @@ def _run_single_turn_command(
         _print_error(format_user_facing_error(exc))
         return 1
 
+    console_display.flush_final_response()
     if outcome.session_id and title_job is not None:
         _apply_local_title(outcome.session_id, prompt, title_job)
     if outcome.session_id:

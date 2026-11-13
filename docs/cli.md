@@ -412,7 +412,7 @@ pbi-agent sandbox --env-file .env.sandbox --read-only-repo run --prompt "Review 
 
 With `--detach`, Docker prints the started container id and the CLI returns after the host browser launch check. Stop the detached container with `docker stop <container-id>`.
 
-`sandbox run` accepts the normal one-shot run options: `--prompt`, `--image`, `--project-dir`, `--session-id`, and `--include-tool-history`.
+`sandbox run` accepts the normal one-shot run options: `-p`/`--prompt`, `--image`, `--project-dir`, `--session-id`, `--include-tool-history`, and `--show-steps`.
 
 See [Docker Sandbox](/sandbox) for setup, storage, and security details.
 
@@ -429,10 +429,11 @@ pbi-agent run --prompt "Read the text in this image." --image ./general_ocr_002.
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `--prompt` | required | User prompt to send to the agent. |
+| `-p`, `--prompt` | required | User prompt to send to the agent. |
 | `--image` | repeatable, none by default | Attach a local workspace image to the prompt. Paths must stay inside the workspace. |
 | `--session-id ID` | none | Resume a previous saved session by ID. |
 | `--include-tool-history` | `false` | With `--session-id`, also include prior tool calls, tool arguments, tool results, and useful tool errors in the resumed model context. |
+| `--show-steps` | `false` | Display all intermediate steps (welcome panel, thinking, tool calls, sub-agents, usage). Without it, only the final assistant response is printed, followed by `session_id=...`. |
 | `--allowed-tools GROUPS` | profile/default | Comma-separated built-in tool groups for this run: `read-image`, `write`, `web`, `sub-agent`, and `shell`. Replaces the selected profile's tool visibility for the run. |
 
 By default, resumed CLI runs include prior user and assistant messages only. Use

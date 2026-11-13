@@ -48,9 +48,16 @@ class ConsoleDisplay(DisplayProtocol):
         verbose: bool = False,
         stdout: TextIO | None = None,
         stderr: TextIO | None = None,
+        final_response_only: bool = False,
     ) -> None:
         self.verbose = verbose
-        self._console = Console(file=stdout)
+        self.final_response_only = final_response_only
+        # In final-response-only mode every intermediate step (welcome panel,
+        # spinners, thinking, tool groups, sub-agents, usage) goes to a quiet
+        # console; only the last assistant message is printed, on flush.
+        self._console = Console(file=stdout, quiet=final_response_only)
+        self._output_console = Console(file=stdout)
+        self._final_response_parts: list[str] = []
         self._error_console = Console(file=stderr, stderr=True)
         self._tool_group = PendingToolGroup()
         self._thinking_counter = 0
@@ -152,6 +159,7 @@ class ConsoleDisplay(DisplayProtocol):
     def reset_session(self) -> None:
         self._stop_spinner()
         self._tool_group.reset()
+        self._final_response_parts.clear()
         self._usage_section_open = False
         self._turn_count = 0
 
@@ -216,6 +224,8 @@ class ConsoleDisplay(DisplayProtocol):
         self._stop_spinner()
 
     def tool_execution_start(self, calls: list[PendingToolCall]) -> None:
+        # Tool calls mean the assistant text so far was not the last response.
+        self._final_response_parts.clear()
         displayable_calls = [call for call in calls if call.name != "sub_agent"]
         if not displayable_calls:
             return
@@ -261,7 +271,19 @@ class ConsoleDisplay(DisplayProtocol):
 
     def render_markdown(self, text: str) -> None:
         self._stop_spinner()
+        if self.final_response_only:
+            self._final_response_parts.append(text)
+            return
         self._console.print(Markdown(text))
+
+    def flush_final_response(self) -> None:
+        """Print the buffered last assistant response (final-only mode)."""
+        if not self.final_response_only:
+            return
+        parts = [part for part in self._final_response_parts if part.strip()]
+        self._final_response_parts.clear()
+        if parts:
+            self._output_console.print(Markdown("\n\n".join(parts)))
 
     def render_thinking(
         self,

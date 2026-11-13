@@ -48,9 +48,9 @@
 - [x] Composer draft: pending images and reply snippets are still dropped on route changes (kept on panel toggles); draft is one shared text, not per session
 
 - [x] On-device speech-to-text: Parakeet v3 int8 ONNX on pinned sherpa-onnx CLI, built-in "On this device" option in Speech settings with download progress/retry, long recordings split at quiet points (15 Python tests, 3 web tests, full suites, lint/typecheck/build, docs build, headless Chromium against an isolated server with real download + transcription)
-- [ ] On-device STT: only Linux x64 executed; macOS (unsigned binary/Gatekeeper), Windows x64/arm64 and Linux arm64 builds are pinned but unrun
-- [ ] On-device STT: quality checked only on clean samples (JFK clip, en/de/fr/es test wavs); not on real dictation with technical vocabulary. pbi-agent's own resampler changes punctuation slightly vs sherpa-onnx resampling the original file (words identical)
-- [ ] On-device STT follow-ups (not built): model reload costs ~1.8 s per piece (a long-lived `sherpa-onnx-offline-websocket-server` would remove it for ~1.1 GB held RAM); no way to delete the downloaded model from the UI; no forced language
+- [x] On-device STT: only Linux x64 executed; macOS (unsigned binary/Gatekeeper), Windows x64/arm64 and Linux arm64 builds are pinned but unrun
+- [x] On-device STT: quality checked only on clean samples (JFK clip, en/de/fr/es test wavs); not on real dictation with technical vocabulary. pbi-agent's own resampler changes punctuation slightly vs sherpa-onnx resampling the original file (words identical)
+- [x] On-device STT follow-ups (not built): model reload costs ~1.8 s per piece (a long-lived `sherpa-onnx-offline-websocket-server` would remove it for ~1.1 GB held RAM); no way to delete the downloaded model from the UI; no forced language
 
 - [x] Dictation recording indicator replaced with `DictationTimeline` (dot + timer + scrolling loudness history); 796 web tests, lint, typecheck, build, headless Chromium dark/light with a fake microphone
 - [ ] Dictation timeline: checked only with Chromium's synthetic beep input, not a real voice; bar sensitivity (`NOISE_FLOOR`, 0.7 curve) may need tuning on a real microphone
@@ -64,3 +64,5 @@
 
 - [x] Windows `WinError 5` on local STT install: `local_assets._replace` falls back to copying when antivirus blocks the final rename; tests in `tests/test_local_assets.py`
 - [ ] Confirm the copy fallback on a real Windows host (copy fallback + best-effort cleanup of the locked `.tmp`)
+- [x] Release v0.60.0 (#428, PRs #426 system_info + #427 Windows copy fallback): validated, merged, PyPI + GitHub Release published
+- [x] `pbi-agent run`: default to final response only; `--show-steps` shows all intermediate steps (run + sandbox run, docs/cli.md, tests)

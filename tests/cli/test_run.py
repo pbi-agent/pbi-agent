@@ -126,7 +126,9 @@ class DefaultWebCommandTests(unittest.TestCase):
             rc = cli_run._handle_run_command(args, settings)
 
         self.assertEqual(rc, 0)
-        mock_display_cls.assert_called_once_with(verbose=False)
+        mock_display_cls.assert_called_once_with(
+            verbose=False, final_response_only=True
+        )
         prompt, runtime, display = mock_run.call_args.args
         self.assertEqual(prompt, "Inspect the report")
         # CLI turns run through the shared web live-session channel: the
@@ -209,7 +211,9 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(seen_cwds, [project_dir])
         self.assertEqual(Path.cwd(), original_cwd)
-        mock_display_cls.assert_called_once_with(verbose=False)
+        mock_display_cls.assert_called_once_with(
+            verbose=False, final_response_only=True
+        )
         mock_run.assert_called_once()
 
     def test_handle_run_command_passes_include_tool_history(self) -> None:
@@ -240,6 +244,32 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertIs(mock_run.call_args.kwargs["include_tool_history"], True)
         with self.assertRaises(SystemExit):
             parser.parse_args(["run", "--prompt", "x", "--full-history"])
+
+    def test_handle_run_command_show_steps_flag_controls_output_mode(self) -> None:
+        parser = cli.build_parser()
+        settings = self._settings()
+
+        for argv, final_only in (
+            (["run", "--prompt", "Go"], True),
+            (["run", "-p", "Go", "--show-steps"], False),
+        ):
+            args = parser.parse_args(argv)
+            with (
+                patch(
+                    "pbi_agent.agent.session.run_single_turn",
+                    return_value=Mock(tool_errors=False, session_id=None),
+                ),
+                patch(
+                    "pbi_agent.display.console_display.ConsoleDisplay"
+                ) as mock_display_cls,
+            ):
+                rc = cli_run._handle_run_command(args, settings)
+
+            self.assertEqual(rc, 0)
+            mock_display_cls.assert_called_once_with(
+                verbose=False, final_response_only=final_only
+            )
+            mock_display_cls.return_value.flush_final_response.assert_called_once_with()
 
     def test_handle_run_command_rejects_missing_project_dir(self) -> None:
         parser = cli.build_parser()
