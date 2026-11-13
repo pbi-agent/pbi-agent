@@ -25,6 +25,17 @@
     --color-usage-amber: var(--usage-amber);
     --color-usage-emerald: var(--usage-emerald);
     --color-usage-rose: var(--usage-rose);
+    --color-trace-bar: var(--trace-bar);
+    --color-trace-agent: var(--trace-agent);
+    --color-trace-chat: var(--trace-chat);
+    --color-trace-tool: var(--trace-tool);
+    --color-trace-error: var(--trace-error);
+    --animate-trace-bar: trace-bar-grow 600ms var(--ease-out) both;
+    @keyframes trace-bar-grow {
+        from {
+            transform: scaleX(0);
+        }
+    }
     --color-chart-5: var(--chart-5);
     --color-chart-4: var(--chart-4);
     --color-chart-3: var(--chart-3);

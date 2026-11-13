@@ -10,6 +10,7 @@ from pbi_agent.session_store import (
     MessageImageAttachment,
     MessageRecord,
     ObservabilityEventRecord,
+    ObservabilityEventSummaryRecord,
     RunSessionRecord,
     SessionRecord,
     _sanitize_stale_web_snapshot,
@@ -627,8 +628,10 @@ def _serialize_saved_session_runtime(  # pyright: ignore[reportUnusedFunction] -
     }
 
 
-def _serialize_observability_event(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
-    record: ObservabilityEventRecord,
+def _serialize_observability_event_summary(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
+    record: ObservabilityEventRecord | ObservabilityEventSummaryRecord,
+    *,
+    has_payload: bool,
 ) -> dict[str, Any]:
     return {
         "run_session_id": record.run_session_id,
@@ -640,13 +643,8 @@ def _serialize_observability_event(  # pyright: ignore[reportUnusedFunction] - i
         "provider": record.provider,
         "model": record.model,
         "url": record.url,
-        "request_config": _deserialize_json_field(record.request_config_json),
-        "request_payload": _deserialize_json_field(record.request_payload_json),
-        "response_payload": _deserialize_json_field(record.response_payload_json),
         "tool_name": record.tool_name,
         "tool_call_id": record.tool_call_id,
-        "tool_input": _deserialize_json_field(record.tool_input_json),
-        "tool_output": _deserialize_json_field(record.tool_output_json),
         "tool_duration_ms": record.tool_duration_ms,
         "prompt_tokens": record.prompt_tokens,
         "completion_tokens": record.completion_tokens,
@@ -656,7 +654,27 @@ def _serialize_observability_event(  # pyright: ignore[reportUnusedFunction] - i
         "status_code": record.status_code,
         "success": None if record.success is None else bool(record.success),
         "error_message": record.error_message,
+        "has_payload": has_payload,
+    }
+
+
+def _serialize_observability_event(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
+    record: ObservabilityEventRecord,
+) -> dict[str, Any]:
+    payloads = {
+        "request_config": _deserialize_json_field(record.request_config_json),
+        "request_payload": _deserialize_json_field(record.request_payload_json),
+        "response_payload": _deserialize_json_field(record.response_payload_json),
+        "tool_input": _deserialize_json_field(record.tool_input_json),
+        "tool_output": _deserialize_json_field(record.tool_output_json),
         "metadata": _deserialize_json_field(record.metadata_json),
+    }
+    return {
+        **_serialize_observability_event_summary(
+            record,
+            has_payload=any(value not in (None, {}) for value in payloads.values()),
+        ),
+        **payloads,
     }
 
 

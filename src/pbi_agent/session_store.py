@@ -397,6 +397,54 @@ class ObservabilityEventRecord:
 
 
 @dataclass(slots=True)
+class ObservabilityEventSummaryRecord:
+    """An observability event without its JSON payload columns."""
+
+    run_session_id: str
+    session_id: str | None
+    step_index: int
+    event_type: str
+    timestamp: str
+    duration_ms: int | None
+    provider: str | None
+    model: str | None
+    url: str | None
+    tool_name: str | None
+    tool_call_id: str | None
+    tool_duration_ms: int | None
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    total_tokens: int | None
+    cached_input_tokens: int | None
+    reasoning_tokens: int | None
+    status_code: int | None
+    success: int | None
+    error_message: str | None
+    has_payload: bool
+
+
+_OBSERVABILITY_EVENT_PAYLOAD_COLUMNS = (
+    "request_config_json",
+    "request_payload_json",
+    "response_payload_json",
+    "tool_input_json",
+    "tool_output_json",
+    "metadata_json",
+)
+_OBSERVABILITY_EVENT_SUMMARY_COLUMNS = (
+    "run_session_id, session_id, step_index, event_type, timestamp, duration_ms, "
+    "provider, model, url, tool_name, tool_call_id, tool_duration_ms, "
+    "prompt_tokens, completion_tokens, total_tokens, cached_input_tokens, "
+    "reasoning_tokens, status_code, success, error_message, ("
+    + " OR ".join(
+        f"COALESCE({column}, 'null') NOT IN ('null', '{{}}')"
+        for column in _OBSERVABILITY_EVENT_PAYLOAD_COLUMNS
+    )
+    + ") AS has_payload"
+)
+
+
+@dataclass(slots=True)
 class KanbanTaskRecord:
     task_id: str
     directory: str
@@ -2250,6 +2298,27 @@ class SessionStore:
             return None
         return _run_session_record_from_row(row)
 
+    def list_descendant_run_sessions(
+        self, run_session_id: str
+    ) -> list[RunSessionRecord]:
+        """Return every run started, directly or transitively, by a run."""
+        with self._lock:
+            rows = self._conn.execute(
+                "WITH RECURSIVE descendants(run_session_id) AS ("
+                "SELECT run_session_id FROM run_sessions "
+                "WHERE parent_run_session_id = ? "
+                "UNION "
+                "SELECT child.run_session_id FROM run_sessions AS child "
+                "JOIN descendants ON child.parent_run_session_id = "
+                "descendants.run_session_id) "
+                "SELECT run_sessions.* FROM run_sessions "
+                "JOIN descendants USING (run_session_id) "
+                "WHERE run_sessions.run_session_id != ? "
+                "ORDER BY run_sessions.started_at ASC, run_sessions.id ASC",
+                (run_session_id, run_session_id),
+            ).fetchall()
+        return [_run_session_record_from_row(row) for row in rows]
+
     def get_next_observability_step_index(self, run_session_id: str) -> int:
         with self._lock:
             row = self._conn.execute(
@@ -2560,6 +2629,42 @@ class SessionStore:
                 (run_session_id,),
             ).fetchall()
         return [ObservabilityEventRecord(**dict(row)) for row in rows]
+
+    def list_observability_event_summaries(
+        self, run_session_ids: list[str]
+    ) -> list[ObservabilityEventSummaryRecord]:
+        """Return trace events of the runs without their JSON payloads."""
+        records: list[ObservabilityEventSummaryRecord] = []
+        for batch in _sqlite_variable_batches(run_session_ids):
+            placeholders = ", ".join("?" for _ in batch)
+            with self._lock:
+                rows = self._conn.execute(
+                    f"SELECT {_OBSERVABILITY_EVENT_SUMMARY_COLUMNS} "
+                    "FROM observability_events "
+                    f"WHERE run_session_id IN ({placeholders}) "
+                    "AND event_type != 'web_event' "
+                    "ORDER BY step_index ASC, id ASC",
+                    batch,
+                ).fetchall()
+            records.extend(
+                ObservabilityEventSummaryRecord(
+                    **{**dict(row), "has_payload": bool(row["has_payload"])}
+                )
+                for row in rows
+            )
+        return records
+
+    def get_observability_event(
+        self, *, run_session_id: str, step_index: int
+    ) -> ObservabilityEventRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM observability_events WHERE run_session_id = ? "
+                "AND step_index = ? AND event_type != 'web_event' "
+                "ORDER BY id ASC LIMIT 1",
+                (run_session_id, step_index),
+            ).fetchone()
+        return None if row is None else ObservabilityEventRecord(**dict(row))
 
     # -- dashboard / observability aggregation ----------------------------
 

@@ -28,6 +28,11 @@
   --usage-amber: #fbbf24;
   --usage-emerald: #34d399;
   --usage-rose: #fb7185;
+  --trace-bar: #29c5ff;
+  --trace-agent: #f2a561;
+  --trace-chat: #86e3a4;
+  --trace-tool: #f6c56b;
+  --trace-error: #fb7185;
   --chart-1: #adc6ff;
   --chart-2: #89ceff;
   --chart-3: #b9c8de;
@@ -163,6 +168,11 @@
   --usage-amber: #d97706;
   --usage-emerald: #059669;
   --usage-rose: #e11d48;
+  --trace-bar: #0891b2;
+  --trace-agent: #c2410c;
+  --trace-chat: #15803d;
+  --trace-tool: #a16207;
+  --trace-error: #e11d48;
   --chart-1: #2563eb;
   --chart-2: #0891b2;
   --chart-3: #7c3aed;
@@ -223,6 +233,11 @@
   --usage-amber: #fbbf24;
   --usage-emerald: #34d399;
   --usage-rose: #fb7185;
+  --trace-bar: #29c5ff;
+  --trace-agent: #f2a561;
+  --trace-chat: #86e3a4;
+  --trace-tool: #f6c56b;
+  --trace-error: #fb7185;
   --chart-1: #fafafa;
   --chart-2: #a1a1aa;
   --chart-3: #71717a;

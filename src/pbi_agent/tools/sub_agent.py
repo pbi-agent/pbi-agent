@@ -285,6 +285,7 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             parent_tool_availability_overridden=context.tool_availability_overridden,
             parent_context=parent_context,
             parent_tracer=parent_tracer,
+            parent_tool_call_id=context.tool_call_id,
             workspace_root=context.workspace_root,
             workspace_directory_key=context.workspace_directory_key,
             intent=intent or None,

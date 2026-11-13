@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple, cast
 from pbi_agent.config import ResolvedRuntime
 from pbi_agent.session_store import (
     KanbanTaskRecord,
-    ObservabilityEventRecord,
+    ObservabilityEventSummaryRecord,
     RunSessionRecord,
     SessionRecord,
     SessionStore,
@@ -21,6 +21,7 @@ from pbi_agent.web.session.serializers import (
     _run_reasoning_effort,
     _serialize_history_message,
     _serialize_observability_event,
+    _serialize_observability_event_summary,
     _serialize_run_as_live_session,
     _serialize_run_session,
     _serialize_session,
@@ -75,15 +76,41 @@ def _resolve_session_activity(
     )
 
 
+def _serialize_run_detail_events(
+    events: list[ObservabilityEventSummaryRecord],
+) -> list[dict[str, Any]]:
+    return [
+        _serialize_observability_event_summary(event, has_payload=event.has_payload)
+        for event in events
+    ]
+
+
+def _serialize_child_run_detail(
+    run: RunSessionRecord,
+    events: list[ObservabilityEventSummaryRecord],
+) -> dict[str, Any]:
+    serialized = _serialize_run_detail_run(run, events)
+    metadata = serialized.get("metadata")
+    tool_call_id = (
+        metadata.get("parent_tool_call_id") if isinstance(metadata, dict) else None
+    )
+    return {
+        "run": serialized,
+        "events": _serialize_run_detail_events(events),
+        "parent_tool_call_id": (
+            tool_call_id if isinstance(tool_call_id, str) and tool_call_id else None
+        ),
+    }
+
+
 def _serialize_run_detail_run(
     run: RunSessionRecord,
-    events: list[ObservabilityEventRecord],
+    detail_events: list[ObservabilityEventSummaryRecord],
 ) -> dict[str, Any]:
     serialized = _serialize_run_session(run)
     if run.status in _TERMINAL_RUN_STATUSES:
         return serialized
 
-    detail_events = [event for event in events if event.event_type != "web_event"]
     started_at = datetime.fromisoformat(run.started_at)
     if started_at.tzinfo is None:
         started_at = started_at.replace(tzinfo=UTC)
@@ -349,26 +376,52 @@ class SavedSessionsMixin:
             runs = store.list_run_sessions(session_id)
         return [_serialize_run_session(run) for run in runs]
 
+    def _require_scoped_run(
+        self, store: SessionStore, run_session_id: str, *, global_scope: bool
+    ) -> RunSessionRecord:
+        run = store.get_run_session(run_session_id)
+        if run is None or run.session_id is None:
+            raise KeyError(run_session_id)
+        if not global_scope:
+            session = store.get_session(run.session_id)
+            if session is None or session.directory != self._directory_key:
+                raise KeyError(run_session_id)
+        return run
+
     def get_run_detail(
         self, run_session_id: str, *, global_scope: bool = False
     ) -> dict[str, Any]:
         with SessionStore() as store:
-            run = store.get_run_session(run_session_id)
-            if run is None or run.session_id is None:
-                raise KeyError(run_session_id)
-            if not global_scope:
-                session = store.get_session(run.session_id)
-                if session is None or session.directory != self._directory_key:
-                    raise KeyError(run_session_id)
-            events = store.list_observability_events(run_session_id=run_session_id)
+            run = self._require_scoped_run(
+                store, run_session_id, global_scope=global_scope
+            )
+            child_runs = store.list_descendant_run_sessions(run_session_id)
+            events_by_run: dict[str, list[ObservabilityEventSummaryRecord]] = {
+                record.run_session_id: [] for record in (run, *child_runs)
+            }
+            for event in store.list_observability_event_summaries(list(events_by_run)):
+                events_by_run[event.run_session_id].append(event)
+        events = events_by_run[run_session_id]
         return {
             "run": _serialize_run_detail_run(run, events),
-            "events": [
-                _serialize_observability_event(event)
-                for event in events
-                if event.event_type != "web_event"
+            "events": _serialize_run_detail_events(events),
+            "child_runs": [
+                _serialize_child_run_detail(child, events_by_run[child.run_session_id])
+                for child in child_runs
             ],
         }
+
+    def get_run_event(
+        self, run_session_id: str, step_index: int, *, global_scope: bool = False
+    ) -> dict[str, Any]:
+        with SessionStore() as store:
+            self._require_scoped_run(store, run_session_id, global_scope=global_scope)
+            event = store.get_observability_event(
+                run_session_id=run_session_id, step_index=step_index
+            )
+        if event is None:
+            raise KeyError(run_session_id)
+        return _serialize_observability_event(event)
 
     def get_dashboard_stats(
         self,

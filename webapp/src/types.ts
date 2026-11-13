@@ -823,7 +823,8 @@ export type RunSession = {
   metadata: unknown;
 };
 
-export type ObservabilityEvent = {
+/** A trace event as listed in run detail: everything except its JSON payloads. */
+export type ObservabilityEventSummary = {
   run_session_id: string;
   session_id: string | null;
   step_index: number;
@@ -833,13 +834,8 @@ export type ObservabilityEvent = {
   provider: string | null;
   model: string | null;
   url: string | null;
-  request_config: unknown;
-  request_payload: unknown;
-  response_payload: unknown;
   tool_name: string | null;
   tool_call_id: string | null;
-  tool_input: unknown;
-  tool_output: unknown;
   tool_duration_ms: number | null;
   prompt_tokens: number | null;
   completion_tokens: number | null;
@@ -849,7 +845,29 @@ export type ObservabilityEvent = {
   status_code: number | null;
   success: boolean | null;
   error_message: string | null;
+  /** Whether fetching the full event yields any payload to show. */
+  has_payload: boolean;
+};
+
+export type ObservabilityEvent = ObservabilityEventSummary & {
+  request_config: unknown;
+  request_payload: unknown;
+  response_payload: unknown;
+  tool_input: unknown;
+  tool_output: unknown;
   metadata: unknown;
+};
+
+export type ChildRunDetail = {
+  run: RunSession;
+  events: ObservabilityEventSummary[];
+  parent_tool_call_id: string | null;
+};
+
+export type RunDetail = {
+  run: RunSession;
+  events: ObservabilityEventSummary[];
+  child_runs: ChildRunDetail[];
 };
 
 // -- Dashboard / Observability Aggregation --------------------------------
