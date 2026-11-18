@@ -200,9 +200,11 @@ def test_upgrade_on_windows_defers_installer_until_exit(
     assert cli.main(["upgrade"]) == 0
 
     wrap.assert_called_once_with(UV_PLAN.command)
-    popen.assert_called_once_with(deferred)
+    popen.assert_called_once_with(
+        deferred, creationflags=upgrade.WINDOWS_CREATE_NEW_CONSOLE
+    )
     upgrade_env.assert_not_called()
-    assert "after pbi-agent exits" in capsys.readouterr().out
+    assert "in a new window after pbi-agent exits" in capsys.readouterr().out
 
 
 def test_upgrade_skips_startup_update_check(
