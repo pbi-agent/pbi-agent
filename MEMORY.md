@@ -31,5 +31,5 @@ Entry shape: rule/fact — why/evidence — `[verified YYYY-MM-DD]` or `[unverif
 
 ## Daily Log
 
-### 2026-11-17
-- MCP stdio on Windows: `bunx` config printed Bun's help text to stdout (`Failed to parse JSONRPC message`), so `pool._normalize_stdio_command` rewrites `bunx`/`bunx.exe|.cmd|.ps1` (keeping any directory) to `bun x …` on win32 only. Unit tests in `tests/test_mcp_pool.py`; Ruff, MCP tests green. Not yet confirmed on a real Windows host. [unverified]
+### 2026-11-18
+- Bumped `CHATGPT_CODEX_VERSION` 0.159.2 → 0.170.0 (`chatgpt_codex_backend.py`; drives User-Agent + model-discovery `client_version`). Ruff + codex/chatgpt/model-discovery/openai tests green. [verified 2026-11-18]
