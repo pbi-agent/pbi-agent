@@ -27,7 +27,7 @@ Entry shape: rule/fact — why/evidence — `[verified YYYY-MM-DD]` or `[unverif
 - `.agents/memory/runtime.md`: prompt assembly, catalogs, sub-agents, commands, replay, hooks, sandbox/init, branding.
 - `.agents/memory/web.md`: API contracts, web sessions, channels, events, timeline, UI quirks, composer, follow-ups.
 
-- Prior implementation/validation notes: `.agents/memory/2026-11-13.md` (#149 trace timeline, composer skill tags/draft, headless-check recipe, releases v0.57–v0.61), `.agents/memory/2026-11-12.md` (web terminal/ConPTY, local session titles, badge centering, session-title UI, #169 kits, releases v0.53–v0.56), `.agents/memory/2026-11-10.md` (includes #292 interrupt cleanup, #199 status dashboard, #344 questionnaire). [verified 2026-11-12]
+- Prior implementation/validation notes: `.agents/memory/2026-11-13.md` (#149 trace timeline, composer skill tags/draft, headless-check recipe, Settings add-dialog scrolling, OpenAI/Claude pricing refresh + Claude ID dedup, trace token column, releases v0.57–v0.62), `.agents/memory/2026-11-12.md` (web terminal/ConPTY, local session titles, badge centering, session-title UI, #169 kits, releases v0.53–v0.56), `.agents/memory/2026-11-10.md` (includes #292 interrupt cleanup, #199 status dashboard, #344 questionnaire). [verified 2026-11-12]
 
 ## Daily Log
 

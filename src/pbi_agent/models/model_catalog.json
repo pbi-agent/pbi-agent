@@ -1,5 +1,284 @@
 {
   "models": {
+    "claude-haiku-5-5": {
+      "pricing": {
+        "input": 0.1,
+        "cache_write_5m": 0.125,
+        "cache_write_1h": 0.2,
+        "cache_hit": 0.01,
+        "output": 0.5
+      }
+    },
+    "claude-sonnet-5-5": {
+      "pricing": {
+        "input": 2,
+        "cache_write_5m": 2.5,
+        "cache_write_1h": 4,
+        "cache_hit": 0.1,
+        "output": 10
+      }
+    },
+    "claude-mythos-5-2": {
+      "pricing": {
+        "input": 8,
+        "cache_write_5m": 10,
+        "cache_write_1h": 16,
+        "cache_hit": 0.2,
+        "output": 40
+      }
+    },
+    "claude-fable-5-2": {
+      "pricing": {
+        "input": 8,
+        "cache_write_5m": 10,
+        "cache_write_1h": 16,
+        "cache_hit": 0.2,
+        "output": 40
+      }
+    },
+    "gpt-5-search-api": {
+      "pricing": {
+        "input": 1.25,
+        "cache_write_5m": 1.25,
+        "cache_write_1h": 1.25,
+        "cache_hit": 0.125,
+        "output": 10
+      }
+    },
+    "chat-latest": {
+      "pricing": {
+        "input": 5,
+        "cache_write_5m": 5,
+        "cache_write_1h": 5,
+        "cache_hit": 0.5,
+        "output": 30
+      }
+    },
+    "gpt-6-astra-law": {
+      "pricing": {
+        "input": 10,
+        "cache_write_5m": 10,
+        "cache_write_1h": 10,
+        "cache_hit": 1,
+        "output": 50
+      }
+    },
+    "gpt-rosalind-discovery": {
+      "pricing": {
+        "input": 5,
+        "cache_write_5m": 5,
+        "cache_write_1h": 5,
+        "cache_hit": 0.5,
+        "output": 25
+      }
+    },
+    "gpt-rosalind-research": {
+      "pricing": {
+        "input": 5,
+        "cache_write_5m": 5,
+        "cache_write_1h": 5,
+        "cache_hit": 0.5,
+        "output": 25
+      }
+    },
+    "gpt-6-rosalind": {
+      "pricing": {
+        "input": 15,
+        "cache_write_5m": 18.75,
+        "cache_write_1h": 18.75,
+        "cache_hit": 1.5,
+        "output": 75
+      }
+    },
+    "gpt-5.5-cyber-preview": {
+      "pricing": {
+        "input": 12.5,
+        "cache_write_5m": 12.5,
+        "cache_write_1h": 12.5,
+        "cache_hit": 1.25,
+        "output": 75
+      }
+    },
+    "gpt-5.6-cyber": {
+      "pricing": {
+        "input": 12.5,
+        "cache_write_5m": 15.625,
+        "cache_write_1h": 15.625,
+        "cache_hit": 1.25,
+        "output": 75
+      }
+    },
+    "gpt-6-cyber": {
+      "pricing": {
+        "input": 20,
+        "cache_write_5m": 25,
+        "cache_write_1h": 25,
+        "cache_hit": 2,
+        "output": 100
+      }
+    },
+    "o3": {
+      "pricing": {
+        "input": 2,
+        "cache_write_5m": 2,
+        "cache_write_1h": 2,
+        "cache_hit": 0.5,
+        "output": 8
+      }
+    },
+    "o3-pro": {
+      "pricing": {
+        "input": 20,
+        "cache_write_5m": 20,
+        "cache_write_1h": 20,
+        "cache_hit": 0,
+        "output": 80
+      }
+    },
+    "gpt-4o-mini": {
+      "pricing": {
+        "input": 0.15,
+        "cache_write_5m": 0.15,
+        "cache_write_1h": 0.15,
+        "cache_hit": 0.075,
+        "output": 0.6
+      }
+    },
+    "gpt-4o": {
+      "pricing": {
+        "input": 2.5,
+        "cache_write_5m": 2.5,
+        "cache_write_1h": 2.5,
+        "cache_hit": 1.25,
+        "output": 10
+      }
+    },
+    "gpt-4.1-mini": {
+      "pricing": {
+        "input": 0.4,
+        "cache_write_5m": 0.4,
+        "cache_write_1h": 0.4,
+        "cache_hit": 0.1,
+        "output": 1.6
+      }
+    },
+    "gpt-4.1": {
+      "pricing": {
+        "input": 2,
+        "cache_write_5m": 2,
+        "cache_write_1h": 2,
+        "cache_hit": 0.5,
+        "output": 8
+      }
+    },
+    "gpt-5-pro": {
+      "pricing": {
+        "input": 15,
+        "cache_write_5m": 15,
+        "cache_write_1h": 15,
+        "cache_hit": 0,
+        "output": 120
+      }
+    },
+    "gpt-5-nano": {
+      "pricing": {
+        "input": 0.05,
+        "cache_write_5m": 0.05,
+        "cache_write_1h": 0.05,
+        "cache_hit": 0.005,
+        "output": 0.4
+      }
+    },
+    "gpt-5-mini": {
+      "pricing": {
+        "input": 0.25,
+        "cache_write_5m": 0.25,
+        "cache_write_1h": 0.25,
+        "cache_hit": 0.025,
+        "output": 2
+      }
+    },
+    "gpt-5": {
+      "pricing": {
+        "input": 1.25,
+        "cache_write_5m": 1.25,
+        "cache_write_1h": 1.25,
+        "cache_hit": 0.125,
+        "output": 10
+      }
+    },
+    "gpt-5.1": {
+      "pricing": {
+        "input": 1.25,
+        "cache_write_5m": 1.25,
+        "cache_write_1h": 1.25,
+        "cache_hit": 0.125,
+        "output": 10
+      }
+    },
+    "gpt-5.2-pro": {
+      "pricing": {
+        "input": 21,
+        "cache_write_5m": 21,
+        "cache_write_1h": 21,
+        "cache_hit": 0,
+        "output": 168
+      }
+    },
+    "gpt-5.2": {
+      "pricing": {
+        "input": 1.75,
+        "cache_write_5m": 1.75,
+        "cache_write_1h": 1.75,
+        "cache_hit": 0.175,
+        "output": 14
+      }
+    },
+    "gpt-5.4-pro": {
+      "pricing": {
+        "input": 30,
+        "cache_write_5m": 30,
+        "cache_write_1h": 30,
+        "cache_hit": 0,
+        "output": 180
+      }
+    },
+    "gpt-6-sol": {
+      "pricing": {
+        "input": 2,
+        "cache_write_5m": 2.5,
+        "cache_write_1h": 2.5,
+        "cache_hit": 0.2,
+        "output": 10
+      }
+    },
+    "gpt-6-luna": {
+      "pricing": {
+        "input": 0.1,
+        "cache_write_5m": 0.125,
+        "cache_write_1h": 0.125,
+        "cache_hit": 0.01,
+        "output": 0.5
+      }
+    },
+    "gpt-6.1-terra": {
+      "pricing": {
+        "input": 1,
+        "cache_write_5m": 1.25,
+        "cache_write_1h": 1.25,
+        "cache_hit": 0.05,
+        "output": 5
+      }
+    },
+    "gpt-6.1-sol": {
+      "pricing": {
+        "input": 2,
+        "cache_write_5m": 2.5,
+        "cache_write_1h": 2.5,
+        "cache_hit": 0.1,
+        "output": 10
+      }
+    },
     "gpt-6-astra": {
       "pricing": {
         "input": 10.00,
@@ -12,41 +291,41 @@
     "gpt-5.6-sol": {
       "context_window": 1050000,
       "pricing": {
-        "input": 5.00,
-        "cache_write_5m": 6.25,
-        "cache_write_1h": 6.25,
-        "cache_hit": 0.50,
-        "output": 30.00
+        "input": 4,
+        "cache_write_5m": 5,
+        "cache_write_1h": 5,
+        "cache_hit": 0.4,
+        "output": 20
       }
     },
     "gpt-5.6-terra": {
       "context_window": 1050000,
       "pricing": {
-        "input": 2.50,
-        "cache_write_5m": 3.125,
-        "cache_write_1h": 3.125,
-        "cache_hit": 0.25,
-        "output": 15.00
+        "input": 2,
+        "cache_write_5m": 2.5,
+        "cache_write_1h": 2.5,
+        "cache_hit": 0.2,
+        "output": 12
       }
     },
     "gpt-5.6-luna": {
       "context_window": 1050000,
       "pricing": {
-        "input": 1.00,
-        "cache_write_5m": 1.25,
-        "cache_write_1h": 1.25,
-        "cache_hit": 0.10,
-        "output": 6.00
+        "input": 0.2,
+        "cache_write_5m": 0.25,
+        "cache_write_1h": 0.25,
+        "cache_hit": 0.02,
+        "output": 1.2
       }
     },
     "gpt-5.6": {
       "context_window": 1050000,
       "pricing": {
-        "input": 5.00,
-        "cache_write_5m": 6.25,
-        "cache_write_1h": 6.25,
-        "cache_hit": 0.50,
-        "output": 30.00
+        "input": 4,
+        "cache_write_5m": 5,
+        "cache_write_1h": 5,
+        "cache_hit": 0.4,
+        "output": 20
       }
     },
     "gpt-5.3-codex": {
@@ -65,7 +344,7 @@
         "input": 30.00,
         "cache_write_5m": 30.00,
         "cache_write_1h": 30.00,
-        "cache_hit": 3.00,
+        "cache_hit": 0.00,
         "output": 180.00
       }
     },
@@ -111,110 +390,83 @@
     },
     "claude-fable-5-1": {
       "pricing": {
-        "input": 10.00,
-        "cache_write_5m": 12.50,
-        "cache_write_1h": 20.00,
+        "input": 10,
+        "cache_write_5m": 12.5,
+        "cache_write_1h": 20,
         "cache_hit": 0.25,
-        "output": 50.00
-      }
-    },
-    "claude-fable-5.1": {
-      "pricing": {
-        "input": 10.00,
-        "cache_write_5m": 12.50,
-        "cache_write_1h": 20.00,
-        "cache_hit": 0.25,
-        "output": 50.00
+        "output": 50
       }
     },
     "claude-mythos-5-1": {
       "pricing": {
-        "input": 10.00,
-        "cache_write_5m": 12.50,
-        "cache_write_1h": 20.00,
+        "input": 10,
+        "cache_write_5m": 12.5,
+        "cache_write_1h": 20,
         "cache_hit": 0.25,
-        "output": 50.00
-      }
-    },
-    "claude-mythos-5.1": {
-      "pricing": {
-        "input": 10.00,
-        "cache_write_5m": 12.50,
-        "cache_write_1h": 20.00,
-        "cache_hit": 0.25,
-        "output": 50.00
+        "output": 50
       }
     },
     "claude-opus-5-5": {
       "pricing": {
-        "input": 4.00,
-        "cache_write_5m": 5.00,
-        "cache_write_1h": 8.00,
-        "cache_hit": 0.20,
-        "output": 20.00
-      }
-    },
-    "claude-opus-5.5": {
-      "pricing": {
-        "input": 4.00,
-        "cache_write_5m": 5.00,
-        "cache_write_1h": 8.00,
-        "cache_hit": 0.20,
-        "output": 20.00
+        "input": 4,
+        "cache_write_5m": 5,
+        "cache_write_1h": 8,
+        "cache_hit": 0.2,
+        "output": 20
       }
     },
     "claude-opus-5": {
       "pricing": {
-        "input": 5.00,
+        "input": 5,
         "cache_write_5m": 6.25,
-        "cache_write_1h": 10.00,
-        "cache_hit": 0.50,
-        "output": 25.00
+        "cache_write_1h": 10,
+        "cache_hit": 0.5,
+        "output": 25
       }
     },
     "claude-opus-4-5": {
       "pricing": {
-        "input": 5.00,
+        "input": 5,
         "cache_write_5m": 6.25,
-        "cache_write_1h": 10.00,
-        "cache_hit": 0.50,
-        "output": 25.00
+        "cache_write_1h": 10,
+        "cache_hit": 0.5,
+        "output": 25
       }
     },
     "claude-opus-4-1": {
       "pricing": {
-        "input": 15.00,
+        "input": 15,
         "cache_write_5m": 18.75,
-        "cache_write_1h": 30.00,
-        "cache_hit": 1.50,
-        "output": 75.00
+        "cache_write_1h": 30,
+        "cache_hit": 1.5,
+        "output": 75
       }
     },
     "claude-opus-4": {
       "pricing": {
-        "input": 15.00,
+        "input": 15,
         "cache_write_5m": 18.75,
-        "cache_write_1h": 30.00,
-        "cache_hit": 1.50,
-        "output": 75.00
+        "cache_write_1h": 30,
+        "cache_hit": 1.5,
+        "output": 75
       }
     },
     "claude-sonnet-4-5": {
       "pricing": {
-        "input": 3.00,
+        "input": 3,
         "cache_write_5m": 3.75,
-        "cache_write_1h": 6.00,
-        "cache_hit": 0.30,
-        "output": 15.00
+        "cache_write_1h": 6,
+        "cache_hit": 0.3,
+        "output": 15
       }
     },
     "claude-sonnet-4": {
       "pricing": {
-        "input": 3.00,
+        "input": 3,
         "cache_write_5m": 3.75,
-        "cache_write_1h": 6.00,
-        "cache_hit": 0.30,
-        "output": 15.00
+        "cache_write_1h": 6,
+        "cache_hit": 0.3,
+        "output": 15
       }
     },
     "claude-3-5-haiku": {
@@ -229,91 +481,81 @@
     "claude-fable-5": {
       "context_window": 1000000,
       "pricing": {
-        "input": 10.00,
-        "cache_write_5m": 12.50,
-        "cache_write_1h": 20.00,
-        "cache_hit": 1.00,
-        "output": 50.00
+        "input": 10,
+        "cache_write_5m": 12.5,
+        "cache_write_1h": 20,
+        "cache_hit": 1,
+        "output": 50
       }
     },
     "claude-mythos-5": {
       "context_window": 1000000,
       "pricing": {
-        "input": 10.00,
-        "cache_write_5m": 12.50,
-        "cache_write_1h": 20.00,
-        "cache_hit": 1.00,
-        "output": 50.00
+        "input": 10,
+        "cache_write_5m": 12.5,
+        "cache_write_1h": 20,
+        "cache_hit": 1,
+        "output": 50
       }
     },
     "claude-opus-4-8": {
       "context_window": 200000,
       "pricing": {
-        "input": 5.0,
+        "input": 5,
         "cache_write_5m": 6.25,
-        "cache_write_1h": 10.0,
+        "cache_write_1h": 10,
         "cache_hit": 0.5,
-        "output": 25.0
+        "output": 25
       }
     },
     "claude-opus-4-7": {
       "context_window": 200000,
       "pricing": {
-        "input": 5.0,
+        "input": 5,
         "cache_write_5m": 6.25,
-        "cache_write_1h": 10.0,
+        "cache_write_1h": 10,
         "cache_hit": 0.5,
-        "output": 25.0
-      }
-    },
-    "claude-opus-4.6": {
-      "context_window": 200000,
-      "pricing": {
-        "input": 5.00,
-        "cache_write_5m": 6.25,
-        "cache_write_1h": 10.00,
-        "cache_hit": 0.50,
-        "output": 25.00
+        "output": 25
       }
     },
     "claude-opus-4-6": {
       "context_window": 200000,
       "pricing": {
-        "input": 5.00,
+        "input": 5,
         "cache_write_5m": 6.25,
-        "cache_write_1h": 10.00,
-        "cache_hit": 0.50,
-        "output": 25.00
+        "cache_write_1h": 10,
+        "cache_hit": 0.5,
+        "output": 25
       }
     },
     "claude-sonnet-4-6": {
       "context_window": 200000,
       "pricing": {
-        "input": 3.00,
+        "input": 3,
         "cache_write_5m": 3.75,
-        "cache_write_1h": 6.00,
-        "cache_hit": 0.30,
-        "output": 15.00
+        "cache_write_1h": 6,
+        "cache_hit": 0.3,
+        "output": 15
       }
     },
     "claude-sonnet-5": {
       "context_window": 1000000,
       "pricing": {
-        "input": 2.00,
-        "cache_write_5m": 2.50,
-        "cache_write_1h": 4.00,
-        "cache_hit": 0.20,
-        "output": 10.00
+        "input": 2,
+        "cache_write_5m": 2.5,
+        "cache_write_1h": 4,
+        "cache_hit": 0.2,
+        "output": 10
       }
     },
     "claude-haiku-4-5": {
       "context_window": 200000,
       "pricing": {
-        "input": 1.00,
+        "input": 1,
         "cache_write_5m": 1.25,
-        "cache_write_1h": 2.00,
-        "cache_hit": 0.10,
-        "output": 5.00
+        "cache_write_1h": 2,
+        "cache_hit": 0.1,
+        "output": 5
       }
     },
     "gemini-3.1-pro-preview": {

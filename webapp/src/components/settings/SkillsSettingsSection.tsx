@@ -388,8 +388,8 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
           if (!nextOpen) closeAddDialog();
         }}
       >
-        <DialogContent className="max-h-screen overflow-hidden sm:max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="flex max-h-dvh flex-col overflow-hidden sm:max-w-2xl">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Add Project Skill</DialogTitle>
             <DialogDescription>
               Browse the official catalog or provide a GitHub source, tree URL,
@@ -397,137 +397,135 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex min-h-0 flex-col">
-            <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
-              <form
-                className="flex flex-col"
-                onSubmit={handleBrowseCustomSource}
-              >
-                <FieldGroup>
-                  <Field>
-                    <FieldLabel htmlFor="skill-source">
-                      Custom source
-                    </FieldLabel>
-                    <div className="flex gap-2">
-                      <Input
-                        id="skill-source"
-                        className="flex-1"
-                        value={customSource}
-                        onChange={(event) =>
-                          setCustomSource(event.target.value)
-                        }
-                        placeholder="owner/repo or /path/to/skills"
-                        disabled={isBusy}
-                      />
-                      <Button
-                        type="submit"
-                        variant="outline"
-                        disabled={isBusy}
-                      >
-                        {loadingCandidates ? (
-                          <LoadingSpinner size="sm" />
-                        ) : (
-                          <SearchIcon data-icon="inline-start" />
-                        )}
-                        Browse
-                      </Button>
-                    </div>
-                    <FieldDescription>
-                      Use owner/repo, a GitHub URL, a tree URL, or a path
-                      available to the web server.
-                    </FieldDescription>
-                  </Field>
-                </FieldGroup>
-              </form>
+          <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
+            <form
+              className="flex flex-col"
+              onSubmit={handleBrowseCustomSource}
+            >
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="skill-source">
+                    Custom source
+                  </FieldLabel>
+                  <div className="flex gap-2">
+                    <Input
+                      id="skill-source"
+                      className="flex-1"
+                      value={customSource}
+                      onChange={(event) =>
+                        setCustomSource(event.target.value)
+                      }
+                      placeholder="owner/repo or /path/to/skills"
+                      disabled={isBusy}
+                    />
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      disabled={isBusy}
+                    >
+                      {loadingCandidates ? (
+                        <LoadingSpinner size="sm" />
+                      ) : (
+                        <SearchIcon data-icon="inline-start" />
+                      )}
+                      Browse
+                    </Button>
+                  </div>
+                  <FieldDescription>
+                    Use owner/repo, a GitHub URL, a tree URL, or a path
+                    available to the web server.
+                  </FieldDescription>
+                </Field>
+              </FieldGroup>
+            </form>
 
-              <Separator />
+            <Separator />
 
-              <section className="flex min-w-0 flex-col gap-3">
-                <header className="flex items-start justify-between gap-2">
-                  <div className="flex min-w-0 flex-col gap-1">
-                    <div className="text-sm font-medium">Available skills</div>
-                    <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                      <FolderGit2Icon
-                        className="size-3.5 shrink-0"
-                        aria-hidden="true"
-                      />
-                      <span className="min-w-0 truncate">{sourceLabel}</span>
-                      {listing?.ref ? (
-                        <Badge size="meta" variant="outline">
-                          {listing.ref}
-                        </Badge>
+            <section className="flex min-w-0 flex-col gap-3">
+              <header className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 flex-col gap-1">
+                  <div className="text-sm font-medium">Available skills</div>
+                  <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                    <FolderGit2Icon
+                      className="size-3.5 shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 truncate">{sourceLabel}</span>
+                    {listing?.ref ? (
+                      <Badge size="meta" variant="outline">
+                        {listing.ref}
+                      </Badge>
+                    ) : null}
+                  </div>
+                </div>
+              </header>
+
+              {candidatesError ? (
+                <Alert variant="destructive">
+                  <AlertCircleIcon />
+                  <AlertTitle>Could not load skills</AlertTitle>
+                  <AlertDescription>{candidatesError}</AlertDescription>
+                </Alert>
+              ) : null}
+
+              {installError ? (
+                <Alert variant="destructive">
+                  <AlertCircleIcon />
+                  <AlertTitle>Could not install skill</AlertTitle>
+                  <AlertDescription>
+                    <div className="flex flex-col items-start gap-2">
+                      <span>{installError}</span>
+                      {conflictRetry ? (
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={() =>
+                            void handleInstall(
+                              {
+                                name: conflictRetry.skillName,
+                                description: "",
+                                subpath: null,
+                              },
+                              true,
+                              conflictRetry.source,
+                            )
+                          }
+                          disabled={installingSkill !== null}
+                        >
+                          Replace existing
+                        </Button>
                       ) : null}
                     </div>
-                  </div>
-                </header>
+                  </AlertDescription>
+                </Alert>
+              ) : null}
 
-                {candidatesError ? (
-                  <Alert variant="destructive">
-                    <AlertCircleIcon />
-                    <AlertTitle>Could not load skills</AlertTitle>
-                    <AlertDescription>{candidatesError}</AlertDescription>
-                  </Alert>
-                ) : null}
-
-                {installError ? (
-                  <Alert variant="destructive">
-                    <AlertCircleIcon />
-                    <AlertTitle>Could not install skill</AlertTitle>
-                    <AlertDescription>
-                      <div className="flex flex-col items-start gap-2">
-                        <span>{installError}</span>
-                        {conflictRetry ? (
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            onClick={() =>
-                              void handleInstall(
-                                {
-                                  name: conflictRetry.skillName,
-                                  description: "",
-                                  subpath: null,
-                                },
-                                true,
-                                conflictRetry.source,
-                              )
-                            }
-                            disabled={installingSkill !== null}
-                          >
-                            Replace existing
-                          </Button>
-                        ) : null}
-                      </div>
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-
-                <div className="flex min-w-0 flex-col gap-2" aria-live="polite">
-                  {loadingCandidates ? (
-                    <>
-                      <CandidateSkeleton />
-                      <CandidateSkeleton />
-                      <CandidateSkeleton />
-                    </>
-                  ) : candidates.length === 0 && !candidatesError ? (
-                    <EmptyState
-                      title="No skills found"
-                      description="Try another source or browse the official catalog."
+              <div className="flex min-w-0 flex-col gap-2" aria-live="polite">
+                {loadingCandidates ? (
+                  <>
+                    <CandidateSkeleton />
+                    <CandidateSkeleton />
+                    <CandidateSkeleton />
+                  </>
+                ) : candidates.length === 0 && !candidatesError ? (
+                  <EmptyState
+                    title="No skills found"
+                    description="Try another source or browse the official catalog."
+                  />
+                ) : (
+                  candidates.map((candidate) => (
+                    <CandidateCard
+                      key={`${sourceLabel}:${candidate.name}`}
+                      candidate={candidate}
+                      isInstalling={installingSkill === candidate.name}
+                      disabled={isBusy}
+                      onInstall={() => void handleInstall(candidate)}
                     />
-                  ) : (
-                    candidates.map((candidate) => (
-                      <CandidateCard
-                        key={`${sourceLabel}:${candidate.name}`}
-                        candidate={candidate}
-                        isInstalling={installingSkill === candidate.name}
-                        disabled={isBusy}
-                        onInstall={() => void handleInstall(candidate)}
-                      />
-                    ))
-                  )}
-                </div>
-              </section>
-            </div>
+                  ))
+                )}
+              </div>
+            </section>
           </div>
         </DialogContent>
       </Dialog>

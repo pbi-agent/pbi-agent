@@ -344,8 +344,8 @@ export function CommandsSettingsSection({
           if (!nextOpen) closeAddDialog();
         }}
       >
-        <DialogContent className="max-h-screen overflow-hidden sm:max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="flex max-h-dvh flex-col overflow-hidden sm:max-w-2xl">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Add Project Command</DialogTitle>
             <DialogDescription>
               Browse the official catalog or provide a GitHub source, tree URL,
@@ -353,144 +353,139 @@ export function CommandsSettingsSection({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex min-h-0 flex-col">
-            <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
-              <form
-                className="flex flex-col"
-                onSubmit={handleBrowseCustomSource}
-              >
-                <FieldGroup>
-                  <Field>
-                    <FieldLabel htmlFor="command-source">
-                      Custom source
-                    </FieldLabel>
-                    <div className="flex gap-2">
-                      <Input
-                        id="command-source"
-                        className="flex-1"
-                        value={customSource}
-                        onChange={(event) =>
-                          setCustomSource(event.target.value)
-                        }
-                        placeholder="owner/repo or /path/to/commands"
-                        disabled={isBusy}
-                      />
-                      <Button
-                        type="submit"
-                        variant="outline"
-                        disabled={isBusy}
-                      >
-                        {loadingCandidates ? (
-                          <LoadingSpinner size="sm" />
-                        ) : (
-                          <SearchIcon data-icon="inline-start" />
-                        )}
-                        Browse
-                      </Button>
-                    </div>
-                    <FieldDescription>
-                      Use owner/repo, a GitHub URL, a tree URL, or a path
-                      available to the web server.
-                    </FieldDescription>
-                  </Field>
-                </FieldGroup>
-              </form>
+          <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
+            <form className="flex flex-col" onSubmit={handleBrowseCustomSource}>
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="command-source">
+                    Custom source
+                  </FieldLabel>
+                  <div className="flex gap-2">
+                    <Input
+                      id="command-source"
+                      className="flex-1"
+                      value={customSource}
+                      onChange={(event) =>
+                        setCustomSource(event.target.value)
+                      }
+                      placeholder="owner/repo or /path/to/commands"
+                      disabled={isBusy}
+                    />
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      disabled={isBusy}
+                    >
+                      {loadingCandidates ? (
+                        <LoadingSpinner size="sm" />
+                      ) : (
+                        <SearchIcon data-icon="inline-start" />
+                      )}
+                      Browse
+                    </Button>
+                  </div>
+                  <FieldDescription>
+                    Use owner/repo, a GitHub URL, a tree URL, or a path
+                    available to the web server.
+                  </FieldDescription>
+                </Field>
+              </FieldGroup>
+            </form>
 
-              <Separator />
+            <Separator />
 
-              <section className="flex min-w-0 flex-col gap-3">
-                <header className="flex items-start justify-between gap-2">
-                  <div className="flex min-w-0 flex-col gap-1">
-                    <div className="text-sm font-medium">
-                      Available commands
-                    </div>
-                    <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                      <FolderGit2Icon
-                        className="size-3.5 shrink-0"
-                        aria-hidden="true"
-                      />
-                      <span className="min-w-0 truncate">{sourceLabel}</span>
-                      {listing?.ref ? (
-                        <Badge size="meta" variant="outline">
-                          {listing.ref}
-                        </Badge>
+            <section className="flex min-w-0 flex-col gap-3">
+              <header className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 flex-col gap-1">
+                  <div className="text-sm font-medium">
+                    Available commands
+                  </div>
+                  <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                    <FolderGit2Icon
+                      className="size-3.5 shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 truncate">{sourceLabel}</span>
+                    {listing?.ref ? (
+                      <Badge size="meta" variant="outline">
+                        {listing.ref}
+                      </Badge>
+                    ) : null}
+                  </div>
+                </div>
+              </header>
+
+              {candidatesError ? (
+                <Alert variant="destructive">
+                  <AlertCircleIcon />
+                  <AlertTitle>Could not load commands</AlertTitle>
+                  <AlertDescription>{candidatesError}</AlertDescription>
+                </Alert>
+              ) : null}
+
+              {installError ? (
+                <Alert variant="destructive">
+                  <AlertCircleIcon />
+                  <AlertTitle>Could not install command</AlertTitle>
+                  <AlertDescription>
+                    <div className="flex flex-col items-start gap-2">
+                      <span>{installError}</span>
+                      {conflictRetry ? (
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={() =>
+                            void handleInstall(
+                              {
+                                name: conflictRetry.name,
+                                command_id: conflictRetry.commandName,
+                                slash_alias: conflictRetry.slashAlias,
+                                description: "",
+                                model_profile_id: null,
+                                subpath: null,
+                              },
+                              true,
+                              conflictRetry.source,
+                            )
+                          }
+                          disabled={installingCommand !== null}
+                        >
+                          Replace existing
+                        </Button>
                       ) : null}
                     </div>
-                  </div>
-                </header>
+                  </AlertDescription>
+                </Alert>
+              ) : null}
 
-                {candidatesError ? (
-                  <Alert variant="destructive">
-                    <AlertCircleIcon />
-                    <AlertTitle>Could not load commands</AlertTitle>
-                    <AlertDescription>{candidatesError}</AlertDescription>
-                  </Alert>
-                ) : null}
-
-                {installError ? (
-                  <Alert variant="destructive">
-                    <AlertCircleIcon />
-                    <AlertTitle>Could not install command</AlertTitle>
-                    <AlertDescription>
-                      <div className="flex flex-col items-start gap-2">
-                        <span>{installError}</span>
-                        {conflictRetry ? (
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            onClick={() =>
-                              void handleInstall(
-                                {
-                                  name: conflictRetry.name,
-                                  command_id: conflictRetry.commandName,
-                                  slash_alias: conflictRetry.slashAlias,
-                                  description: "",
-                                  model_profile_id: null,
-                                  subpath: null,
-                                },
-                                true,
-                                conflictRetry.source,
-                              )
-                            }
-                            disabled={installingCommand !== null}
-                          >
-                            Replace existing
-                          </Button>
-                        ) : null}
-                      </div>
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-
-                <div className="flex min-w-0 flex-col gap-2" aria-live="polite">
-                  {loadingCandidates ? (
-                    <>
-                      <CandidateSkeleton />
-                      <CandidateSkeleton />
-                      <CandidateSkeleton />
-                    </>
-                  ) : candidates.length === 0 && !candidatesError ? (
-                    <EmptyState
-                      title="No commands found"
-                      description="Try another source or browse the official catalog."
+              <div className="flex min-w-0 flex-col gap-2" aria-live="polite">
+                {loadingCandidates ? (
+                  <>
+                    <CandidateSkeleton />
+                    <CandidateSkeleton />
+                    <CandidateSkeleton />
+                  </>
+                ) : candidates.length === 0 && !candidatesError ? (
+                  <EmptyState
+                    title="No commands found"
+                    description="Try another source or browse the official catalog."
+                  />
+                ) : (
+                  candidates.map((candidate) => (
+                    <CandidateCard
+                      key={`${sourceLabel}:${candidate.command_id}`}
+                      candidate={candidate}
+                      isInstalling={
+                        installingCommand === candidate.command_id
+                      }
+                      disabled={isBusy}
+                      onInstall={() => void handleInstall(candidate)}
                     />
-                  ) : (
-                    candidates.map((candidate) => (
-                      <CandidateCard
-                        key={`${sourceLabel}:${candidate.command_id}`}
-                        candidate={candidate}
-                        isInstalling={
-                          installingCommand === candidate.command_id
-                        }
-                        disabled={isBusy}
-                        onInstall={() => void handleInstall(candidate)}
-                      />
-                    ))
-                  )}
-                </div>
-              </section>
-            </div>
+                  ))
+                )}
+              </div>
+            </section>
           </div>
         </DialogContent>
       </Dialog>

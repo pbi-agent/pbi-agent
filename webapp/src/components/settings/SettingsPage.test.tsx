@@ -1433,6 +1433,95 @@ describe("SettingsPage", () => {
     expect(fetchCommandCandidates).toHaveBeenCalledWith(null);
   });
 
+  it("keeps a long command catalog inside a viewport-bounded scroll body", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchCommandCandidates).mockResolvedValue({
+      source: "https://github.com/pbi-agent/commands",
+      ref: "main",
+      candidates: Array.from({ length: 30 }, (_, index) => ({
+        name: `Suggested command ${index + 1}`,
+        command_id: `suggested-${index + 1}`,
+        slash_alias: `/suggested-${index + 1}`,
+        description: "A suggested project command",
+        model_profile_id: null,
+        subpath: null,
+      })),
+    });
+
+    renderWithProviders(<SettingsPage />);
+    await openSettingsTab(user, "Commands");
+    await user.click(await screen.findByRole("button", { name: "Add Command" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Add Project Command",
+    });
+    const lastCommand = await within(dialog).findByText("/suggested-30");
+
+    // jsdom cannot measure overflow; guard the layout contract that allows
+    // the body to shrink and scroll while the dialog header stays visible.
+    expect(dialog).toHaveClass(
+      "flex",
+      "flex-col",
+      "max-h-dvh",
+      "overflow-hidden",
+    );
+    const scrollBody = lastCommand.closest(".overflow-y-auto");
+    expect(scrollBody).toHaveClass("min-h-0");
+    expect(scrollBody?.parentElement).toBe(dialog);
+    expect(scrollBody).toContainElement(
+      within(dialog).getByRole("textbox", { name: "Custom source" }),
+    );
+    const header = within(dialog)
+      .getByRole("heading", { name: "Add Project Command" })
+      .closest('[data-slot="dialog-header"]');
+    expect(header).toHaveClass("shrink-0");
+    expect(scrollBody).not.toContainElement(header as HTMLElement);
+    expect(
+      within(dialog).getAllByRole("button", { name: "Install" }),
+    ).toHaveLength(30);
+  });
+
+  it.each([
+    { tab: "Skills", element: "Skill" },
+    { tab: "Agents", element: "Agent" },
+  ])("keeps a long $tab catalog inside a viewport-bounded scroll body", async ({ tab, element }) => {
+    const user = userEvent.setup();
+    const candidates = Array.from({ length: 30 }, (_, index) => ({
+      name: `suggested-${index + 1}`,
+      agent_name: `suggested-${index + 1}`,
+      description: "A suggested project element",
+      model_profile_id: null,
+      subpath: null,
+    }));
+    const fetchCandidates = element === "Skill" ? fetchSkillCandidates : fetchAgentCandidates;
+    vi.mocked(fetchCandidates).mockResolvedValue({
+      source: `https://github.com/pbi-agent/${tab.toLowerCase()}`,
+      ref: "main",
+      candidates,
+    });
+
+    renderWithProviders(<SettingsPage />);
+    await openSettingsTab(user, tab);
+    await user.click(await screen.findByRole("button", { name: `Add ${element}` }));
+
+    const dialog = await screen.findByRole("dialog", { name: `Add Project ${element}` });
+    const lastCandidate = await within(dialog).findByText("suggested-30");
+    // jsdom cannot measure overflow; assert the shrink/scroll layout contract.
+    expect(dialog).toHaveClass("flex", "flex-col", "max-h-dvh", "overflow-hidden");
+    const scrollBody = lastCandidate.closest(".overflow-y-auto");
+    expect(scrollBody).toHaveClass("min-h-0");
+    expect(scrollBody?.parentElement).toBe(dialog);
+    expect(scrollBody).toContainElement(
+      within(dialog).getByRole("textbox", { name: "Custom source" }),
+    );
+    const header = within(dialog)
+      .getByRole("heading", { name: `Add Project ${element}` })
+      .closest('[data-slot="dialog-header"]');
+    expect(header).toHaveClass("shrink-0");
+    expect(scrollBody).not.toContainElement(header as HTMLElement);
+    expect(within(dialog).getAllByRole("button", { name: "Install" })).toHaveLength(30);
+  });
+
   it("installs a selected command, refetches settings, and closes the dialog", async () => {
     const user = userEvent.setup();
     vi.mocked(fetchConfigBootstrap)
