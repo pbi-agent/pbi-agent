@@ -21,6 +21,8 @@ UPGRADE_COMMANDS = frozenset({"upgrade", "update"})
 EXIT_ERROR = 1
 # Same convention as `dnf check-update`: 100 means an update is available.
 EXIT_UPDATE_AVAILABLE = 100
+# subprocess.CREATE_NEW_CONSOLE only exists on Windows builds of Python.
+WINDOWS_CREATE_NEW_CONSOLE = getattr(subprocess, "CREATE_NEW_CONSOLE", 0x00000010)
 
 
 def _handle_upgrade_command(args: argparse.Namespace) -> int:  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint
@@ -81,10 +83,18 @@ def _start_deferred_windows_upgrade(
 ) -> int:
     # Windows locks the running launcher, interpreter, and extension DLLs, so the
     # installer has to run after this process exits.
+    # A separate console keeps installer output from landing after the user's
+    # shell has redrawn its prompt, which otherwise looks like a hung command.
     try:
-        subprocess.Popen(windows_deferred_command(command))
+        subprocess.Popen(
+            windows_deferred_command(command),
+            creationflags=WINDOWS_CREATE_NEW_CONSOLE,
+        )
     except OSError as exc:
         _print_error(f"failed to start the upgrade: {exc}\n{manual_hint}")
         return EXIT_ERROR
-    print(f"Upgrading with {installer} after pbi-agent exits: {' '.join(command)}")
+    print(
+        f"Upgrading with {installer} in a new window after pbi-agent exits: "
+        f"{' '.join(command)}"
+    )
     return 0

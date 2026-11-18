@@ -164,6 +164,8 @@ def test_windows_deferred_command_waits_for_process_and_launcher() -> None:
     assert "ProcessName -eq 'pbi-agent'" in script
     assert "& 'C:\\Users\\O''Neil\\uv.exe' 'tool' 'upgrade' 'pbi-agent'" in script
     assert script.index("Wait-Process") < script.index("& 'C:")
+    assert "Read-Host 'Press Enter to close'" in script
+    assert script.endswith("exit $code")
 
 
 def test_latest_pypi_version_uses_json_request_headers_and_timeout(

@@ -154,6 +154,9 @@ def windows_deferred_command(
     On Windows the running ``pbi-agent.exe`` launcher, ``python.exe``, and loaded
     extension modules are locked, so the installer cannot replace them while we
     are alive. PowerShell waits for both processes, then runs the installer.
+    The caller runs it in its own console window: sharing the user's console
+    would print installer output after the shell has already redrawn its
+    prompt, which looks like a hung command.
     """
     current_pid = os.getpid() if pid is None else pid
     launcher_pid = os.getppid() if parent_pid is None else parent_pid
@@ -164,7 +167,15 @@ def windows_deferred_command(
         "if ($launcher -and $launcher.ProcessName -eq 'pbi-agent') "
         "{ $launcher.WaitForExit() }; "
         f"& {invocation}; "
-        "exit $LASTEXITCODE"
+        "$code = $LASTEXITCODE; "
+        "if ($code -eq 0) { "
+        "Write-Host 'pbi-agent upgrade finished. This window closes in 5 seconds.'; "
+        "Start-Sleep -Seconds 5 "
+        "} else { "
+        'Write-Host "pbi-agent upgrade failed (exit code $code)."; '
+        "Read-Host 'Press Enter to close' | Out-Null "
+        "}; "
+        "exit $code"
     )
     return (
         "powershell",
