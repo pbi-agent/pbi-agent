@@ -33,3 +33,4 @@ Entry shape: rule/fact — why/evidence — `[verified YYYY-MM-DD]` or `[unverif
 
 ### 2026-11-18
 - Bumped `CHATGPT_CODEX_VERSION` 0.159.2 → 0.170.0 (`chatgpt_codex_backend.py`; drives User-Agent + model-discovery `client_version`). Ruff + codex/chatgpt/model-discovery/openai tests green. [verified 2026-11-18]
+- Added `gpt-6.2-astra` (8/40, cached 0.4, write 10) and `gpt-6.2-sol` (2/10, cached 0.1, write 2.5) using short-context rates; 30m write fills both write fields (12h/long-context tiers unrepresentable). Pricing regressions added; usage tests, Ruff/format passed. [verified 2026-11-18]

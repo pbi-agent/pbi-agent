@@ -318,6 +318,8 @@ def test_format_session_subtitle_parts_uses_informal_workspace_path(
 @pytest.mark.parametrize(
     ("model", "expected"),
     [
+        ("gpt-6.2-astra", (8, 10, 10, 0.4, 40)),
+        ("gpt-6.2-sol", (2, 2.5, 2.5, 0.1, 10)),
         ("gpt-6.1-sol", (2, 2.5, 2.5, 0.1, 10)),
         ("gpt-6.1-terra", (1, 1.25, 1.25, 0.05, 5)),
         ("gpt-6-luna", (0.1, 0.125, 0.125, 0.01, 0.5)),
