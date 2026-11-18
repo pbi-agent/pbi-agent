@@ -1,3 +1,2 @@
-- [x] Remove 15 redundant Claude catalog entries and verify uniqueness
-- [x] Add catalog uniqueness regression; 92 focused pricing/capability tests pass
-- [x] Run full Python quality checks and test suite (4 skips)
+- [x] Windows MCP stdio: rewrite `bunx …` to `bun x …` before spawning (`src/pbi_agent/mcp/pool.py`, tests in `tests/test_mcp_pool.py`)
+- [ ] Confirm `.agents/mcp.json` with `bunx` starts the Power BI modeling MCP on a real Windows host
