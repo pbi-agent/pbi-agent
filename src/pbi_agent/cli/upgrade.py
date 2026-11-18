@@ -87,7 +87,9 @@ def _start_deferred_windows_upgrade(
     # shell has redrawn its prompt, which otherwise looks like a hung command.
     try:
         subprocess.Popen(
-            windows_deferred_command(command),
+            windows_deferred_command(
+                command, installer=installer, interactive=_is_interactive()
+            ),
             creationflags=WINDOWS_CREATE_NEW_CONSOLE,
         )
     except OSError as exc:
@@ -98,3 +100,10 @@ def _start_deferred_windows_upgrade(
         f"{' '.join(command)}"
     )
     return 0
+
+
+def _is_interactive() -> bool:
+    # Scheduled tasks, CI, and remote sessions have no user to press Enter, so
+    # the deferred window must not wait for input there.
+    stdin = sys.stdin
+    return stdin is not None and stdin.isatty()

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.metadata
+import subprocess
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -144,13 +146,16 @@ def test_source_install_url_missing_distribution(
     assert source_install_url() is None
 
 
-def test_windows_deferred_command_waits_for_process_and_launcher() -> None:
+def _deferred_script(*, interactive: bool = True) -> str:
     command = windows_deferred_command(
         ("C:\\Users\\O'Neil\\uv.exe", "tool", "upgrade", "pbi-agent"),
+        installer="uv",
+        interactive=interactive,
         pid=111,
         parent_pid=222,
+        python="C:\\tools\\pbi-agent\\Scripts\\python.exe",
+        current_version="1.0.0",
     )
-
     assert command[:5] == (
         "powershell",
         "-NoProfile",
@@ -158,14 +163,139 @@ def test_windows_deferred_command_waits_for_process_and_launcher() -> None:
         "Bypass",
         "-Command",
     )
-    script = command[5]
+    return command[5]
+
+
+def test_windows_deferred_command_waits_for_process_and_launcher() -> None:
+    script = _deferred_script()
+
     assert script.startswith("Wait-Process -Id 111 ")
     assert "Get-Process -Id 222 " in script
     assert "ProcessName -eq 'pbi-agent'" in script
-    assert "& 'C:\\Users\\O''Neil\\uv.exe' 'tool' 'upgrade' 'pbi-agent'" in script
-    assert script.index("Wait-Process") < script.index("& 'C:")
-    assert "Read-Host 'Press Enter to close'" in script
+    assert script.index("Wait-Process") < script.index("& 'C:\\Users")
     assert script.endswith("exit $code")
+
+
+def test_windows_deferred_command_captures_installer_exit_code() -> None:
+    script = _deferred_script()
+
+    installer = "& 'C:\\Users\\O''Neil\\uv.exe' 'tool' 'upgrade' 'pbi-agent'"
+    # $LASTEXITCODE is read right after the installer, before anything else runs.
+    assert f"try {{ {installer}; $code = $LASTEXITCODE }}" in script
+    assert script.index("$code = 1;") < script.index(installer)
+    assert "if ($null -eq $code) { $code = 1 }" in script
+
+
+def test_windows_deferred_command_verifies_installed_version_on_success() -> None:
+    script = _deferred_script()
+
+    check = "& 'C:\\tools\\pbi-agent\\Scripts\\python.exe' '-c' 'import importlib"
+    assert check in script
+    assert script.index("if ($code -eq 0) { $check = 1;") < script.index(check)
+    assert "'pbi-agent' '1.0.0'" in script
+    assert "uv finished, but pbi-agent is still 1.0.0." in script
+
+
+def test_windows_deferred_command_has_no_double_quotes() -> None:
+    assert '"' not in _deferred_script(interactive=True)
+    assert '"' not in _deferred_script(interactive=False)
+
+
+def test_windows_deferred_command_pauses_only_when_interactive() -> None:
+    interactive = _deferred_script(interactive=True)
+    unattended = _deferred_script(interactive=False)
+
+    assert "Read-Host 'Press Enter to close'" in interactive
+    assert "[Console]::KeyAvailable" in interactive
+    assert "Read-Host" not in unattended
+    assert "KeyAvailable" not in unattended
+    assert "Start-Sleep" not in unattended
+
+
+def _exited_pid() -> int:
+    process = subprocess.Popen([sys.executable, "-c", "pass"])
+    process.wait()
+    return process.pid
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(sys.platform != "win32", reason="runs Windows PowerShell")
+@pytest.mark.parametrize(
+    ("installer", "python", "current_version", "exit_code", "output"),
+    [
+        pytest.param(
+            (sys.executable, "-c", "pass"),
+            sys.executable,
+            "0.0.0",
+            0,
+            "pbi-agent upgraded to ",
+            id="upgraded",
+        ),
+        pytest.param(
+            (sys.executable, "-c", "pass"),
+            sys.executable,
+            None,
+            1,
+            "fake finished, but pbi-agent is still ",
+            id="pinned",
+        ),
+        pytest.param(
+            (sys.executable, "-c", "raise SystemExit(7)"),
+            sys.executable,
+            "0.0.0",
+            7,
+            "pbi-agent upgrade failed (exit code 7).",
+            id="installer-fails",
+        ),
+        pytest.param(
+            ("C:\\missing\\installer.exe", "upgrade"),
+            sys.executable,
+            "0.0.0",
+            1,
+            "pbi-agent upgrade failed (exit code 1).",
+            id="installer-missing",
+        ),
+        pytest.param(
+            (sys.executable, "-c", "pass"),
+            "C:\\missing\\python.exe",
+            "0.0.0",
+            0,
+            "installed pbi-agent version could not be read",
+            id="version-unreadable",
+        ),
+    ],
+)
+def test_windows_deferred_command_runs_in_powershell(
+    installer: tuple[str, ...],
+    python: str,
+    current_version: str | None,
+    exit_code: int,
+    output: str,
+) -> None:
+    if current_version is None:
+        current_version = importlib.metadata.version("pbi-agent")
+    pid = _exited_pid()
+    command = windows_deferred_command(
+        installer,
+        installer="fake",
+        interactive=False,
+        pid=pid,
+        parent_pid=pid,
+        python=python,
+        current_version=current_version,
+    )
+
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        stdin=subprocess.DEVNULL,
+        check=False,
+    )
+
+    assert completed.returncode == exit_code, completed.stdout + completed.stderr
+    assert output in completed.stdout
 
 
 def test_latest_pypi_version_uses_json_request_headers_and_timeout(
