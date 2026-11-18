@@ -1,9 +1,10 @@
 - [x] Windows `pbi-agent upgrade` looks hung: run the deferred installer in its own console window (`src/pbi_agent/cli/upgrade.py`, `src/pbi_agent/self_update.py`)
-- [ ] Verify the new-console upgrade on a real Windows host (Windows Terminal may open a tab instead of a window)
-- [ ] Don't block forever on `Read-Host` after a failed unattended upgrade (scheduled task, CI, remote session); only pause when interactive
-- [ ] Handle `$LASTEXITCODE` being `$null` when the installer can't start, so the window doesn't show a blank exit code and exit 0
-- [ ] Windows deferred path: check the installed version after exit 0 so a pinned install isn't reported as "finished"
-- [ ] Remove double quotes from the deferred `-Command` script (the failure `Write-Host`) so it doesn't depend on powershell.exe `\"` parsing
-- [ ] Keep installer warnings visible on success (the window closes after 5s)
-- [ ] Guard against running `pbi-agent` while the deferred upgrade is replacing its files (only a docs note today)
-- [ ] Test the deferred script's success branch and that `$code` is captured right after the installer call
+- [-] Verify the new-console upgrade on a real Windows host: CREATE_NEW_CONSOLE launch + exit codes verified on Win11 26300 (default terminal = "let Windows decide"); still needs one visual check of tab vs window and the interactive key/Enter pauses
+- [x] Don't block forever on `Read-Host` after a failed unattended upgrade (scheduled task, CI, remote session); only pause when interactive
+- [x] Handle `$LASTEXITCODE` being `$null` when the installer can't start, so the window doesn't show a blank exit code and exit 0
+- [x] Windows deferred path: check the installed version after exit 0 so a pinned install isn't reported as "finished"
+- [x] Remove double quotes from the deferred `-Command` script (the failure `Write-Host`) so it doesn't depend on powershell.exe `\"` parsing
+- [x] Keep installer warnings visible on success (5s, any key closes early; interactive only)
+- [-] Guard against running `pbi-agent` while the deferred upgrade is replacing its files (only a docs note today; needs a cross-process lock design — a failed install now at least reports a non-zero exit in the window)
+- [x] Test the deferred script's success branch and that `$code` is captured right after the installer call
+- [-] Pre-existing on Windows: ~32 failing tests unrelated to upgrade (e.g. `tests/cli/test_catalogs.py::...test_main_config_profiles_crud_commands` — Rich truncates `analysis` at narrow console width; `test_web_serve.py`, `test_session_history.py`, `test_workspace_context.py`)

@@ -23,6 +23,15 @@ PIPX_UPGRADE_COMMAND = ("pipx", "upgrade", PACKAGE_NAME)
 PIP_UPGRADE_ARGS = ("-m", "pip", "install", "--upgrade", PACKAGE_NAME)
 FALLBACK_UPGRADE_COMMAND = ("uv", "tool", "install", PACKAGE_NAME, "--upgrade")
 SELF_UPGRADE_COMMAND = "pbi-agent upgrade"
+# Deferred Windows upgrade: how long the success window stays open, and the exit
+# code the version check uses for "still the old version". The check prints the
+# installed version and must not contain quotes (see windows_deferred_command).
+_SUCCESS_PAUSE_SECONDS = 5
+_VERSION_UNCHANGED_EXIT = 3
+_VERSION_CHECK_CODE = (
+    "import importlib.metadata as m, sys; v = m.version(sys.argv[1]); print(v); "
+    f"sys.exit({_VERSION_UNCHANGED_EXIT} if v == sys.argv[2] else 0)"
+)
 
 
 class UpdateCheckError(RuntimeError):
@@ -146,8 +155,12 @@ def installed_version() -> str | None:
 def windows_deferred_command(
     command: tuple[str, ...],
     *,
+    installer: str,
+    interactive: bool,
     pid: int | None = None,
     parent_pid: int | None = None,
+    python: str | None = None,
+    current_version: str | None = None,
 ) -> tuple[str, ...]:
     """Wrap ``command`` so it runs after this process (and its launcher) exit.
 
@@ -157,23 +170,65 @@ def windows_deferred_command(
     The caller runs it in its own console window: sharing the user's console
     would print installer output after the shell has already redrawn its
     prompt, which looks like a hung command.
+
+    After a successful install, the environment's own ``python`` reports the
+    installed version so a pinned install is not reported as upgraded. The
+    window only pauses when ``interactive``; otherwise nobody can dismiss it.
+    The script avoids double quotes so it does not depend on how
+    powershell.exe unescapes ``\\"`` in its command line.
     """
     current_pid = os.getpid() if pid is None else pid
     launcher_pid = os.getppid() if parent_pid is None else parent_pid
     invocation = " ".join(_powershell_quote(part) for part in command)
+    version_check = " ".join(
+        _powershell_quote(part)
+        for part in (
+            python or sys.executable,
+            "-c",
+            _VERSION_CHECK_CODE,
+            PACKAGE_NAME,
+            current_version or __version__,
+        )
+    )
+    still_old = _powershell_quote(
+        f"{installer} finished, but pbi-agent is still "
+        f"{current_version or __version__}. A version constraint in the original "
+        "install may be pinning it; reinstall without the constraint."
+    )
+    if interactive:
+        success_pause = (
+            f"Write-Host 'This window closes in {_SUCCESS_PAUSE_SECONDS} seconds; "
+            "press any key to close it now.'; "
+            f"$deadline = (Get-Date).AddSeconds({_SUCCESS_PAUSE_SECONDS}); "
+            "try { while ((Get-Date) -lt $deadline -and -not [Console]::KeyAvailable) "
+            "{ Start-Sleep -Milliseconds 200 } } catch {} "
+        )
+        failure_pause = "Read-Host 'Press Enter to close' | Out-Null "
+    else:
+        success_pause = failure_pause = ""
     script = (
         f"Wait-Process -Id {current_pid} -ErrorAction SilentlyContinue; "
         f"$launcher = Get-Process -Id {launcher_pid} -ErrorAction SilentlyContinue; "
         "if ($launcher -and $launcher.ProcessName -eq 'pbi-agent') "
         "{ $launcher.WaitForExit() }; "
-        f"& {invocation}; "
-        "$code = $LASTEXITCODE; "
+        # A command that cannot start leaves $LASTEXITCODE unset; `exit $null`
+        # would report success, so default to failure and read it immediately.
+        "$code = 1; "
+        f"try {{ & {invocation}; $code = $LASTEXITCODE }} catch {{ Write-Host $_ }}; "
+        "if ($null -eq $code) { $code = 1 }; "
         "if ($code -eq 0) { "
-        "Write-Host 'pbi-agent upgrade finished. This window closes in 5 seconds.'; "
-        "Start-Sleep -Seconds 5 "
+        "$check = 1; "
+        f"try {{ $installed = & {version_check}; $check = $LASTEXITCODE }} catch {{}}; "
+        "if ($check -eq 0) { Write-Host ('pbi-agent upgraded to ' + $installed + '.') } "
+        f"elseif ($check -eq {_VERSION_UNCHANGED_EXIT}) {{ $code = 1; Write-Host {still_old} }} "
+        "else { Write-Host 'Upgrade finished, but the installed pbi-agent version "
+        "could not be read.' } "
+        "}; "
+        "if ($code -eq 0) { "
+        f"{success_pause}"
         "} else { "
-        'Write-Host "pbi-agent upgrade failed (exit code $code)."; '
-        "Read-Host 'Press Enter to close' | Out-Null "
+        "Write-Host ('pbi-agent upgrade failed (exit code ' + $code + ').'); "
+        f"{failure_pause}"
         "}; "
         "exit $code"
     )

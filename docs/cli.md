@@ -258,7 +258,7 @@ After the installer finishes, the command checks the installed version. If it di
 
 The command does not upgrade source installs (editable checkouts, local paths, or git URLs). Update the source checkout and reinstall it instead. If `uv` or `pipx` is not on `PATH`, or the install method cannot be detected, the command prints the manual upgrade command and exits with an error.
 
-On Windows, the running `pbi-agent.exe` and its Python files are locked. The installer therefore runs in a new console window after `pbi-agent` exits, so your shell prompt returns right away. The window closes a few seconds after a successful upgrade and stays open on failure until you press Enter. Wait for it to finish before running `pbi-agent` again.
+On Windows, the running `pbi-agent.exe` and its Python files are locked. The installer therefore runs in a new console window after `pbi-agent` exits, so your shell prompt returns right away. After a successful install it checks the installed version, so a pinned install is reported as a failure instead of an upgrade. In an interactive terminal, the window stays open for 5 seconds after success (press any key to close it sooner) so installer warnings stay readable, and on failure it waits until you press Enter. When `pbi-agent upgrade` runs unattended (scheduled task, CI, redirected input), the window closes without waiting. Wait for it to finish before running `pbi-agent` again.
 
 The startup update notice uses the same detection. It suggests `pbi-agent upgrade` only when that command can run for your install.
 

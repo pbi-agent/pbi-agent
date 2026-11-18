@@ -185,12 +185,15 @@ def test_upgrade_reports_pypi_failure_cause(
     assert "proxy refused" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("interactive", [True, False])
 def test_upgrade_on_windows_defers_installer_until_exit(
     upgrade_env: Mock,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    interactive: bool,
 ) -> None:
     monkeypatch.setattr(upgrade.sys, "platform", "win32")
+    monkeypatch.setattr(upgrade, "_is_interactive", lambda: interactive)
     deferred = ("powershell", "-Command", "wait; upgrade")
     wrap = Mock(return_value=deferred)
     popen = Mock()
@@ -199,7 +202,9 @@ def test_upgrade_on_windows_defers_installer_until_exit(
 
     assert cli.main(["upgrade"]) == 0
 
-    wrap.assert_called_once_with(UV_PLAN.command)
+    wrap.assert_called_once_with(
+        UV_PLAN.command, installer=UV_PLAN.installer, interactive=interactive
+    )
     popen.assert_called_once_with(
         deferred, creationflags=upgrade.WINDOWS_CREATE_NEW_CONSOLE
     )
