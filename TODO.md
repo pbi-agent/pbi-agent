@@ -1,2 +1,3 @@
 - [x] Windows MCP stdio: rewrite `bunx …` to `bun x …` before spawning (`src/pbi_agent/mcp/pool.py`, tests in `tests/test_mcp_pool.py`)
-- [ ] Confirm `.agents/mcp.json` with `bunx` starts the Power BI modeling MCP on a real Windows host
+- [x] Confirm `.agents/mcp.json` with `bunx` starts the Power BI modeling MCP on a real Windows host
+- [x] Surface Chat Completions `finish_reason: content_filter` as a clear error (generic, GCP chat-completions, GitHub Copilot)

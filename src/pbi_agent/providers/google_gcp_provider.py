@@ -44,7 +44,10 @@ from pbi_agent.providers.protocols.anthropic_messages import (
 from pbi_agent.providers.protocols.anthropic_messages import (
     render_messages_response,
 )
-from pbi_agent.providers.protocols.chat_completions import ChatCompletionsProtocol
+from pbi_agent.providers.protocols.chat_completions import (
+    ChatCompletionsProtocol,
+    raise_if_content_filtered,
+)
 from pbi_agent.providers.protocols.gemini_generate_content import (
     GeminiGenerateContentProtocol,
 )
@@ -53,7 +56,10 @@ from pbi_agent.providers.protocols.openai_responses import (
     response_history_item_for_input,
     serialize_function_call_output,
 )
-from pbi_agent.providers.runtime import record_response_usage
+from pbi_agent.providers.runtime import (
+    record_failed_response_usage,
+    record_response_usage,
+)
 from pbi_agent.providers.tool_execution import execute_provider_tool_calls
 from pbi_agent.providers.transport import (
     JsonErrorPolicy,
@@ -746,12 +752,21 @@ class _OpenAIChatCompletionsShape(_GoogleGcpShapeStub):
             tool_result_items=tool_result_items,
             steer_user_input=steer_user_input,
         )
-        result = self._http_request(
-            input_value=input_value,
-            instructions=instructions or self._protocol.system_prompt,
-            display=display,
-            tracer=tracer,
-        )
+        try:
+            result = self._http_request(
+                input_value=input_value,
+                instructions=instructions or self._protocol.system_prompt,
+                display=display,
+                tracer=tracer,
+            )
+        except RuntimeError as exc:
+            record_failed_response_usage(
+                exc,
+                display=display,
+                session_usage=session_usage,
+                turn_usage=turn_usage,
+            )
+            raise
         record_response_usage(
             result,
             display=display,
@@ -839,6 +854,7 @@ class _OpenAIChatCompletionsShape(_GoogleGcpShapeStub):
             display=display,
             tracer=tracer,
             parse_response=self._protocol.parse_response,
+            semantic_validator=raise_if_content_filtered,
         )
 
 

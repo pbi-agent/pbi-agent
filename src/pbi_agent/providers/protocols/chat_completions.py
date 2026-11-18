@@ -18,6 +18,7 @@ from pbi_agent.models.messages import (
     UserTurnInput,
 )
 from pbi_agent.providers.protocols.base import ResponseProtocol
+from pbi_agent.providers.transport import SemanticResponseError
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.availability import (
     default_excluded_tool_names,
@@ -30,6 +31,10 @@ _THINK_TAG_RE = re.compile(
     r"<think(?:\s+[^>]*)?>(.*?)</think\s*>",
     flags=re.IGNORECASE | re.DOTALL,
 )
+
+
+_CONTENT_FILTER_FINISH_REASON = "content_filter"
+_CONTENT_FILTER_PARTIAL_OUTPUT_LIMIT = 500
 
 
 @dataclass(frozen=True, slots=True)
@@ -614,3 +619,95 @@ def _normalize_tool_calls(raw_tool_calls: object) -> list[dict[str, Any]]:
         )
 
     return normalized_calls
+
+
+def raise_if_content_filtered(response_json: dict[str, Any]) -> None:
+    """Raise when a Chat Completions choice was stopped by a content filter.
+
+    Providers return HTTP 200 with ``finish_reason: "content_filter"`` and an
+    empty (or truncated) assistant message, which would otherwise look like a
+    silent empty answer.
+    """
+    choices = response_json.get("choices")
+    if not isinstance(choices, list):
+        return
+    filtered_choices = [
+        choice
+        for choice in choices
+        if isinstance(choice, dict)
+        and choice.get("finish_reason") == _CONTENT_FILTER_FINISH_REASON
+    ]
+    if not filtered_choices:
+        return
+
+    details: list[str] = []
+    for choice in filtered_choices:
+        message = choice.get("message")
+        if isinstance(message, dict):
+            refusal = message.get("refusal")
+            if isinstance(refusal, str) and refusal.strip():
+                _append_unique_text(details, f"Refusal: {refusal.strip()}")
+            partial = _extract_message_text(message.get("content")).text.strip()
+            if partial:
+                if len(partial) > _CONTENT_FILTER_PARTIAL_OUTPUT_LIMIT:
+                    partial = (
+                        partial[:_CONTENT_FILTER_PARTIAL_OUTPUT_LIMIT].rstrip() + "…"
+                    )
+                _append_unique_text(details, f"Partial output: {partial}")
+        categories = _filtered_categories(choice.get("content_filter_results"))
+        if categories:
+            _append_unique_text(
+                details, f"Filtered output categories: {', '.join(categories)}"
+            )
+
+    prompt_categories: list[str] = []
+    prompt_results = response_json.get("prompt_filter_results")
+    if isinstance(prompt_results, list):
+        for entry in prompt_results:
+            if isinstance(entry, dict):
+                for category in _filtered_categories(
+                    entry.get("content_filter_results")
+                ):
+                    _append_unique_text(prompt_categories, category)
+    if prompt_categories:
+        details.append(f"Filtered prompt categories: {', '.join(prompt_categories)}")
+
+    message_parts = [
+        "Model response blocked by the provider content filter "
+        "(finish_reason: content_filter)."
+    ]
+    if details:
+        message_parts.extend(
+            f"{detail}." if not detail.endswith((".", "…")) else detail
+            for detail in details
+        )
+    else:
+        message_parts.append("The provider returned no additional details.")
+    message_parts.append("Rephrase the request or switch model/provider.")
+    raise SemanticResponseError(
+        message=" ".join(message_parts),
+        payload=response_json,
+        retryable=False,
+        metadata={"finish_reason": _CONTENT_FILTER_FINISH_REASON},
+        usage=(
+            _parse_usage(response_json)
+            if isinstance(response_json.get("usage"), dict)
+            else None
+        ),
+    )
+
+
+def _filtered_categories(results: object) -> list[str]:
+    """Return ``category (severity)`` labels for filter results marked filtered."""
+    if not isinstance(results, dict):
+        return []
+    categories: list[str] = []
+    for category, result in results.items():
+        if not isinstance(result, dict) or result.get("filtered") is not True:
+            continue
+        severity = result.get("severity")
+        label = str(category)
+        if isinstance(severity, str) and severity and severity != "safe":
+            label = f"{label} (severity: {severity})"
+        categories.append(label)
+    return categories

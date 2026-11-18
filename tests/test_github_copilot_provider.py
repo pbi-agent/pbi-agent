@@ -511,6 +511,61 @@ def test_github_copilot_chat_completions_explains_public_code_filter_422(
         )
 
 
+def test_github_copilot_chat_completions_reports_content_filter(
+    monkeypatch,
+) -> None:
+    calls = 0
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        nonlocal calls
+        del request, timeout
+        calls += 1
+        return _FakeHTTPResponse(
+            json.dumps(
+                {
+                    "choices": [
+                        {
+                            "finish_reason": "content_filter",
+                            "message": {"role": "assistant"},
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 50,
+                        "completion_tokens": 2,
+                        "total_tokens": 52,
+                    },
+                }
+            )
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GitHubCopilotProvider(_make_settings(model="claude-opus-5.5"))
+    session_usage = TokenUsage(model="claude-opus-5.5")
+    turn_usage = TokenUsage(model="claude-opus-5.5")
+
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(
+            "Model response blocked by the provider content filter "
+            "(finish_reason: content_filter)."
+        ),
+    ):
+        provider.request_turn(
+            user_input=UserTurnInput(text="Hello"),
+            display=_DisplayStub(),
+            session_usage=session_usage,
+            turn_usage=turn_usage,
+        )
+    assert calls == 1
+    for usage in (session_usage, turn_usage):
+        assert usage.input_tokens == 50
+        assert usage.output_tokens == 2
+
+
 def test_github_copilot_parser_uses_output_index_for_function_calls_and_reasoning(
     monkeypatch,
 ) -> None:
