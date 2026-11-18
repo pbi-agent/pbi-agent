@@ -28,6 +28,9 @@ from pbi_agent.providers.github_copilot_backend import (
     github_copilot_backend_for_model,
 )
 from pbi_agent.providers.openai_provider import OpenAIProvider
+from pbi_agent.providers.protocols.chat_completions import raise_if_content_filtered
+from pbi_agent.providers.runtime import record_failed_response_usage
+from pbi_agent.providers.transport import SemanticResponseError
 from pbi_agent.providers.wait_messages import waiting_message_for_input
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.catalog import ToolCatalog
@@ -305,12 +308,21 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
         else:
             raise ValueError("Either user_input or tool_result_items is required")
 
-        result = self._http_request(
-            input_value=input_value,
-            instructions=instructions or self._system_prompt,
-            display=display,
-            tracer=tracer,
-        )
+        try:
+            result = self._http_request(
+                input_value=input_value,
+                instructions=instructions or self._system_prompt,
+                display=display,
+                tracer=tracer,
+            )
+        except RuntimeError as exc:
+            record_failed_response_usage(
+                exc,
+                display=display,
+                session_usage=session_usage,
+                turn_usage=turn_usage,
+            )
+            raise
         session_usage.add(result.usage)
         turn_usage.add(result.usage)
         display.session_usage(session_usage)
@@ -381,6 +393,31 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
                 )
                 with urllib.request.urlopen(req, timeout=300) as resp:
                     response_json = json.loads(resp.read().decode("utf-8"))
+
+                try:
+                    raise_if_content_filtered(response_json)
+                except SemanticResponseError as exc:
+                    provider_retry.trace_provider_call(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=request_auth.request_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=body,
+                        response_payload=exc.payload,
+                        duration_ms=provider_retry.duration_ms(req_start),
+                        usage=exc.usage,
+                        status_code=200,
+                        success=False,
+                        error_message=str(exc),
+                        metadata={
+                            "attempt": attempt + 1,
+                            "semantic_error": True,
+                            **exc.metadata,
+                        },
+                    )
+                    display.wait_stop()
+                    raise RuntimeError(str(exc)) from exc
 
                 result = self._parse_response(response_json)
                 provider_retry.trace_provider_call(

@@ -41,6 +41,7 @@ class SemanticResponseError(RuntimeError):
     payload: dict[str, Any]
     retryable: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
+    usage: TokenUsage | None = None
 
     def __post_init__(self) -> None:
         RuntimeError.__init__(self, self.message)
@@ -125,6 +126,7 @@ class JsonModelTransport:
                             tracer=tracer,
                             response_payload=exc.payload,
                             duration_ms=provider_retry.duration_ms(req_start),
+                            usage=exc.usage,
                             status_code=200,
                             success=False,
                             error_message=str(exc),

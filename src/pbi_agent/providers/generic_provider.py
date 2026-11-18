@@ -16,8 +16,14 @@ from pbi_agent.providers.auth_strategies import (
 )
 from pbi_agent.providers.base import Provider
 from pbi_agent.providers.endpoints import chat_completions_url
-from pbi_agent.providers.protocols.chat_completions import ChatCompletionsProtocol
-from pbi_agent.providers.runtime import record_response_usage
+from pbi_agent.providers.protocols.chat_completions import (
+    ChatCompletionsProtocol,
+    raise_if_content_filtered,
+)
+from pbi_agent.providers.runtime import (
+    record_failed_response_usage,
+    record_response_usage,
+)
 from pbi_agent.providers.tool_execution import execute_provider_tool_calls
 from pbi_agent.providers.transport import (
     JsonErrorPolicy,
@@ -133,12 +139,21 @@ class GenericProvider(Provider):
             tool_result_items=tool_result_items,
             steer_user_input=steer_user_input,
         )
-        result = self._http_request(
-            input_value=input_value,
-            instructions=instructions or self._protocol.system_prompt,
-            display=display,
-            tracer=tracer,
-        )
+        try:
+            result = self._http_request(
+                input_value=input_value,
+                instructions=instructions or self._protocol.system_prompt,
+                display=display,
+                tracer=tracer,
+            )
+        except RuntimeError as exc:
+            record_failed_response_usage(
+                exc,
+                display=display,
+                session_usage=session_usage,
+                turn_usage=turn_usage,
+            )
+            raise
         record_response_usage(
             result,
             display=display,
@@ -227,6 +242,7 @@ class GenericProvider(Provider):
             display=display,
             tracer=tracer,
             parse_response=self._protocol.parse_response,
+            semantic_validator=raise_if_content_filtered,
         )
 
     def _parse_response(self, response_json: dict[str, Any]) -> CompletedResponse:

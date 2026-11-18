@@ -4,6 +4,8 @@ import json
 import urllib.request
 from unittest.mock import Mock
 
+import pytest
+
 from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.config import DEFAULT_GENERIC_API_URL, DEFAULT_MAX_TOKENS, Settings
 from pbi_agent.models.messages import (
@@ -13,6 +15,8 @@ from pbi_agent.models.messages import (
     ToolCall,
 )
 from pbi_agent.providers.generic_provider import GenericProvider
+from pbi_agent.providers.protocols.chat_completions import raise_if_content_filtered
+from pbi_agent.providers.transport import SemanticResponseError
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ToolResult
@@ -1210,3 +1214,124 @@ def test_generic_request_turn_records_observability(
 
     tracer.log_model_call.assert_called_once()
     assert tracer.log_model_call.call_args.kwargs["url"] == DEFAULT_GENERIC_API_URL
+
+
+def test_generic_request_turn_raises_clear_error_on_content_filter(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    calls = 0
+
+    def fake_urlopen(request: urllib.request.Request, timeout: float):
+        nonlocal calls
+        del request, timeout
+        calls += 1
+        return make_http_response(
+            {
+                "id": "chatcmpl_filtered",
+                "model": "gpt-test",
+                "choices": [
+                    {
+                        "finish_reason": "content_filter",
+                        "message": {"role": "assistant"},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 120,
+                    "completion_tokens": 3,
+                    "total_tokens": 123,
+                },
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    provider = GenericProvider(_make_settings())
+    session_usage = TokenUsage()
+    turn_usage = TokenUsage()
+
+    with pytest.raises(RuntimeError, match="blocked by the provider content filter"):
+        provider.request_turn(
+            user_message="hello",
+            display=display_spy,
+            session_usage=session_usage,
+            turn_usage=turn_usage,
+        )
+
+    assert calls == 1
+    for usage in (session_usage, turn_usage):
+        assert usage.input_tokens == 120
+        assert usage.output_tokens == 3
+    assert display_spy.markdown_calls == []
+
+
+def test_raise_if_content_filtered_ignores_normal_responses() -> None:
+    raise_if_content_filtered(
+        {"choices": [{"finish_reason": "stop", "message": {"content": "hi"}}]}
+    )
+    raise_if_content_filtered({"choices": None})
+    raise_if_content_filtered({})
+
+
+def test_raise_if_content_filtered_without_details() -> None:
+    with pytest.raises(SemanticResponseError) as exc_info:
+        raise_if_content_filtered(
+            {
+                "choices": [
+                    {
+                        "finish_reason": "content_filter",
+                        "message": {"role": "assistant"},
+                    }
+                ]
+            }
+        )
+
+    assert exc_info.value.retryable is False
+    assert exc_info.value.metadata == {"finish_reason": "content_filter"}
+    assert exc_info.value.usage is None
+    assert "finish_reason: content_filter" in str(exc_info.value)
+    assert "The provider returned no additional details." in str(exc_info.value)
+
+
+def test_raise_if_content_filtered_includes_available_details() -> None:
+    with pytest.raises(SemanticResponseError) as exc_info:
+        raise_if_content_filtered(
+            {
+                "choices": [
+                    {
+                        "finish_reason": "content_filter",
+                        "message": {
+                            "role": "assistant",
+                            "content": "Here is the start",
+                            "refusal": "I can't help with that.",
+                        },
+                        "content_filter_results": {
+                            "violence": {"filtered": True, "severity": "medium"},
+                            "hate": {"filtered": False, "severity": "safe"},
+                            "protected_material_code": {
+                                "filtered": True,
+                                "detected": True,
+                            },
+                        },
+                    }
+                ],
+                "prompt_filter_results": [
+                    {
+                        "prompt_index": 0,
+                        "content_filter_results": {
+                            "jailbreak": {"filtered": True, "detected": True}
+                        },
+                    }
+                ],
+            }
+        )
+
+    message = str(exc_info.value)
+    assert "Refusal: I can't help with that." in message
+    assert "Partial output: Here is the start." in message
+    assert (
+        "Filtered output categories: violence (severity: medium), "
+        "protected_material_code." in message
+    )
+    assert "hate" not in message
+    assert "Filtered prompt categories: jailbreak." in message
