@@ -5,8 +5,8 @@ type_reason: Label bug (+ui); wide markdown tables overflow their card, existing
 source: https://github.com/pbi-agent/pbi-agent/issues/450
 risk: normal
 risk_triggers: none
-stage: release
-status: running
+stage: done
+status: done
 ---
 # Keep wide markdown tables inside the message card, with horizontal scrolling
 
@@ -38,6 +38,9 @@ Out of scope: wrapping/truncating cell text, vertical table scrolling/height lim
 - build: build.md
 - review: review-1.md
 - quality: quality-1.md
+- release: release.md
+- verify: verify.md
+- learn: learn.md
 
 ## Gate log
 | stage | gate | decision | note |
@@ -48,6 +51,8 @@ Out of scope: wrapping/truncating cell text, vertical table scrolling/height lim
 | build | always_run | auto_pass | conductor reran test:web (894 passed), lint, typecheck, web:build (deterministic hashes): green; risk stays normal (3 src/test files + generated bundle, <200 lines) |
 | review | approve | approved_unchanged | human: Approve and release |
 | release | approve | approved_unchanged | human: Approve and release; no unpushed base commits |
+| verify | always_run | auto_pass | verify: pass; CI green on 0584f031; all 6 AC confirmed; #450 closed |
+| learn | always_run | auto_pass | learn: 4 proposals; ledger rows appended; no gate eligible for promotion |
 
 ## Stage log
 | stage | round | result | note |
@@ -56,3 +61,6 @@ Out of scope: wrapping/truncating cell text, vertical table scrolling/height lim
 | review | code-quality r1 | No code-quality findings. | agent reviewers clean; awaiting human review+release gate |
 | release | validation | pass | ruff/format/basedpyright clean; full pytest 2526 passed, 9 skipped; test:web 894 passed; lint, typecheck, web:build ok (bundle deterministic) |
 | release | pre-commit /verify | pass | scratch DB+workspace, port 7471: issue session wrapper 1046/2632 scrolled 800px, card 1086/1086, doc not widened, copy button + paragraphs did not move, button visible on hover; server stopped |
+| release | operator | release: shipped | PR #453 merged 0584f031; PR checks + post-merge CI green; issue closed |
+
+Learn proposals 1-4 applied on human request (2026-11-20), plus: verify moved before release; issue updates reduced to one brief final comment (or a comment when blocked).
