@@ -57,6 +57,7 @@ Critical rules:
 * If high-impact detail is missing, choose most reasonable default from repo, request, and existing conventions.
 * Record assumptions explicitly in final plan. Do not defer decisions to implementer.
 * Prefer simplest plan that satisfies request and matches existing architecture.
+* Defect lives in a copy or override of a shared builder/helper that already behaves correctly: plan to route the copy through the shared owner (delete the copy), not to patch the copy. Characterize that change by comparing serialized output (sorted keys if only key order can change). Patch the copy only when the shared owner cannot express the caller's difference; record why.
 * If request gives acceptance criteria or required checks (for example, factory `task.md` criteria and profile checks), map each to change and to test or verification that proves it.
 * If plan corrects fact repeated in several places (docs, guides, help text), scope fix to every occurrence, not one file.
 * If work is large, split it into ordered groups, each with own checks. Do not plan for implementer to delegate to sub-agents: factory stage agents cannot spawn them.
