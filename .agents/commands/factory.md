@@ -39,6 +39,8 @@ Stage reruns after step back: write new file with suffix (`plan-2.md`), point `t
 
 Task folders and `ledger.md` are committed to repo. Release commit carries task folder as written up to release (`task.md`, triage, plan, build, review, quality, fix, verify files). Files written after that commit (`release.md`, `learn.md`, later `task.md` updates, new `ledger.md` rows) stay in working tree; next factory release commit includes them.
 
+Stage files are Markdown checked by `uv run ruff format --check .`, which formats Python fences inside them. After writing or receiving any stage file, run `uv run ruff format .agents/factory/tasks/<id>/` (rewrites only fenced Python). Stage agents use `text` fences for command output and reference scratch scripts by path instead of pasting them. Format-check failure confined to task folder = conductor's to fix, not a stage pass or fail; failure elsewhere fails the stage.
+
 `task.md` shape:
 
 ```md

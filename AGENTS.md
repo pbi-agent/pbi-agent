@@ -112,6 +112,7 @@ uv tool install --reinstall .
 - Keep the web implementation aligned with the current FastAPI backend plus Vite/React frontend; do not introduce a parallel web framework or client stack.
 - Validation by touched surface:
   - Python changes: `uv run ruff check .`, `uv run ruff format --check .`, `uv run basedpyright`, and the relevant `uv run pytest ...` scope.
+    - `ruff format` also formats Python code fences in every Markdown file it checks (docs, skills, `.agents/**`), and CI runs `ruff format --check .`. After writing a `.md` with a Python fence, run `uv run ruff format <file>`; use a `text` fence for snippets not meant as formatted Python.
   - Frontend changes: `bun run test:web`, `bun run lint`, `bun run typecheck`, and `bun run web:build`.
   - Docs changes: `bun run docs:build`.
 - Before handoff on broad changes, the repo-level checks are `uv run ruff check .`, `uv run ruff format --check .`, `uv run basedpyright`, `bun run lint`, `bun run typecheck`, and `uv run pytest`.
