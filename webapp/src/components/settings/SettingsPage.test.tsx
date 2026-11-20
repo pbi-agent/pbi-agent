@@ -640,6 +640,12 @@ function withXaiMetadata(
   };
 }
 
+type InstallScenario = {
+  existing: string[];
+  candidates: string[];
+  failing?: string;
+};
+
 async function openSettingsTab(
   user: ReturnType<typeof userEvent.setup>,
   tabName: string,
@@ -853,6 +859,7 @@ describe("SettingsPage", () => {
           description: "Review repository changes",
           model_profile_id: null,
           subpath: null,
+          installed: false,
         },
       ],
     });
@@ -889,6 +896,7 @@ describe("SettingsPage", () => {
           name: "repo-review",
           description: "Review repository changes",
           subpath: null,
+          installed: false,
         },
       ],
     });
@@ -921,6 +929,7 @@ describe("SettingsPage", () => {
           description: "Review repository changes",
           model_profile_id: null,
           subpath: null,
+          installed: false,
         },
       ],
     });
@@ -1445,6 +1454,7 @@ describe("SettingsPage", () => {
         description: "A suggested project command",
         model_profile_id: null,
         subpath: null,
+        installed: false,
       })),
     });
 
@@ -1492,6 +1502,7 @@ describe("SettingsPage", () => {
       description: "A suggested project element",
       model_profile_id: null,
       subpath: null,
+      installed: false,
     }));
     const fetchCandidates = element === "Skill" ? fetchSkillCandidates : fetchAgentCandidates;
     vi.mocked(fetchCandidates).mockResolvedValue({
@@ -1522,7 +1533,7 @@ describe("SettingsPage", () => {
     expect(within(dialog).getAllByRole("button", { name: "Install" })).toHaveLength(30);
   });
 
-  it("installs a selected command, refetches settings, and closes the dialog", async () => {
+  it("installs a selected command, refetches settings, and keeps the dialog open", async () => {
     const user = userEvent.setup();
     vi.mocked(fetchConfigBootstrap)
       .mockResolvedValueOnce(makeConfigBootstrap())
@@ -1567,8 +1578,9 @@ describe("SettingsPage", () => {
       await screen.findByText(".agents/commands/repo-review.md"),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("dialog", { name: "Add Project Command" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("dialog", { name: "Add Project Command" }),
+    ).toBeInTheDocument();
+    expect(await within(dialog).findByText("Installed")).toBeInTheDocument();
   });
 
   it("reveals Replace existing on command install conflict and retries with force", async () => {
@@ -1642,6 +1654,7 @@ describe("SettingsPage", () => {
             description: "Private review workflow",
             model_profile_id: "analysis",
             subpath: "commands/private-review.md",
+            installed: false,
           },
         ],
       });
@@ -1970,7 +1983,7 @@ describe("SettingsPage", () => {
     expect(fetchAgentCandidates).toHaveBeenCalledWith(null);
   });
 
-  it("installs a selected agent, refetches settings, and closes the dialog", async () => {
+  it("installs a selected agent, refetches settings, and keeps the dialog open", async () => {
     const user = userEvent.setup();
     vi.mocked(fetchConfigBootstrap)
       .mockResolvedValueOnce(makeConfigBootstrap())
@@ -2013,7 +2026,10 @@ describe("SettingsPage", () => {
     expect(
       await screen.findByText(".agents/agents/repo-reviewer.md"),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("dialog", { name: "Add Project Agent" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Add Project Agent" }),
+    ).toBeInTheDocument();
+    expect(await within(dialog).findByText("Installed")).toBeInTheDocument();
   });
 
   it("reveals Replace existing on agent install conflict and retries with force", async () => {
@@ -2083,6 +2099,7 @@ describe("SettingsPage", () => {
             description: "Private reviewer",
             model_profile_id: null,
             subpath: "agents/private-reviewer.md",
+            installed: false,
           },
         ],
       });
@@ -2224,7 +2241,7 @@ describe("SettingsPage", () => {
     expect(fetchSkillCandidates).toHaveBeenCalledWith(null);
   });
 
-  it("installs a selected skill, refetches settings, and closes the dialog", async () => {
+  it("installs a selected skill, refetches settings, and keeps the dialog open", async () => {
     const user = userEvent.setup();
     vi.mocked(fetchConfigBootstrap)
       .mockResolvedValueOnce(makeConfigBootstrap())
@@ -2262,7 +2279,10 @@ describe("SettingsPage", () => {
     expect(
       await screen.findByText(".agents/skills/repo-review/SKILL.md"),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("dialog", { name: "Add Project Skill" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Add Project Skill" }),
+    ).toBeInTheDocument();
+    expect(await within(dialog).findByText("Installed")).toBeInTheDocument();
   });
 
   it("reveals Replace existing on skill install conflict and retries with force", async () => {
@@ -2326,6 +2346,7 @@ describe("SettingsPage", () => {
             name: "private-skill",
             description: "Private workflow",
             subpath: "skills/private-skill",
+            installed: false,
           },
         ],
       });
@@ -4055,5 +4076,310 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByText(/Failed to load settings:/)).toBeInTheDocument();
     expect(screen.getByText(/boom/)).toBeInTheDocument();
+  });
+
+  describe.each([
+    {
+      kind: "Skill",
+      tab: "Skills",
+      sourceUrl: "https://github.com/pbi-agent/skills",
+      rowText: (id: string) => id,
+      itemPath: (id: string) => `.agents/skills/${id}/SKILL.md`,
+      installArgs: (id: string) => ({ skill_name: id }),
+      install: installSkill,
+      mock(options: InstallScenario) {
+        let skills = options.existing.map((id) => ({
+          id,
+          name: id,
+          description: `${id} description`,
+          instructions: `# ${id}`,
+          path: this.itemPath(id),
+          enabled: true,
+        }));
+        vi.mocked(fetchConfigBootstrap).mockImplementation(() =>
+          Promise.resolve(makeConfigBootstrap({ skills })),
+        );
+        vi.mocked(fetchSkillCandidates).mockResolvedValue({
+          source: this.sourceUrl,
+          ref: null,
+          candidates: options.candidates.map((id) => ({
+            name: id,
+            description: `${id} description`,
+            subpath: null,
+            installed: options.existing.includes(id),
+          })),
+        });
+        vi.mocked(installSkill).mockImplementation((request) => {
+          const id = request.skill_name;
+          if (id === options.failing) {
+            return Promise.reject(new ApiError("Install failed", 500));
+          }
+          skills = [
+            ...skills.filter((item) => item.id !== id),
+            {
+              id,
+              name: id,
+              description: `${id} description`,
+              instructions: `# ${id}`,
+              path: this.itemPath(id),
+              enabled: true,
+            },
+          ];
+          return Promise.resolve({
+            installed: {
+              name: id,
+              install_path: `.agents/skills/${id}`,
+              source: this.sourceUrl,
+              ref: null,
+              subpath: null,
+            },
+            skills,
+            config_revision: "rev-2",
+          });
+        });
+      },
+    },
+    {
+      kind: "Command",
+      tab: "Commands",
+      sourceUrl: "https://github.com/pbi-agent/commands",
+      rowText: (id: string) => `/${id}`,
+      itemPath: (id: string) => `.agents/commands/${id}.md`,
+      installArgs: (id: string) => ({ command_name: id }),
+      install: installCommand,
+      mock(options: InstallScenario) {
+        const makeItem = (id: string) => ({
+          id,
+          name: id,
+          slash_alias: `/${id}`,
+          description: `${id} description`,
+          instructions: `# ${id}`,
+          path: this.itemPath(id),
+          model_profile_id: null,
+          allowed_tools: null,
+          skills: null,
+          sub_agents: null,
+        });
+        let commands = options.existing.map(makeItem);
+        vi.mocked(fetchConfigBootstrap).mockImplementation(() =>
+          Promise.resolve(makeConfigBootstrap({ commands })),
+        );
+        vi.mocked(fetchCommandCandidates).mockResolvedValue({
+          source: this.sourceUrl,
+          ref: null,
+          candidates: options.candidates.map((id) => ({
+            name: `${id} command`,
+            command_id: id,
+            slash_alias: `/${id}`,
+            description: `${id} description`,
+            model_profile_id: null,
+            subpath: null,
+            installed: options.existing.includes(id),
+          })),
+        });
+        vi.mocked(installCommand).mockImplementation((request) => {
+          const id = request.command_name;
+          if (id === options.failing) {
+            return Promise.reject(new ApiError("Install failed", 500));
+          }
+          commands = [...commands.filter((item) => item.id !== id), makeItem(id)];
+          return Promise.resolve({
+            installed: {
+              command_id: id,
+              slash_alias: `/${id}`,
+              install_path: this.itemPath(id),
+              source: this.sourceUrl,
+              ref: null,
+              subpath: null,
+            },
+            commands,
+            config_revision: "rev-2",
+          });
+        });
+      },
+    },
+    {
+      kind: "Agent",
+      tab: "Agents",
+      sourceUrl: "https://github.com/pbi-agent/agents",
+      rowText: (id: string) => id,
+      itemPath: (id: string) => `.agents/agents/${id}.md`,
+      installArgs: (id: string) => ({ agent_name: id }),
+      install: installAgent,
+      mock(options: InstallScenario) {
+        const makeItem = (id: string) => ({
+          id,
+          name: id,
+          description: `${id} description`,
+          instructions: `${id} instructions`,
+          path: this.itemPath(id),
+          model_profile_id: null,
+          allowed_tools: null,
+          skills: null,
+          commands: null,
+          sub_agents: null,
+          enabled: true,
+        });
+        let agents = options.existing.map(makeItem);
+        vi.mocked(fetchConfigBootstrap).mockImplementation(() =>
+          Promise.resolve(makeConfigBootstrap({ agents })),
+        );
+        vi.mocked(fetchAgentCandidates).mockResolvedValue({
+          source: this.sourceUrl,
+          ref: null,
+          candidates: options.candidates.map((id) => ({
+            agent_name: id,
+            description: `${id} description`,
+            model_profile_id: null,
+            subpath: null,
+            installed: options.existing.includes(id),
+          })),
+        });
+        vi.mocked(installAgent).mockImplementation((request) => {
+          const id = request.agent_name;
+          if (id === options.failing) {
+            return Promise.reject(new ApiError("Install failed", 500));
+          }
+          agents = [...agents.filter((item) => item.id !== id), makeItem(id)];
+          return Promise.resolve({
+            installed: {
+              agent_name: id,
+              install_path: this.itemPath(id),
+              source: this.sourceUrl,
+              ref: null,
+              subpath: null,
+            },
+            agents,
+            config_revision: "rev-2",
+          });
+        });
+      },
+    },
+  ])("Add $kind dialog multi-install", (scenario) => {
+    async function openAddDialog(user: ReturnType<typeof userEvent.setup>) {
+      renderWithProviders(<SettingsPage />);
+      await openSettingsTab(user, scenario.tab);
+      await user.click(
+        await screen.findByRole("button", { name: `Add ${scenario.kind}` }),
+      );
+      return screen.findByRole("dialog", {
+        name: `Add Project ${scenario.kind}`,
+      });
+    }
+
+    async function findRow(dialog: HTMLElement, id: string) {
+      const label = await within(dialog).findByText(scenario.rowText(id));
+      const row = label.closest<HTMLElement>("[data-candidate-row]");
+      expect(row).not.toBeNull();
+      return row as HTMLElement;
+    }
+
+    it("stays open after an install so another candidate can be installed", async () => {
+      const user = userEvent.setup();
+      scenario.mock({ existing: [], candidates: ["alpha", "beta"] });
+      const dialog = await openAddDialog(user);
+
+      const alphaRow = await findRow(dialog, "alpha");
+      await user.click(within(alphaRow).getByRole("button", { name: "Install" }));
+
+      expect(await within(alphaRow).findByText("Installed")).toBeInTheDocument();
+      expect(within(alphaRow).getByRole("button", { name: "Replace" })).toBeEnabled();
+      expect(dialog).toBeInTheDocument();
+      expect(
+        await screen.findByText(scenario.itemPath("alpha")),
+      ).toBeInTheDocument();
+
+      const betaRow = await findRow(dialog, "beta");
+      await user.click(within(betaRow).getByRole("button", { name: "Install" }));
+
+      expect(await within(betaRow).findByText("Installed")).toBeInTheDocument();
+      expect(scenario.install).toHaveBeenCalledTimes(2);
+      expect(scenario.install).toHaveBeenLastCalledWith({
+        source: scenario.sourceUrl,
+        ...scenario.installArgs("beta"),
+      });
+      expect(
+        await screen.findByText(scenario.itemPath("beta")),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("dialog", { name: `Add Project ${scenario.kind}` }),
+      ).toBeInTheDocument();
+    });
+
+    it("marks candidates that already exist in the project as Installed", async () => {
+      const user = userEvent.setup();
+      scenario.mock({ existing: ["alpha"], candidates: ["alpha", "beta"] });
+      const dialog = await openAddDialog(user);
+
+      const alphaRow = await findRow(dialog, "alpha");
+      expect(within(alphaRow).getByText("Installed")).toBeInTheDocument();
+      expect(within(alphaRow).queryByRole("button", { name: "Install" })).toBeNull();
+      expect(within(alphaRow).getByRole("button", { name: "Replace" })).toBeEnabled();
+
+      const betaRow = await findRow(dialog, "beta");
+      expect(within(betaRow).getByRole("button", { name: "Install" })).toBeEnabled();
+    });
+
+    it("reinstalls an Installed candidate after confirming Replace and stays open", async () => {
+      const user = userEvent.setup();
+      scenario.mock({ existing: ["alpha"], candidates: ["alpha"] });
+      const dialog = await openAddDialog(user);
+
+      const alphaRow = await findRow(dialog, "alpha");
+      await user.click(within(alphaRow).getByRole("button", { name: "Replace" }));
+      const confirm = await screen.findByRole("alertdialog", {
+        name: new RegExp(`^Replace ${scenario.kind.toLowerCase()} "alpha`),
+      });
+      expect(scenario.install).not.toHaveBeenCalled();
+      await user.click(within(confirm).getByRole("button", { name: "Replace" }));
+
+      await waitFor(() =>
+        expect(scenario.install).toHaveBeenCalledWith({
+          source: scenario.sourceUrl,
+          ...scenario.installArgs("alpha"),
+          force: true,
+        }),
+      );
+      expect(
+        await within(alphaRow).findByRole("button", { name: "Replace" }),
+      ).toBeEnabled();
+      expect(within(alphaRow).getByText("Installed")).toBeInTheDocument();
+      expect(
+        screen.getByRole("dialog", { name: `Add Project ${scenario.kind}` }),
+      ).toBeInTheDocument();
+    });
+
+    it("does not reinstall when the Replace confirmation is cancelled", async () => {
+      const user = userEvent.setup();
+      scenario.mock({ existing: ["alpha"], candidates: ["alpha"] });
+      const dialog = await openAddDialog(user);
+
+      const alphaRow = await findRow(dialog, "alpha");
+      await user.click(within(alphaRow).getByRole("button", { name: "Replace" }));
+      const confirm = await screen.findByRole("alertdialog");
+      await user.click(within(confirm).getByRole("button", { name: "Cancel" }));
+
+      await waitFor(() =>
+        expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+      );
+      expect(scenario.install).not.toHaveBeenCalled();
+      expect(within(alphaRow).getByText("Installed")).toBeInTheDocument();
+    });
+
+    it("shows a failed install in the open dialog without marking the row Installed", async () => {
+      const user = userEvent.setup();
+      scenario.mock({ existing: [], candidates: ["alpha"], failing: "alpha" });
+      const dialog = await openAddDialog(user);
+
+      const alphaRow = await findRow(dialog, "alpha");
+      await user.click(within(alphaRow).getByRole("button", { name: "Install" }));
+
+      expect(await within(dialog).findByText("Install failed")).toBeInTheDocument();
+      expect(
+        screen.getByRole("dialog", { name: `Add Project ${scenario.kind}` }),
+      ).toBeInTheDocument();
+      expect(within(alphaRow).getByRole("button", { name: "Install" })).toBeEnabled();
+      expect(within(alphaRow).queryByText("Installed")).toBeNull();
+    });
   });
 });

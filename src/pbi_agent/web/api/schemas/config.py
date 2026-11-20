@@ -408,6 +408,7 @@ class CommandCandidateViewModel(BaseModel):
     description: str
     model_profile_id: str | None
     subpath: str | None
+    installed: bool
 
 
 class CommandCandidatesResponse(BaseModel):
@@ -463,6 +464,7 @@ class SkillCandidateViewModel(BaseModel):
     name: str
     description: str
     subpath: str | None
+    installed: bool
 
 
 class SkillCandidatesResponse(BaseModel):
@@ -519,6 +521,7 @@ class AgentCandidateViewModel(BaseModel):
     description: str
     model_profile_id: str | None
     subpath: str | None
+    installed: bool
 
 
 class AgentCandidatesResponse(BaseModel):

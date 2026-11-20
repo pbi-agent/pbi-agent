@@ -2474,6 +2474,7 @@ def test_command_candidates_endpoint_uses_local_and_default_sources(
                     "description": "Review code changes",
                     "model_profile_id": None,
                     "subpath": "commands/review.md",
+                    "installed": False,
                 }
             ],
         }
@@ -2489,6 +2490,7 @@ def test_command_candidates_endpoint_uses_local_and_default_sources(
                     "description": "Plan the work",
                     "model_profile_id": None,
                     "subpath": "commands/plan.md",
+                    "installed": False,
                 }
             ],
         }
@@ -2665,6 +2667,55 @@ def test_skill_enabled_endpoint_toggles_internal_state(
     assert not (tmp_path / ".agents" / "skills" / ".skill-state.json").exists()
 
 
+def test_candidates_endpoints_flag_installed_by_install_target(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "source"
+    _write_skill(source / "skills", "review", "Review code changes.")
+    _write_skill(source / "skills", "plan", "Plan the work.")
+    _write_command(source, "review", "# Review\n\nReview.", relative_dir="commands")
+    _write_command(source, "plan", "# Plan\n\nPlan.", relative_dir="commands")
+    _write_agent(source / "agents", "reviewer", "Reviews code.", "Review.")
+    _write_agent(source / "agents", "planner", "Plans work.", "Plan.")
+    # Installed at the target path the installer would write to.
+    _write_skill(tmp_path / ".agents" / "skills", "plan", "Local plan.")
+    _write_command(tmp_path, "plan", "# Local plan\n\nLocal.")
+    _write_agent(tmp_path / ".agents" / "agents", "planner", "Local.", "Local.")
+    # Same display name at a different path does not block an install.
+    _write_skill(
+        tmp_path / ".agents" / "skills",
+        "review",
+        "Local review.",
+        directory_name="review-local",
+    )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+
+        def installed_by(kind: str, key: str) -> dict[str, bool]:
+            response = client.post(
+                f"/api/config/{kind}/candidates",
+                json={"source": str(source)},
+            )
+            assert response.status_code == 200
+            return {
+                item[key]: item["installed"] for item in response.json()["candidates"]
+            }
+
+        assert installed_by("skills", "name") == {"plan": True, "review": False}
+        assert installed_by("commands", "command_id") == {
+            "plan": True,
+            "review": False,
+        }
+        assert installed_by("agents", "agent_name") == {
+            "planner": True,
+            "reviewer": False,
+        }
+
+    assert not (tmp_path / ".agents" / "skills" / "review").exists()
+
+
 def test_skill_candidates_endpoint_uses_local_and_default_sources(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -2693,6 +2744,7 @@ def test_skill_candidates_endpoint_uses_local_and_default_sources(
                     "name": "review",
                     "description": "Review code changes.",
                     "subpath": "skills/review",
+                    "installed": False,
                 }
             ],
         }
@@ -2705,6 +2757,7 @@ def test_skill_candidates_endpoint_uses_local_and_default_sources(
                     "name": "plan",
                     "description": "Plan the work.",
                     "subpath": "skills/plan",
+                    "installed": False,
                 }
             ],
         }
@@ -2876,6 +2929,7 @@ def test_agent_candidates_endpoint_uses_local_and_default_sources(
                     "description": "Review code changes.",
                     "model_profile_id": "analysis",
                     "subpath": "agents/reviewer.md",
+                    "installed": False,
                 }
             ],
         }
@@ -2889,6 +2943,7 @@ def test_agent_candidates_endpoint_uses_local_and_default_sources(
                     "description": "Plan the work.",
                     "model_profile_id": None,
                     "subpath": "agents/planner.md",
+                    "installed": False,
                 }
             ],
         }

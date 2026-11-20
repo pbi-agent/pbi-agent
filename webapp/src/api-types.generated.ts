@@ -7,7 +7,7 @@ export type ActiveProfileResponse = { active_profile_id: string | null; config_r
 
 export type AgentCandidateRequest = { source?: string | null };
 
-export type AgentCandidateViewModel = { agent_name: string; description: string; model_profile_id: string | null; subpath: string | null };
+export type AgentCandidateViewModel = { agent_name: string; description: string; model_profile_id: string | null; subpath: string | null; installed: boolean };
 
 export type AgentCandidatesResponse = { source: string; ref: string | null; candidates: AgentCandidateViewModel[] };
 
@@ -65,7 +65,7 @@ export type ChildRunDetailModel = { run: RunSessionModel; events: ObservabilityE
 
 export type CommandCandidateRequest = { source?: string | null };
 
-export type CommandCandidateViewModel = { name: string; command_id: string; slash_alias: string; description: string; model_profile_id: string | null; subpath: string | null };
+export type CommandCandidateViewModel = { name: string; command_id: string; slash_alias: string; description: string; model_profile_id: string | null; subpath: string | null; installed: boolean };
 
 export type CommandCandidatesResponse = { source: string; ref: string | null; candidates: CommandCandidateViewModel[] };
 
@@ -305,7 +305,7 @@ export type SessionsResponse = { sessions: SessionRecordModel[] };
 
 export type SkillCandidateRequest = { source?: string | null };
 
-export type SkillCandidateViewModel = { name: string; description: string; subpath: string | null };
+export type SkillCandidateViewModel = { name: string; description: string; subpath: string | null; installed: boolean };
 
 export type SkillCandidatesResponse = { source: string; ref: string | null; candidates: SkillCandidateViewModel[] };
 

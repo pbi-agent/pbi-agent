@@ -2,7 +2,6 @@ import { useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircleIcon,
-  DownloadIcon,
   EyeIcon,
   FileTextIcon,
   FolderGit2Icon,
@@ -19,6 +18,10 @@ import type {
 } from "../../types";
 import { EmptyState } from "../shared/EmptyState";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
+import {
+  CandidateInstallActions,
+  markCandidateInstalled,
+} from "./CandidateInstallActions";
 import { SettingsPreviewDialog } from "./SettingsPreviewDialog";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Badge } from "../ui/badge";
@@ -124,16 +127,23 @@ function CandidateSkeleton() {
 function CandidateCard({
   candidate,
   isInstalling,
+  isInstalled,
   disabled,
   onInstall,
+  onReplace,
 }: {
   candidate: CommandCandidateView;
   isInstalling: boolean;
+  isInstalled: boolean;
   disabled: boolean;
   onInstall: () => void;
+  onReplace: () => void;
 }) {
   return (
-    <div className="flex min-w-0 items-start gap-3 rounded-lg border border-border p-3">
+    <div
+      className="flex min-w-0 items-start gap-3 rounded-lg border border-border p-3"
+      data-candidate-row
+    >
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="text-sm font-medium break-words">{candidate.name}</div>
         <p className="text-sm text-muted-foreground">
@@ -155,21 +165,15 @@ function CandidateCard({
           ) : null}
         </div>
       </div>
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        onClick={onInstall}
+      <CandidateInstallActions
+        kind="command"
+        itemName={candidate.name}
+        isInstalling={isInstalling}
+        isInstalled={isInstalled}
         disabled={disabled}
-        className="shrink-0"
-      >
-        {isInstalling ? (
-          <LoadingSpinner size="sm" />
-        ) : (
-          <DownloadIcon data-icon="inline-start" />
-        )}
-        Install
-      </Button>
+        onInstall={onInstall}
+        onReplace={onReplace}
+      />
     </div>
   );
 }
@@ -254,7 +258,6 @@ export function CommandsSettingsSection({
             }
           : current,
     );
-    closeAddDialog();
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["config-bootstrap"] }),
       queryClient.invalidateQueries({ queryKey: ["bootstrap"] }),
@@ -276,6 +279,10 @@ export function CommandsSettingsSection({
         command_name: candidate.command_id,
         ...(force ? { force: true } : {}),
       });
+      setListing((current) =>
+        markCandidateInstalled(current, (item) => item.command_id === candidate.command_id),
+      );
+      setConflictRetry(null);
       await applyInstallResponse(response);
     } catch (err) {
       const message = (err as Error).message;
@@ -444,6 +451,7 @@ export function CommandsSettingsSection({
                                 description: "",
                                 model_profile_id: null,
                                 subpath: null,
+                                installed: true,
                               },
                               true,
                               conflictRetry.source,
@@ -479,8 +487,10 @@ export function CommandsSettingsSection({
                       isInstalling={
                         installingCommand === candidate.command_id
                       }
+                      isInstalled={candidate.installed}
                       disabled={isBusy}
                       onInstall={() => void handleInstall(candidate)}
+                      onReplace={() => void handleInstall(candidate, true)}
                     />
                   ))
                 )}

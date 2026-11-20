@@ -2,7 +2,6 @@ import { useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircleIcon,
-  DownloadIcon,
   EyeIcon,
   FolderGit2Icon,
   PlusIcon,
@@ -25,6 +24,10 @@ import type {
 } from "../../types";
 import { EmptyState } from "../shared/EmptyState";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
+import {
+  CandidateInstallActions,
+  markCandidateInstalled,
+} from "./CandidateInstallActions";
 import { SettingsPreviewDialog } from "./SettingsPreviewDialog";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Badge } from "../ui/badge";
@@ -115,16 +118,23 @@ function CandidateSkeleton() {
 function CandidateCard({
   candidate,
   isInstalling,
+  isInstalled,
   disabled,
   onInstall,
+  onReplace,
 }: {
   candidate: SkillCandidateView;
   isInstalling: boolean;
+  isInstalled: boolean;
   disabled: boolean;
   onInstall: () => void;
+  onReplace: () => void;
 }) {
   return (
-    <div className="flex min-w-0 items-start gap-3 rounded-lg border border-border p-3">
+    <div
+      className="flex min-w-0 items-start gap-3 rounded-lg border border-border p-3"
+      data-candidate-row
+    >
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="text-sm font-medium break-words">{candidate.name}</div>
         <p className="text-sm text-muted-foreground">
@@ -136,21 +146,15 @@ function CandidateCard({
           </Badge>
         ) : null}
       </div>
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        onClick={onInstall}
+      <CandidateInstallActions
+        kind="skill"
+        itemName={candidate.name}
+        isInstalling={isInstalling}
+        isInstalled={isInstalled}
         disabled={disabled}
-        className="shrink-0"
-      >
-        {isInstalling ? (
-          <LoadingSpinner size="sm" />
-        ) : (
-          <DownloadIcon data-icon="inline-start" />
-        )}
-        Install
-      </Button>
+        onInstall={onInstall}
+        onReplace={onReplace}
+      />
     </div>
   );
 }
@@ -227,7 +231,6 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
             }
           : current,
     );
-    closeAddDialog();
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["config-bootstrap"] }),
       queryClient.invalidateQueries({ queryKey: ["bootstrap"] }),
@@ -294,6 +297,10 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
         skill_name: candidate.name,
         ...(force ? { force: true } : {}),
       });
+      setListing((current) =>
+        markCandidateInstalled(current, (item) => item.name === candidate.name),
+      );
+      setConflictRetry(null);
       await applyInstallResponse(response);
     } catch (err) {
       const message = (err as Error).message;
@@ -486,6 +493,7 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
                                 name: conflictRetry.skillName,
                                 description: "",
                                 subpath: null,
+                                installed: true,
                               },
                               true,
                               conflictRetry.source,
@@ -519,8 +527,10 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
                       key={`${sourceLabel}:${candidate.name}`}
                       candidate={candidate}
                       isInstalling={installingSkill === candidate.name}
+                      isInstalled={candidate.installed}
                       disabled={isBusy}
                       onInstall={() => void handleInstall(candidate)}
+                      onReplace={() => void handleInstall(candidate, true)}
                     />
                   ))
                 )}

@@ -285,7 +285,30 @@ def _select_remote_skill_candidate(
     return matched[0]
 
 
+def is_project_skill_installed(
+    skill_name: str,
+    *,
+    workspace: Path | None = None,
+) -> bool:
+    """Return whether installing ``skill_name`` would hit an existing target."""
+    install_root = ((workspace or Path.cwd()).resolve() / _INSTALL_ROOT).resolve()
+    try:
+        target_dir = _install_target_path(
+            install_root=install_root,
+            skill_name=skill_name,
+        )
+    except ProjectSkillInstallError:
+        return False
+    return target_dir.exists()
+
+
 def _resolve_install_target(*, install_root: Path, skill_name: str) -> Path:
+    target_dir = _install_target_path(install_root=install_root, skill_name=skill_name)
+    install_root.mkdir(parents=True, exist_ok=True)
+    return target_dir
+
+
+def _install_target_path(*, install_root: Path, skill_name: str) -> Path:
     normalized_name = skill_name.strip()
     if not normalized_name:
         raise ProjectSkillInstallError("Skill manifest name must not be empty.")
@@ -299,7 +322,6 @@ def _resolve_install_target(*, install_root: Path, skill_name: str) -> Path:
             f"{skill_name!r}. Skill install names must be a single path segment."
         )
 
-    install_root.mkdir(parents=True, exist_ok=True)
     target_dir = (install_root / normalized_name).resolve()
     if target_dir.parent != install_root.resolve():
         raise ProjectSkillInstallError(

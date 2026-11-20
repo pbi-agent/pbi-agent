@@ -378,8 +378,30 @@ def _select_remote_command_candidate(
     return matched[0]
 
 
+def is_project_command_installed(
+    command_id: str,
+    *,
+    workspace: Path | None = None,
+) -> bool:
+    """Return whether installing ``command_id`` would hit an existing target."""
+    install_root = ((workspace or Path.cwd()).resolve() / _INSTALL_ROOT).resolve()
+    try:
+        target_path = _install_target_path(
+            install_root=install_root,
+            command_id=command_id,
+        )
+    except ProjectCommandInstallError:
+        return False
+    return target_path.exists()
+
+
 def _resolve_install_target(*, install_root: Path, command_id: str) -> Path:
+    target_path = _install_target_path(install_root=install_root, command_id=command_id)
     install_root.mkdir(parents=True, exist_ok=True)
+    return target_path
+
+
+def _install_target_path(*, install_root: Path, command_id: str) -> Path:
     target_path = (install_root / f"{command_id}.md").resolve()
     if target_path.parent != install_root.resolve():
         raise ProjectCommandInstallError(

@@ -307,7 +307,30 @@ def _select_remote_agent_candidate(
     )
 
 
+def is_project_agent_installed(
+    agent_name: str,
+    *,
+    workspace: Path | None = None,
+) -> bool:
+    """Return whether installing ``agent_name`` would hit an existing target."""
+    install_root = ((workspace or Path.cwd()).resolve() / _INSTALL_ROOT).resolve()
+    try:
+        target_path = _install_target_path(
+            install_root=install_root,
+            agent_name=agent_name,
+        )
+    except ProjectAgentInstallError:
+        return False
+    return target_path.exists()
+
+
 def _resolve_install_target(*, install_root: Path, agent_name: str) -> Path:
+    target_path = _install_target_path(install_root=install_root, agent_name=agent_name)
+    install_root.mkdir(parents=True, exist_ok=True)
+    return target_path
+
+
+def _install_target_path(*, install_root: Path, agent_name: str) -> Path:
     normalized_name = agent_name.strip()
     if not normalized_name:
         raise ProjectAgentInstallError("Agent name must not be empty.")
@@ -321,7 +344,6 @@ def _resolve_install_target(*, install_root: Path, agent_name: str) -> Path:
             f"{agent_name!r}. Agent install names must be a single path segment."
         )
 
-    install_root.mkdir(parents=True, exist_ok=True)
     target_path = (install_root / f"{normalized_name}.md").resolve()
     if target_path.parent != install_root.resolve():
         raise ProjectAgentInstallError(
@@ -353,6 +375,7 @@ __all__ = [
     "RemoteAgentCandidateSummary",
     "RemoteAgentListing",
     "install_project_agent",
+    "is_project_agent_installed",
     "list_remote_project_agents",
     "parse_github_agent_source",
     "parse_project_agent_source",
