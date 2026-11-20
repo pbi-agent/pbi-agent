@@ -171,6 +171,7 @@ def _turn_instructions(
     visible_skill_names: tuple[str, ...] | None = None,
     visible_agent_names: tuple[str, ...] | None = None,
     workspace_directory_key: str | None = None,
+    chat_interface: bool = False,
 ) -> str | None:
     if active_command_instructions is None:
         return None
@@ -184,6 +185,7 @@ def _turn_instructions(
         explicit_agent_names=extract_explicit_agent_names(user_input),
         visible_agent_names=visible_agent_names,
         workspace_directory_key=workspace_directory_key,
+        chat_interface=chat_interface,
     )
 
 

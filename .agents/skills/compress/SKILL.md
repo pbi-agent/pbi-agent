@@ -1,123 +1,122 @@
 ---
 name: compress
 description: >
-  Compress natural-language memory files into a shorter caveman-style form to save
-  input tokens while preserving technical substance, code, URLs, paths, commands,
-  and structure. Use when a user asks to compress a memory or notes file.
+  Rewrite any text (pasted text, notes or files) into a
+  compact, clear form that uses fewer tokens and keeps all content
+  exact. Use when the user asks to compress, shorten, tighten, or simplify text.
 ---
 
 # Compress
 
 ## Purpose
 
-Compress natural-language files such as `md` files, notes, or preferences into shorter caveman-style prose to reduce input tokens.
+Rewrite text to be short, clear, and token-efficient. Keep every fact. Change only the wording.
+
+## Input / Output
+
+- **Pasted text** → return the compressed text in the reply. Do not create a file.
+- **File path** → edit the file in place with normal file-editing tools.
+- **Level** → use `standard` if the user does not give one.
+
+| Level | Style | Use for |
+|---|---|---|
+| `light` | Plain Language. Full grammar, short sentences. | Text for humans: docs, emails, READMEs |
+| `standard` | Terse. Drop articles and filler. Fragments OK. | Notes, prompts, agent instructions |
+| `ultra` | Telegraphic. Symbols (`→`, `+`, `=`), abbreviations, key-value lines. | Memory files, context for agents only |
 
 ## Process
 
-1. Read the target file.
-2. Compress only the prose. Do not invent, summarize away, or reinterpret technical content.
-3. Preserve code, commands, URLs, paths, headings, and structural markers exactly.
-4. Apply the edit directly with normal file-editing tools.
-5. Report what changed and any residual risk if the file contains mixed prose and technical content.
+1. Read the full text. Find the main point and the audience (human or agent). Count the words in the original text (`before`).
+2. Mark read-only regions (see Preserve).
+3. Apply the Structure, Sentence, and Word rules to the prose.
+4. Check: no lost facts, no changed meaning, read-only regions identical.
+5. Count the words in the compressed text (`after`). Report:
+   - Level used
+   - Words: `before` → `after` (saved: `before - after`, `-X%`)
+   - Any risky region left unchanged
 
-## Compression Rules
+## Structure Rules
 
-### Remove
-- Articles: a, an, the
-- Filler: just, really, basically, actually, simply, essentially, generally
-- Pleasantries: "sure", "certainly", "of course", "happy to", "I'd recommend"
-- Hedging: "it might be worth", "you could consider", "it would be good to"
-- Redundant phrasing: "in order to" → "to", "make sure to" → "ensure", "the reason is because" → "because"
-- Connective fluff: "however", "furthermore", "additionally", "in addition"
+- **BLUF**: put the conclusion, request, or main rule first.
+- **Pyramid**: main idea → supporting points, grouped by topic.
+- **Chunking**: one topic per paragraph or section. Max 6 sentences per paragraph.
+- Use lists for parallel items, numbered steps for sequences, and tables for comparisons.
+- Merge duplicate or overlapping bullets. Keep one example per pattern.
+- Remove intros, outros, recaps, and sentences that repeat the heading.
 
-### Preserve EXACTLY (never modify)
-- Code blocks (fenced ``` and indented)
-- Inline code (`backtick content`)
-- URLs and links (full URLs, markdown links)
-- File paths (`/src/components/...`, `./config.yaml`)
-- Commands (`npm install`, `git commit`, `docker build`)
-- Technical terms (library names, API names, protocols, algorithms)
-- Proper nouns (project names, people, companies)
-- Dates, version numbers, numeric values
-- Environment variables (`$HOME`, `NODE_ENV`)
-- Frontmatter/YAML headers in markdown files
+## Sentence Rules (from ASD-STE100)
 
-### Preserve Structure
-- All markdown headings (keep exact heading text, compress body below)
-- Bullet point hierarchy (keep nesting level)
-- Numbered lists (keep numbering)
-- Tables (compress cell text, keep structure)
+- Instructions: max 20 words. Descriptions: max 25 words.
+- One instruction per sentence.
+- Use the active voice: "Tests catch bugs", not "Bugs are caught by tests".
+- Use the imperative for actions: "Run tests", not "You should run tests".
+- Put conditions first: "If build fails, check logs."
+- Put the warning before the step it applies to.
+- Use one word for one meaning. Do not switch synonyms for the same thing.
 
-### Compress
-- Use short synonyms: "big" not "extensive", "fix" not "implement a solution for", "use" not "utilize"
-- Fragments OK: "Run tests before commit" not "You should always run tests before committing"
-- Drop "you should", "make sure to", "remember to" — just state the action
-- Merge redundant bullets that say the same thing differently
-- Keep one example where multiple examples show the same pattern
+## Word Rules
 
-CRITICAL RULE:
-Anything inside ``` ... ``` must be copied EXACTLY.
-Do not:
-- remove comments
-- remove spacing
+**Remove**
+- Filler: just, really, basically, actually, simply, essentially, very
+- Pleasantries: sure, certainly, of course, happy to
+- Hedging: it might be worth, you could consider, it should be noted that
+- Connective fluff: however, furthermore, additionally, moreover
+- Directives: you should, make sure to, remember to, please
+- Articles (a, an, the): remove at `standard` and `ultra` only
+
+**Replace**
+| Long | Short |
+|---|---|
+| in order to | to |
+| due to the fact that | because |
+| make a decision | decide |
+| is able to | can |
+| at this point in time | now |
+| utilize / leverage | use |
+| implement a solution for | fix |
+| a large number of | many |
+
+Use verbs, not noun forms: "configure", not "perform the configuration of".
+
+## Preserve EXACTLY (read-only)
+
+- Fenced code blocks and indented code
+- Inline code in backticks
+- URLs, links, file paths, commands, environment variables
+- Technical terms, API and library names, proper nouns
+- Numbers, dates, versions, units, IDs
+- Frontmatter and YAML headers
+- Quoted text, legal text, error messages
+- Markdown headings (text unchanged) and list or table structure
+
+Inside read-only regions, do not:
+- remove comments or spacing
 - reorder lines
-- shorten commands
-- simplify anything
+- shorten or "simplify" anything
 
-Inline code (`...`) must be preserved EXACTLY.
-Do not modify anything inside backticks.
-
-If file contains code blocks:
-- Treat code blocks as read-only regions
-- Only compress text outside them
-- Do not merge sections around code
+Do not merge sections across a code block.
 
 ## Safety
 
-- Do not run external scripts, CLIs, or network calls as part of this skill.
-- Do not send file contents to third-party services for compression.
-- If the file looks like code, config, secrets, credentials, or keys, do not compress it.
-- If unsure whether a region is prose or executable/config data, leave it unchanged.
+- Do not invent, add, or interpret facts. Compress wording only.
+- Do not run scripts, CLIs, or network calls. Do not send text to external services.
+- Do not compress code files, config files, secrets, or credentials (`.py`, `.js`, `.ts`, `.json`, `.yaml`, `.toml`, `.env`, `.sh`, `.sql`, `.html`, `.css`, `.xml`, `.lock`).
+- If you are not sure whether a region is prose or code/config, leave it unchanged.
+- If compressing would remove a nuance that matters (legal, safety, contract text), keep that nuance and report it.
 
-## Pattern
+## Examples
 
-Original:
-> You should always make sure to run the test suite before pushing any changes to the main branch. This is important because it helps catch bugs early and prevents broken builds from being deployed to production.
+**standard**
+> Original: You should always make sure to run the test suite before pushing any changes to the main branch. This is important because it helps catch bugs early and prevents broken builds from being deployed to production.
+>
+> Compressed: Run tests before push to main. Catches bugs early, prevents broken prod deploys.
 
-Compressed:
-> Run tests before push to main. Catch bugs early, prevent broken prod deploys.
+**light**
+> Original: Due to the fact that the API is able to return a large number of results, it is recommended that you utilize pagination.
+>
+> Compressed: The API can return many results. Use pagination.
 
-Original:
-> The application uses a microservices architecture with the following components. The API gateway handles all incoming requests and routes them to the appropriate service. The authentication service is responsible for managing user sessions and JWT tokens.
-
-Compressed:
-> Microservices architecture. API gateway route all requests to services. Auth service manage user sessions + JWT tokens.
-
-## Boundaries
-
-- ONLY compress natural language files (.md, .txt, extensionless)
-- NEVER modify: .py, .js, .ts, .json, .yaml, .yml, .toml, .env, .lock, .css, .html, .xml, .sql, .sh
-- If file has mixed content (prose + code), compress ONLY the prose sections
-- If unsure whether something is code or prose, leave it unchanged
-- Do not create or rely on helper scripts for this skill
-
-## MEMORY.md Mode
-
-When target is `MEMORY.md` or a `.agents/memory/*.md` topic page, compression means memory curation, not only prose shortening. `MEMORY.md` is a short index (current focus, top rules, open follow-ups, topic links); move detail into topic pages instead of keeping it in the index.
-
-For memory entries:
-- Keep only durable decisions, stable repo conventions, reusable validation patterns, and active follow-ups.
-- Drop facts already stated in `AGENTS.md` or config, completed task logs, detailed histories, branch names, commit hashes, PR/run IDs, workflow IDs, validation transcripts, and implementation step lists unless still actionable.
-- Prefer outcome-only bullets. Example: a detailed shipped-release log can become `v0.1.0 shipped.`
-- If a bullet is only proof that past work happened, delete or collapse it.
-- If a bullet tells future agents how to act, keep it compact.
-
-`MEMORY.md` exception to normal preserve rules:
-- Do not preserve every URL, path, command, date, version, or ID just because it is technical.
-- Preserve technical strings only when they are needed for future decisions or workflows.
-
-Acceptance check for `MEMORY.md`:
-- `MEMORY.md` stays well under 200 lines; entries keep `[verified YYYY-MM-DD]`/`[unverified]` tags.
-- Memory entries should read like decisions/follow-ups, not changelog/docs.
-- No completed-task bullet should contain a full chain of PR + branch + commit + workflow + validation details.
-- Report compression by durable-memory impact, not by all removed details.
+**ultra**
+> Original: The application uses a microservices architecture. The API gateway handles all incoming requests and routes them to the appropriate service. The authentication service manages user sessions and JWT tokens.
+>
+> Compressed: Arch: microservices. API gateway → routes all requests. Auth service → sessions + JWT.

@@ -22,3 +22,6 @@
 - [x] Evaluate /code-review findings on workspace file links; fix path:line, absolute workspace paths, extension-less relative links, sub-agent prefix, context churn, duplicated predicate
 - [x] Run /verify on the live web UI (relative, path:line, absolute workspace path, LICENSE, external link)
 - [x] Jump to and highlight the linked line range in the Explorer preview (`:42`, `:42-50`, `#L42`), incl. top-level `README.md:42` hrefs
+
+- [x] Tell the main agent about the chat UI's runnable bash blocks and line-focused file links / external links in the system prompt
+- [x] Make the chat-interface prompt section web-chat-only (`run_session_loop`), excluded from CLI `run`, board tasks, sub-agents

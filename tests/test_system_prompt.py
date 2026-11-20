@@ -356,6 +356,28 @@ def test_get_system_prompt_with_memory_md_without_agents_md(tmp_path):
     )
 
 
+def test_chat_interface_section_only_for_web_chat_prompt(tmp_path):
+    chat_prompt = get_system_prompt(cwd=tmp_path, chat_interface=True)
+
+    assert "<chat_interface>" in chat_prompt
+    assert "Run button" in chat_prompt
+    assert "path/to/file.py:42" in chat_prompt
+    assert "<chat_interface>" not in get_system_prompt(cwd=tmp_path)
+    assert "<chat_interface>" not in get_sub_agent_system_prompt(cwd=tmp_path)
+
+
+def test_turn_instructions_forward_chat_interface(tmp_path):
+    instructions = _turn_instructions(
+        "Command body.",
+        settings=Settings(api_key="test", provider="openai", model="gpt-test"),
+        cwd=tmp_path,
+        chat_interface=True,
+    )
+
+    assert instructions is not None
+    assert "<chat_interface>" in instructions
+
+
 def test_get_sub_agent_system_prompt_with_agents_md(tmp_path, monkeypatch):
     (tmp_path / "AGENTS.md").write_text("Sub-agent rule.", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
