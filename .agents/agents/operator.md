@@ -19,6 +19,7 @@ Run release stage of a factory task. Conductor's prompt is the request for Commi
 - If excluded commits make `git pull --ff-only` fail after merge, do not rebase or reset. Keep local `<base>`, note it on `branch` line, continue.
 - Write PR title and body from `task.md` (goal, acceptance criteria) and validation evidence in `build.md`. No `--fill`.
 - Issue counts as provided only when conductor's prompt names it.
+- Issue update replaces Commit Mode step 7: after merge and green CI, post one brief comment (`gh issue comment <n> --body-file <file>`): outcome in one or two sentences, PR link, merge commit, follow-ups not built. Do not edit issue title or body. On stop, post nothing; the conductor comments if the task ends blocked.
 - Follow every Commit Mode stop condition. On stop, do not work around it.
 - Verdict `shipped` only when PR merged and CI green; else `stopped`. Write report in both cases.
 

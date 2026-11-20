@@ -6,11 +6,11 @@ sub_agents: investigator,planner,worker,reviewer,code-quality-reviewer,fixer,ope
 
 # Factory Mode
 
-Run one request through fixed pipeline `intake → triage → plan → build → review → release → verify → learn`.
+Run one request through fixed pipeline `intake → triage → plan → build → review → verify → release → learn`.
 
 Main session = conductor. Owns task folder, profile, gates, routing, TODO, memory, handoff; runs stage sub-agents one at a time. Never implements, fixes, reviews or ships itself.
 
-Invoking `/factory` = explicit authorization for release stage (commit, push, PR, merge, CI watch, issue update, as defined by `commit` command) and issue comments, once gates below allow it. Publishing a version is not part of factory; stays with human-run `/release`.
+Invoking `/factory` = explicit authorization for release stage (commit, push, PR, merge, CI watch, as defined by `commit` command) and the brief issue comments under `## Issue updates`, once gates below allow it. Publishing a version is not part of factory; stays with human-run `/release`.
 
 ## Input
 
@@ -31,13 +31,13 @@ Every stage writes output to a Markdown file in `.agents/factory/tasks/<id>/`. L
 | `review-N.md`, `quality-N.md` | `reviewer`, `code-quality-reviewer` | Findings per round |
 | `review-human-N.md` | conductor | Human change requests, verbatim |
 | `fix-N.md` | `fixer` | Findings fixed, files changed, validation |
+| `verify.md` | conductor | Validation, live check, evidence per acceptance criterion |
 | `release.md` | `operator` | Commit, PR, merge, CI, issue |
-| `verify.md` | conductor | Outcome against acceptance criteria |
 | `learn.md` | `retrospector` | Proposed improvements |
 
 Stage reruns after step back: write new file with suffix (`plan-2.md`), point `task.md` index at it, keep old file. `review-N`, `quality-N` count rounds per reviewer; `fix-N` counts across whole task.
 
-Task folders and `ledger.md` are committed to repo. Release commit carries task folder as written up to release (`task.md`, triage, plan, build, review, quality, fix files). Files written after that commit (`release.md`, `verify.md`, `learn.md`, later `task.md` updates, new `ledger.md` rows) stay in working tree; next factory release commit includes them.
+Task folders and `ledger.md` are committed to repo. Release commit carries task folder as written up to release (`task.md`, triage, plan, build, review, quality, fix, verify files). Files written after that commit (`release.md`, `learn.md`, later `task.md` updates, new `ledger.md` rows) stay in working tree; next factory release commit includes them.
 
 `task.md` shape:
 
@@ -81,9 +81,15 @@ Effective gate per stage = profile gate; when risk is `high`, every `auto` gate 
   - Approved, nothing changed: log `approved_unchanged`.
   - Changes requested: write feedback into task folder, rerun stage with it, ask again; log `approved_with_changes` once approved.
   - Stopped: log `rejected`, set status `rejected`, run learn, then hand off.
-- Review and release both `approve`: ask once after agent reviewers are clean: `Approve and release`, `Approve review, hold release`, `Request changes`. No stop option fits: say in question that typing `stop` stops task. Log both gates. On hold, log only review decision; set status `awaiting_approval` at stage release.
+- Review and release both `approve`: ask once after agent reviewers are clean and verify passes: `Approve and release`, `Approve review, hold release`, `Request changes`. No stop option fits: say in question that typing `stop` stops task. Log both gates. On hold, log only review decision; set status `awaiting_approval` at stage release.
 - If `ask_user` unavailable or returns no usable answer: set status `awaiting_approval`, end turn, state exact `/factory resume <id> approve` command.
-- Issue-sourced task: post stage file to issue before asking: `gh issue comment <n> --body-file <file>`.
+
+## Issue updates
+
+Issue-sourced task only. Never post stage files or per-stage progress to the issue. Post at most:
+
+- End, shipped: `operator` posts one brief comment (outcome in one or two sentences, PR link, merge commit, follow-ups not built). It does not edit issue title or body; this overrides `commit` step 7.
+- Blocked or rejected: conductor posts one brief comment: what stopped it, what is needed, PR link if one exists. Skip if the last comment already says the same.
 
 ## Stages
 
@@ -94,8 +100,8 @@ Effective gate per stage = profile gate; when risk is `high`, every `auto` gate 
 | plan | `planner` | `task.md`, `triage.md` | `plan.md` | Plan covers every acceptance criterion and every profile check |
 | build | `worker` | `task.md`, `triage.md`, `plan.md` | `build.md` | Profile checks and surface validation pass when conductor reruns them |
 | review | profile `reviewers`, `fixer` on findings | `task.md`, `plan.md`, `build.md`, earlier review and fix files | `review-N.md`, `quality-N.md`, `fix-N.md` | `No findings.` then `No code-quality findings.` after the latest fix |
-| release | `operator` | `task.md`, `build.md`, fix files | `release.md` | `release: shipped` |
-| verify | conductor | `task.md`, `release.md` | `verify.md` | CI green on `master`, each acceptance criterion confirmed against merged code, issue state correct |
+| verify | conductor | `task.md`, `plan.md`, `build.md`, fix files | `verify.md` | Full validation passes, live check passes, each acceptance criterion confirmed against working tree: `verify: pass` |
+| release | `operator` | `task.md`, `build.md`, fix files, `verify.md` | `release.md` | `release: shipped` (PR merged, PR checks and CI on merge commit green, issue state correct) |
 | learn | `retrospector` | whole task folder | `learn.md` | Ledger rows appended, memory updated |
 
 Stage notes:
@@ -103,9 +109,10 @@ Stage notes:
 - **Intake.** Issue: `gh issue view <n> --json number,title,body,labels,comments,state,url`. If folder for id exists and is not `done`, treat call as `resume`. Run `git status --short --branch`. Record unrelated dirty files in `task.md`. Stop if merge or rebase in progress. Ask one `ask_user` batch only when goal or acceptance criteria cannot be inferred. Run `git rev-list --oneline origin/<base>..<base>`; base is `master`. Unpushed commits on base: list under `## Environment notes` in `task.md`. Out of scope unless human includes them: release-gate `ask_user` call then adds second question (each question takes exactly three suggestions) with options `Ship them as separate commits in this PR`, `Exclude them (release from origin/<base>)`, `Stop`. When release is `auto`, ask that question alone before release. Pass chosen scope to `operator` verbatim. Without that decision, release must not start from base ahead of its upstream.
 - **Triage.** `triage: needs-human` forces `approve` gate. `triage: reject` (duplicate, already fixed, not worth doing) goes to human with reason through `approve` gate.
 - **Build.** Never trust success claim: inspect diff, rerun checks yourself. Reassess type and risk against real diff. Stage agents do not spawn sub-agents (pbi-agent runtime rejects nested runs for agents without scoped `sub_agents` list; nested time counts against parent's cap). `plan.md` splits work into groups: run `worker` once per group in plan order, each writing `build-<group>.md` and running that group's checks. Then one final `worker` pass integrates, runs full checks, writes `build.md`.
-- **Review.** Run profile's reviewers in order, each as own loop: reviewer → `fixer` with exact findings file → conductor reruns validation → same reviewer again, until no findings. Later reviewer's fixes do not reopen earlier reviewer's clean loop. Human change requests go to `review-human-N.md`, then through `fixer` and agent reviewers again.
-- **Release.** First run full validation for touched surfaces (full `uv run pytest`, full `bun run test:web`, plus lint, type, build checks). Then delegate to `operator` with: issue number when there is one, task-scoped paths from `build.md` and fix files, task folder `.agents/factory/tasks/<id>/`, and the human's decision on unpushed base commits (ship or exclude) when intake found any.
-- **Verify.** Read `release.md`. Confirm each acceptance criterion against merged `master`; record evidence per criterion.
+- **UI and CLI evidence.** Triage reproduces on base and build verifies the change, both with the `verify` skill (scratch-server recipe for web). Reviewers reuse `build.md` measurements and run only targeted checks for claims they doubt.
+- **Review.** Run profile's reviewers in order, each as own loop: reviewer → `fixer` with exact findings file → conductor reruns validation → same reviewer again, until no findings. Later reviewer's fixes do not reopen earlier reviewer's clean loop. Human change requests go to `review-human-N.md`, then through `fixer`, agent reviewers and verify again.
+- **Verify.** Runs after agent reviewers are clean, before the release gate question; it is the pre-commit check. Run full validation for touched surfaces (full `uv run pytest`, full `bun run test:web`, plus lint, type, build checks; `bun run docs:build` for docs). For web or CLI behavior, run the `verify` skill live: if no `fix-N` changed source since the live check in `build.md`, a smoke check of the primary acceptance criterion with the build fixtures; otherwise the full check. Confirm each acceptance criterion against the working tree; record evidence per criterion and the verdict line in `verify.md`. Any source change after verify (human change requests) reruns verify.
+- **Release.** Delegate to `operator` with: issue number when there is one, task-scoped paths from `build.md` and fix files, task folder `.agents/factory/tasks/<id>/`, and the human's decision on unpushed base commits (ship or exclude) when intake found any. Afterwards read `release.md` and confirm with `gh` that the PR is merged, CI on the merge commit is green and the issue state is correct.
 - **Learn.** Always runs, also for blocked and rejected tasks. Afterwards append one row per gate decision to `.agents/factory/tasks/ledger.md` (`date | task | profile | stage | gate | decision`). Ledger rows come only from `## Gate log`; one row per gated stage; combined review+release question logs two rows. Apply promotion rule from profiles file. Append `MEMORY.md` daily-log entry. Leave post-release task files and ledger rows uncommitted for next factory release. Do not apply proposals in `learn.md`; report them.
 
 ## Routing on failure
@@ -115,8 +122,8 @@ Failed exit check sends task back one stage, with failing evidence file as extra
 - build fails: rerun `worker` once with exact failing output; still failing, back to plan.
 - plan cannot cover criteria: back to triage.
 - review findings: `fixer`, then same reviewer again.
-- release stopped: back to review. Environmental cause (`gh` auth, remote, branch protection): set `blocked`.
-- verify fails: back to triage with `verify.md` as new finding, same task id.
+- verify fails: back to build with `verify.md` as failing evidence (`worker` rerun), then review and verify again; criterion the plan cannot meet: back to plan.
+- release stopped: back to review. Environmental cause (`gh` auth, remote, branch protection): set `blocked`. CI on `master` red after merge: set `blocked`, report failing run.
 
 Limits: 3 rounds per reviewer loop, 2 reruns of any other stage, 2 full passes after verify failure. Past a limit: set status `blocked`, log why, run learn, hand off.
 
