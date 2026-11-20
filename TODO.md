@@ -25,3 +25,10 @@
 
 - [x] Tell the main agent about the chat UI's runnable bash blocks and line-focused file links / external links in the system prompt
 - [x] Make the chat-interface prompt section web-chat-only (`run_session_loop`), excluded from CLI `run`, board tasks, sub-agents
+
+- [x] Design the `/factory` pipeline on top of project commands and sub-agents (flat conductor, per-stage `.md` outputs)
+- [x] Add `.agents/factory/profiles.md` with `docs`, `bug_fix`, `build` profiles, detection, risk and checks
+- [x] Add `.agents/commands/factory.md` and the `investigator`, `operator`, `retrospector` sub-agents
+- [x] Validate discovery: command listed, scoped sub-agent list resolves strictly
+- [!] `worker` and `fixer` use `model_profile_id: worker`, which is not a saved profile (`Unknown profile ID 'worker'`); build and fix stages fail until the profile exists or the agents are repointed
+- [ ] First live `/factory` run on a small docs task, then a bug fix
