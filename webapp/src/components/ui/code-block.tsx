@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { languageForPath } from "@/lib/code-language";
 import { highlightCode } from "@/lib/shiki-highlighter";
@@ -12,7 +12,16 @@ type CodeBlockProps = {
   className?: string;
   /** `tool` (default): wrapped, compact. `markdown`: unwrapped, taller fenced block. */
   variant?: "tool" | "markdown";
+  /**
+   * 1-based inclusive line range to highlight and scroll into view. Pass a new
+   * object to scroll again to the same range.
+   */
+  highlightLines?: { start: number; end: number } | null;
 };
+
+const LINE_HIGHLIGHT_ATTRIBUTE = "data-line-highlight";
+const LINE_HIGHLIGHT_CLASSES =
+  "[&_[data-line-highlight]]:inline-block [&_[data-line-highlight]]:min-w-full [&_[data-line-highlight]]:align-top [&_[data-line-highlight]]:bg-primary/15";
 
 const SHIKI_CLASSES =
   "[&_.shiki]:m-0 [&_.shiki]:bg-transparent! [&_.shiki]:text-(--shiki-light,var(--muted-foreground)) [&_.shiki_span]:text-(--shiki-light,inherit) dark:[&_.shiki]:text-(--shiki-dark,var(--muted-foreground)) dark:[&_.shiki_span]:text-(--shiki-dark,inherit)";
@@ -52,6 +61,7 @@ export function CodeBlock({
   path,
   className,
   variant = "tool",
+  highlightLines = null,
 }: CodeBlockProps) {
   const resolvedLanguage = language ?? languageForPath(path);
   const currentKey = resolvedLanguage ? `${resolvedLanguage}::${value}` : null;
@@ -75,16 +85,35 @@ export function CodeBlock({
   }, [currentKey, resolvedLanguage, value]);
 
   const highlightedHtml = state && state.key === currentKey ? state.html : null;
+  const [container, setContainer] = useState<HTMLElement | null>(null);
+
+  // Shiki renders one `span.line` per source line; the plain fallback mirrors
+  // that when a range is requested. Re-run after Shiki swaps in its markup.
+  useLayoutEffect(() => {
+    if (!container) return;
+    const lines = container.querySelectorAll<HTMLElement>(".line");
+    lines.forEach((line, index) => {
+      const lineNumber = index + 1;
+      line.toggleAttribute(
+        LINE_HIGHLIGHT_ATTRIBUTE,
+        highlightLines !== null && lineNumber >= highlightLines.start && lineNumber <= highlightLines.end,
+      );
+    });
+    if (highlightLines === null || lines.length === 0) return;
+    lines[Math.min(highlightLines.start, lines.length) - 1]
+      .scrollIntoView?.({ block: "center", inline: "nearest" });
+  }, [container, highlightLines, highlightedHtml]);
   const styles = VARIANT_CLASSES[variant];
   const baseClassName = cn(
     "m-0 overflow-auto font-mono text-xs leading-relaxed",
     styles.frame,
   );
-  const wrapperClassName = cn(baseClassName, SHIKI_CLASSES, styles.shiki, className);
+  const wrapperClassName = cn(baseClassName, SHIKI_CLASSES, styles.shiki, LINE_HIGHLIGHT_CLASSES, className);
 
   if (highlightedHtml) {
     return (
       <div
+        ref={setContainer}
         className={wrapperClassName}
         data-language={resolvedLanguage}
         data-highlighted="true"
@@ -96,12 +125,20 @@ export function CodeBlock({
 
   return (
     <pre
-      className={cn(baseClassName, "text-muted-foreground", styles.text, className)}
+      ref={setContainer}
+      className={cn(baseClassName, "text-muted-foreground", styles.text, LINE_HIGHLIGHT_CLASSES, className)}
       data-language={resolvedLanguage}
       data-highlighted="false"
       data-code-block="plain"
     >
-      {value}
+      {highlightLines
+        ? value.split("\n").map((line, index, all) => (
+          <Fragment key={index}>
+            <span className="line">{line}</span>
+            {index < all.length - 1 ? "\n" : null}
+          </Fragment>
+        ))
+        : value}
     </pre>
   );
 }

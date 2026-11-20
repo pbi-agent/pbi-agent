@@ -1,4 +1,4 @@
-import { useId, useState, type JSX, type ReactNode } from "react";
+import { useContext, useId, useState, type JSX, type MouseEvent, type ReactNode } from "react";
 import { ChevronRightIcon, SplitIcon } from "lucide-react";
 import type { ImageAttachment, TimelineItem, TimelineMessageItem } from "../../types";
 import { Button } from "../ui/button";
@@ -18,6 +18,7 @@ import { ToolResult } from "./ToolResult";
 import { useSkillCatalog } from "../../hooks/useSkillCatalog";
 import { Spinner } from "../ui/spinner";
 import { cn } from "@/lib/utils";
+import { OpenWorkspaceFileLinkContext } from "./workspaceFileLinks";
 
 type RoleClass = "user" | "error" | "notice" | "debug" | "assistant";
 
@@ -277,6 +278,14 @@ export function TimelineEntry({
   onForkMessage?: (messageId: string) => void;
 }) {
   const skillNames = useSkillCatalog();
+  const openWorkspaceFileLink = useContext(OpenWorkspaceFileLinkContext);
+  const handleAssistantContentClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (event.defaultPrevented || event.button !== 0
+      || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    const anchor = event.target instanceof Element ? event.target.closest("a[href]") : null;
+    const href = anchor?.getAttribute("href");
+    if (href && openWorkspaceFileLink?.(href)) event.preventDefault();
+  };
   const toolGroupDefaultOpen =
     item.kind === "tool_group"
     && item.status !== "running"
@@ -382,7 +391,11 @@ export function TimelineEntry({
         data-timeline-item-id={item.itemId}
       >
         {subAgentBanner}
-        <div className={CONTENT_ROLE_CLASSES[roleClass]} data-timeline-content>
+        <div
+          className={CONTENT_ROLE_CLASSES[roleClass]}
+          data-timeline-content
+          onClick={item.role === "assistant" && openWorkspaceFileLink ? handleAssistantContentClick : undefined}
+        >
           {item.markdown && roleClass !== "user" ? (
             <MarkdownContent content={item.content} copyable={item.role === "assistant"} />
           ) : (

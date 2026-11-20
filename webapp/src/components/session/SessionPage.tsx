@@ -57,6 +57,7 @@ import type {
   ProcessingState,
   SessionRecord,
   UserQuestionAnswer,
+  WorkspaceFileTreePayload,
 } from "../../types";
 import {
   getSavedSessionKey,
@@ -85,6 +86,11 @@ import { UserQuestionsPanel } from "./UserQuestionsPanel";
 import { Composer, type ComposerHandle } from "./Composer";
 import { ReplySelectionPopover } from "./ReplySelectionPopover";
 import { WorkspaceFileTreePanel } from "./WorkspaceFileTreePanel";
+import {
+  OpenWorkspaceFileLinkContext,
+  workspaceFileTargetForLink,
+  type WorkspaceFileReveal,
+} from "./workspaceFileLinks";
 import {
   WORKSPACE_FILE_TREE_STALE_TIME_MS,
   workspaceFileTreeRefetchInterval,
@@ -234,6 +240,12 @@ function useSubAgentItemMap(items: TimelineItem[]): Record<string, TimelineItem[
 const CHANGE_DOT_CLASS =
   "pointer-events-none absolute top-1 right-1 size-2 rounded-full bg-primary ring-2 ring-background";
 
+type SidePanel = "files" | WorkspaceFileReveal | "background" | "terminal" | "todo" | null;
+
+function isFilesSidePanel(panel: SidePanel): boolean {
+  return panel === "files" || (panel !== null && typeof panel === "object");
+}
+
 export function SessionPage({
   workspaceRoot,
   workspaceKey,
@@ -262,10 +274,11 @@ export function SessionPage({
   const composerRef = useRef<ComposerHandle>(null);
   const submitInFlightRef = useRef(false);
   const [directSubmitPending, setDirectSubmitPending] = useState(false);
-  const [sidePanel, setSidePanel] = useState<"files" | "background" | "terminal" | "todo" | null>(
+  const [sidePanel, setSidePanel] = useState<SidePanel>(
     () => (useTerminalStore.getState().open ? "terminal" : null),
   );
-  const fileTreeOpen = sidePanel === "files";
+  const fileReveal = typeof sidePanel === "object" ? sidePanel : null;
+  const fileTreeOpen = isFilesSidePanel(sidePanel);
   const backgroundPanelOpen = sidePanel === "background";
   const terminalPanelOpen = sidePanel === "terminal";
   const todoPanelOpen = sidePanel === "todo";
@@ -282,8 +295,9 @@ export function SessionPage({
   const setFileTreeOpen = useCallback(
     (next: boolean | ((current: boolean) => boolean)) => {
       setSidePanel((current) => {
-        const open = typeof next === "function" ? next(current === "files") : next;
-        return open ? "files" : current === "files" ? null : current;
+        const isOpen = isFilesSidePanel(current);
+        const open = typeof next === "function" ? next(isOpen) : next;
+        return open === isOpen ? current : open ? "files" : null;
       });
     },
     [],
@@ -352,6 +366,17 @@ export function SessionPage({
     refetchInterval: workspaceFileTreeRefetchInterval(fileTreeOpen),
     staleTime: WORKSPACE_FILE_TREE_STALE_TIME_MS,
   });
+
+  // Read the tree from the cache on click so file-tree refreshes don't change the
+  // context value and re-render every timeline entry.
+  const openWorkspaceFileLink = useCallback((href: string) => {
+    const tree = client.getQueryData<WorkspaceFileTreePayload>(workspaceFileTreeKey);
+    const knownFiles = new Set(tree?.items.map((item) => item.path));
+    const target = workspaceFileTargetForLink(href, window.location.origin, knownFiles, workspaceRoot);
+    if (target === null) return false;
+    setSidePanel({ ...target, workspaceKey: workspaceQueryKey });
+    return true;
+  }, [client, workspaceFileTreeKey, workspaceQueryKey, workspaceRoot]);
 
   const changedWorkspaceFileCount = useMemo(
     () =>
@@ -1570,28 +1595,30 @@ export function SessionPage({
               onAddReply={(quote, comment) => composerRef.current?.addReplySnippet(quote, comment)}
             />
           ) : null}
-          <SessionTimeline
-            items={displayedItems}
-            itemsVersion={displayedItemsVersion}
-            subAgents={displayedSubAgents}
-            subAgentItems={subAgentItems}
-            turnElapsedSeconds={displayedTurnElapsedSeconds}
-            turnCostUsd={displayedTurnCostUsd}
-            connection={sessionState?.connection ?? "disconnected"}
-            waitMessage={displayedWaitMessage}
-            processing={displayedProcessing}
-            parentSessionId={routeSessionId ?? sessionState?.sessionId ?? undefined}
-            showSubAgentCards={!isSubAgentRoute}
-            onForkMessage={!isSubAgentRoute ? handleForkMessage : undefined}
-            interruptingShellCallId={
-              interruptShellToolMutation.isPending
-                ? interruptShellToolMutation.variables
-                : null
-            }
-            onInterruptShellTool={
-              requestShellToolInterrupt
-            }
-          />
+          <OpenWorkspaceFileLinkContext.Provider value={openWorkspaceFileLink}>
+            <SessionTimeline
+              items={displayedItems}
+              itemsVersion={displayedItemsVersion}
+              subAgents={displayedSubAgents}
+              subAgentItems={subAgentItems}
+              turnElapsedSeconds={displayedTurnElapsedSeconds}
+              turnCostUsd={displayedTurnCostUsd}
+              connection={sessionState?.connection ?? "disconnected"}
+              waitMessage={displayedWaitMessage}
+              processing={displayedProcessing}
+              parentSessionId={routeSessionId ?? sessionState?.sessionId ?? undefined}
+              showSubAgentCards={!isSubAgentRoute}
+              onForkMessage={!isSubAgentRoute ? handleForkMessage : undefined}
+              interruptingShellCallId={
+                interruptShellToolMutation.isPending
+                  ? interruptShellToolMutation.variables
+                  : null
+              }
+              onInterruptShellTool={
+                requestShellToolInterrupt
+              }
+            />
+          </OpenWorkspaceFileLinkContext.Provider>
           {!isSubAgentRoute && sessionState?.pendingUserQuestions ? (
             <UserQuestionsPanel
               prompt={sessionState.pendingUserQuestions}
@@ -1716,7 +1743,9 @@ export function SessionPage({
             >
               {fileTreeOpen ? (
                 <WorkspaceFileTreePanel
+                  key={workspaceQueryKey}
                   workspaceKey={workspaceQueryKey}
+                  fileReveal={fileReveal?.workspaceKey === workspaceQueryKey ? fileReveal : null}
                   onClose={() => setFileTreeOpen(false)}
                 />
               ) : terminalPanelOpen ? (

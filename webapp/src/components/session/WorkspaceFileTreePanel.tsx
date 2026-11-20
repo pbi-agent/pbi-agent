@@ -41,6 +41,7 @@ import { Skeleton } from "../ui/skeleton";
 import { Toggle } from "../ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 import { SidebarSearchField } from "./SidebarSearchField";
+import type { WorkspaceFileLineRange, WorkspaceFileReveal } from "./workspaceFileLinks";
 
 type TreeNode = {
   name: string;
@@ -57,9 +58,11 @@ const TREE_WITH_PREVIEW_DEFAULT_PERCENT = 100 - PREVIEW_AUTO_MAX_PERCENT;
 
 export function WorkspaceFileTreePanel({
   workspaceKey,
+  fileReveal = null,
   onClose,
 }: {
   workspaceKey: string | null | undefined;
+  fileReveal?: WorkspaceFileReveal | null;
   onClose: () => void;
 }) {
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
@@ -72,6 +75,27 @@ export function WorkspaceFileTreePanel({
   const [showChangedOnly, setShowChangedOnly] = useState(false);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
   const [collapsedChangedPaths, setCollapsedChangedPaths] = useState<Set<string>>(() => new Set());
+  const [appliedFileReveal, setAppliedFileReveal] = useState<WorkspaceFileReveal | null>(null);
+  // Line range from the last revealing link; picking a file in the tree drops it.
+  const [lineTarget, setLineTarget] = useState<WorkspaceFileReveal | null>(null);
+  if (fileReveal !== null && fileReveal !== appliedFileReveal) {
+    setAppliedFileReveal(fileReveal);
+    setLineTarget(fileReveal.lines ? fileReveal : null);
+    setSelectedPath(fileReveal.path);
+    setSelectedPathRevision((revision) => revision + 1);
+    setPreviewMode("raw");
+    setSearchTerm("");
+    setShowChangedOnly(false);
+    setCollapsedChangedPaths(new Set());
+    const segments = fileReveal.path.split("/");
+    setExpandedPaths((current) => {
+      const expanded = new Set(current);
+      for (let i = 1; i < segments.length; i += 1) {
+        expanded.add(segments.slice(0, i).join("/"));
+      }
+      return expanded;
+    });
+  }
   const treeQueryKey = workspaceFileTreeQueryKey(workspaceKey);
   const treeQuery = useQuery({
     queryKey: treeQueryKey,
@@ -91,6 +115,8 @@ export function WorkspaceFileTreePanel({
     () => items.find((item) => item.path === selectedPath) ?? null,
     [items, selectedPath],
   );
+  const selectedInTree = selectedItem !== null;
+  const selectedLines = lineTarget !== null && lineTarget.path === selectedPath ? lineTarget.lines : null;
   const selectedGitStatus = selectedItem?.git_status ?? null;
   const selectedCanPreviewRaw = selectedGitStatus !== "D";
   const selectedCanDiff = selectedGitStatus !== null;
@@ -187,10 +213,11 @@ export function WorkspaceFileTreePanel({
   }, []);
 
   useLayoutEffect(() => {
-    if (selectedPath === null) return;
+    if (selectedPath === null || !selectedInTree) return;
     scheduleSelectedTreeRowScroll();
   }, [
     scheduleSelectedTreeRowScroll,
+    selectedInTree,
     selectedPath,
     selectedPathRevision,
   ]);
@@ -335,6 +362,7 @@ export function WorkspaceFileTreePanel({
                       onToggle={togglePath}
                       onSelect={(path, gitStatus) => {
                         setSelectedPath(path);
+                        setLineTarget(null);
                         setSelectedPathRevision((revision) => revision + 1);
                         setPreviewMode(gitStatus === null ? "raw" : "diff");
                       }}
@@ -360,7 +388,10 @@ export function WorkspaceFileTreePanel({
             >
               <section className="flex size-full min-h-0 min-w-0 flex-col gap-2 overflow-hidden p-3" aria-label="File preview">
                 <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 font-mono text-xs break-all text-muted-foreground">
-                  <span>{selectedPath}</span>
+                  <span>
+                    {selectedPath}
+                    {selectedLines ? formatLineRange(selectedLines) : null}
+                  </span>
                   <div className="flex shrink-0 items-center gap-2">
                     {selectedCanDiff && selectedCanPreviewRaw ? (
                       <ToggleGroup
@@ -466,6 +497,7 @@ export function WorkspaceFileTreePanel({
                   <FilePreviewContent
                     content={previewQuery.data?.content ?? ""}
                     path={selectedPath}
+                    highlightLines={selectedLines}
                   />
                 )}
               </section>
@@ -477,14 +509,21 @@ export function WorkspaceFileTreePanel({
   );
 }
 
+function formatLineRange(lines: WorkspaceFileLineRange): string {
+  return lines.end > lines.start ? `:${lines.start}-${lines.end}` : `:${lines.start}`;
+}
+
 function FilePreviewContent({
   content,
   path,
+  highlightLines,
 }: {
   content: string;
   path: string;
+  highlightLines: WorkspaceFileLineRange | null;
 }) {
-  if (isMarkdownPath(path)) {
+  // Rendered Markdown has no source lines, so a line target shows the source.
+  if (isMarkdownPath(path) && highlightLines === null) {
     return (
       <div className="min-h-0 w-full min-w-0 flex-1 overflow-auto">
         <div className="min-h-full rounded-md border border-border bg-card p-4 text-sm leading-relaxed">
@@ -496,7 +535,7 @@ function FilePreviewContent({
 
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-auto">
-      <CodeBlock value={content} path={path} />
+      <CodeBlock value={content} path={path} highlightLines={highlightLines} />
     </div>
   );
 }
