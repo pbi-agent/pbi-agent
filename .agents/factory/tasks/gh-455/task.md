@@ -5,8 +5,8 @@ type_reason: Label bug; Enhance prompt fails with GitHub Copilot 400 (tool choic
 source: https://github.com/pbi-agent/pbi-agent/issues/455
 risk: high
 risk_triggers: provider request paths (src/pbi_agent/providers/)
-stage: release
-status: running
+stage: done
+status: done
 ---
 # Fix "Enhance prompt" failing with tools-required 400 on no-tool provider calls
 
@@ -40,6 +40,8 @@ Out of scope: changing Enhance prompt rewrite instructions or output, composer e
 - quality-2: quality-2.md
 - fix: fix-1.md
 - verify: verify.md
+- release: release.md
+- learn: learn.md
 
 ## Gate log
 | stage | gate | decision | note |
@@ -51,6 +53,7 @@ Out of scope: changing Enhance prompt rewrite instructions or output, composer e
 | review | approve | approved_unchanged | human: Approve and release |
 | release | approve | approved_unchanged | human: Approve and release; no unpushed base commits |
 | verify | always_run | auto_pass | verify: pass; full validation green; live Copilot enhance + tool turn pass; all 4 AC confirmed |
+| learn | always_run | auto_pass | learn: 4 proposals; ledger rows appended; no gate eligible for promotion |
 
 ## Stage log
 | stage | round | result | note |
@@ -61,3 +64,6 @@ Out of scope: changing Enhance prompt rewrite instructions or output, composer e
 | review | validation | pass | conductor reran ruff check, format --check, basedpyright 0 errors, full pytest 2533 passed/9 skipped |
 | review | code-quality r2 | No code-quality findings. | quality-1 resolved; agent reviewers clean |
 | verify | validation+live | verify: pass | full pytest/ruff/basedpyright green; live Copilot enhance 200 (no tool fields on wire) + live Copilot tool turn 200 |
+| release | operator | release: shipped | PR #456 merged 79c3a32a; PR checks + post-merge CI (Tests, Deploy Docs) green; #455 closed, one comment |
+
+Learn proposals 1-4 applied on human request (2026-11-20); proposal 1 also mirrored into `plan-interactive.md`; verify skill recipe re-tested live (port 7457: PID = uv, cwd correct, kill frees port).

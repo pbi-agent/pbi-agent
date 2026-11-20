@@ -1,13 +1,13 @@
-- [x] Intake gh-450 (always_run)
-- [x] Triage gh-450 (auto)
-- [x] Plan gh-450 (auto)
-- [x] Build gh-450 (always_run)
-- [x] Review gh-450 (approve): reviewer round 1
-- [x] Review gh-450: code-quality-reviewer round 1
-- [x] Review+release gate gh-450 (human): Approve and release
-- [x] Release gh-450 (approve)
-- [x] Verify gh-450 (always_run)
-- [x] Learn gh-450 (always_run)
-- [x] Apply gh-450 learn proposals (verify skill to .agents + recipe/pkill gotcha, factory evidence reuse, AGENTS.md static bundle)
-- [x] Factory: verify stage before release
-- [x] Factory: issue updates = one brief final comment / blocked comment, no stage files
+- [x] Intake gh-455 (always_run)
+- [x] Triage gh-455 (approve)
+- [x] Plan gh-455 (approve)
+- [x] Build gh-455 (always_run)
+- [x] Review gh-455 (approve): reviewer round 1
+- [x] Review gh-455: code-quality-reviewer round 1 (findings: 1)
+- [x] Fix gh-455: fix-1 (quality-1)
+- [x] Review gh-455: code-quality-reviewer round 2
+- [x] Verify gh-455 (always_run)
+- [x] Review+release gate gh-455 (human): Approve and release
+- [x] Release gh-455 (approve)
+- [x] Learn gh-455 (always_run)
+- [x] Apply gh-455 learn proposals (plan/plan-interactive shared-owner rule, factory task-folder ruff format, AGENTS.md ruff md fences, verify skill uv --directory PID + stop check)
