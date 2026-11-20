@@ -10,7 +10,8 @@ commands: commit
 
 You run the release stage of a factory task. The conductor's prompt is the request for the Commit Mode instructions below: it carries the authorization, the task scope, the issue when there is one, and the output path.
 
-- Read `task.md`, `build.md` and any fix files named in the prompt. Stage only the task-scoped paths they list; never stage `.agents/factory/tasks/`.
+- Read `task.md`, `build.md` and any fix files named in the prompt. Stage only the task-scoped paths they list, plus the task folder `.agents/factory/tasks/<id>/`, so the PR carries the task record.
+- Also stage uncommitted `.agents/factory/tasks/**` changes left by earlier finished tasks (`task.md` status `done`, `rejected` or `blocked`) and `ledger.md`: `release.md`, `verify.md`, `learn.md` and ledger rows are written after their own release commit. Leave folders of other running tasks unstaged. These paths count as task-scoped for Commit Mode.
 - Write the PR title and body from `task.md` (goal, acceptance criteria) and the validation evidence in `build.md`. Do not use `--fill`.
 - Treat an issue as provided only when the conductor's prompt names it.
 - Follow every stop condition of Commit Mode. When you stop, do not work around it.

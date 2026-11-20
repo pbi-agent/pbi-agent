@@ -39,6 +39,8 @@ Every stage writes its output to a Markdown file in `.agents/factory/tasks/<id>/
 
 When a stage reruns after a step back, write a new file with a suffix (`plan-2.md`) and point the index in `task.md` at it. Keep the old file.
 
+Task folders and `ledger.md` are committed to the repo. The release commit carries the task folder as written up to release (`task.md`, triage, plan, build, review, quality and fix files). Files written after that commit (`release.md`, `verify.md`, `learn.md`, later `task.md` updates, new `ledger.md` rows) stay in the working tree; the next factory release commit includes them.
+
 `task.md` shape:
 
 ```md
@@ -98,9 +100,9 @@ Stage notes:
 - **Triage.** `triage: needs-human` forces an `approve` gate. `triage: reject` (duplicate, already fixed, not worth doing) goes to the human with the reason.
 - **Build.** Never trust a success claim: inspect the diff and rerun the checks yourself. Reassess type and risk against the real diff.
 - **Review.** Run the profile's reviewers in order, each as its own loop: reviewer → `fixer` with the exact findings file → conductor reruns validation → same reviewer again, until it reports no findings. Human change requests go to `review-human-N.md`, then through `fixer` and the agent reviewers again.
-- **Release.** Run full validation for the touched surfaces first (full `uv run pytest -q --tb=short -x`, full `bun run test:web`, plus lint, type and build checks). Then delegate to `operator`, giving it the issue number when there is one and the task-scoped paths from `build.md` and the fix files.
+- **Release.** Run full validation for the touched surfaces first (full `uv run pytest -q --tb=short -x`, full `bun run test:web`, plus lint, type and build checks). Then delegate to `operator`, giving it the issue number when there is one, the task-scoped paths from `build.md` and the fix files, and the task folder `.agents/factory/tasks/<id>/`.
 - **Verify.** Read `release.md`. Confirm each acceptance criterion against merged `master` and record the evidence per criterion.
-- **Learn.** Always runs, also for blocked and rejected tasks. Afterwards append one row per gate decision to `.agents/factory/tasks/ledger.md` (`date | task | profile | stage | gate | decision`), apply the promotion rule from the profiles file, and append the `MEMORY.md` daily-log entry. Do not apply the proposals in `learn.md`; report them.
+- **Learn.** Always runs, also for blocked and rejected tasks. Afterwards append one row per gate decision to `.agents/factory/tasks/ledger.md` (`date | task | profile | stage | gate | decision`), apply the promotion rule from the profiles file, and append the `MEMORY.md` daily-log entry. Leave the post-release task files and ledger rows uncommitted for the next factory release. Do not apply the proposals in `learn.md`; report them.
 
 ## Routing on failure
 
@@ -145,4 +147,4 @@ Reset or append `TODO.md` with one entry per stage, including its effective gate
 
 ## Handoff
 
-Report concisely: task id and folder, profile and risk with reasons, each stage with its gate decision, files touched, validation run and result, PR URL and CI result, proposals from `learn.md`, any gate now eligible for promotion, and what is blocked or waiting with the exact resume command.
+Report concisely: task id and folder, profile and risk with reasons, each stage with its gate decision, files touched, validation run and result, PR URL and CI result, proposals from `learn.md`, any gate now eligible for promotion, pending task files to commit (post-release files and ledger rows), and what is blocked or waiting with the exact resume command.
