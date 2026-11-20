@@ -124,11 +124,13 @@ def _reload_provider_initialization(
     workspace: Path | None = None,
     *,
     workspace_directory_key: str | None = None,
+    chat_interface: bool = False,
 ) -> str:
     system_prompt = get_system_prompt(
         settings=provider.settings,
         cwd=workspace,
         workspace_directory_key=workspace_directory_key,
+        chat_interface=chat_interface,
     )
     provider.set_system_prompt(system_prompt)
     provider.refresh_tools()

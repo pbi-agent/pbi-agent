@@ -35,6 +35,15 @@ _SUB_AGENT_PROMPT = """
 </persona>
 """.strip()
 
+_CHAT_INTERFACE_PROMPT = """
+<chat_interface>
+- The user reads replies in the web chat UI, which renders Markdown.
+- A fenced `bash`/`sh` code block gets a Run button that runs it in the workspace terminal; use one for commands the user should run.
+- Workspace file links open in the in-app preview: `[label](path/to/file.py:42)` or `:42-50` focuses those lines. Use them to point the user at files or sections.
+- External `https://` links open in a new browser tab.
+</chat_interface>
+""".strip()
+
 _MAX_FILE_BYTES = 1_000_000  # 1 MB
 _MEMORY_MAX_LINES = 200
 _MEMORY_MAX_BYTES = 25_000
@@ -458,6 +467,7 @@ def get_system_prompt(
     visible_agent_names: tuple[str, ...] | None = None,
     explicit_agent_names: set[str] | None = None,
     workspace_directory_key: str | None = None,
+    chat_interface: bool = False,
 ) -> str:
     excluded_names = _active_tool_excluded_names(settings, excluded_tools)
     active_names = {spec.name for spec in get_tool_specs(excluded_names=excluded_names)}
@@ -471,6 +481,8 @@ def get_system_prompt(
         ),
         cwd,
     )
+    if chat_interface:
+        prompt = f"{prompt}\n\n{_CHAT_INTERFACE_PROMPT}"
     if "shell" in active_names:
         prompt = _append_available_skills(
             prompt,

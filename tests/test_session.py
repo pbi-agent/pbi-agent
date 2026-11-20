@@ -311,6 +311,36 @@ def _stub_runtime_provider(provider):
     return _open_runtime_provider
 
 
+def test_run_single_turn_omits_web_chat_interface_prompt(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(tmp_path / "sessions.db"))
+    provider = _ProviderStub()
+    system_prompts: list[str | None] = []
+
+    @contextmanager
+    def capture_runtime_provider(*args, **kwargs):
+        del args
+        system_prompts.append(kwargs.get("system_prompt"))
+        yield provider
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        capture_runtime_provider,
+    )
+
+    run_single_turn(
+        "Inspect the workspace",
+        Settings(api_key="test-key", provider="openai", max_tool_workers=3),
+        _DisplaySpy(),
+    )
+
+    assert system_prompts
+    assert all(
+        prompt is not None and "<chat_interface>" not in prompt
+        for prompt in system_prompts
+    )
+
+
 def test_run_single_turn_executes_tool_loop_and_aggregates_usage(monkeypatch) -> None:
     provider = _ProviderStub()
     display = _DisplaySpy()
@@ -2938,6 +2968,10 @@ def test_run_session_loop_explicit_disabled_agent_reopens_provider_with_schema(
     assert "<available_sub_agents>" in turn_system_prompt
     assert "<name>reviewer</name>" in turn_system_prompt
     assert providers[1].request_instructions == [turn_system_prompt]
+    initial_system_prompt = opened[0]["system_prompt"]
+    assert isinstance(initial_system_prompt, str)
+    assert "<chat_interface>" in initial_system_prompt
+    assert "<chat_interface>" in turn_system_prompt
 
 
 def test_run_session_loop_honors_per_turn_tool_history_preference(

@@ -590,6 +590,7 @@ def run_session_loop(
             excluded_tools=_turn_excluded_tools(interactive_mode=False),
             cwd=workspace,
             workspace_directory_key=workspace_directory_key,
+            chat_interface=True,
         )
         with _open_runtime_provider(
             current_runtime.settings,
@@ -758,6 +759,7 @@ def run_session_loop(
                         provider,
                         workspace,
                         workspace_directory_key=workspace_directory_key,
+                        chat_interface=True,
                     )
                     if on_reload is not None:
                         on_reload()
@@ -770,6 +772,7 @@ def run_session_loop(
                         provider,
                         workspace,
                         workspace_directory_key=workspace_directory_key,
+                        chat_interface=True,
                     )
                     if on_reload is not None:
                         on_reload()
@@ -861,6 +864,7 @@ def run_session_loop(
                         else None
                     ),
                     workspace_directory_key=workspace_directory_key,
+                    chat_interface=True,
                 )
                 if turn_instructions is None and (
                     explicit_skill_names or explicit_agent_names
@@ -877,6 +881,7 @@ def run_session_loop(
                             else None
                         ),
                         workspace_directory_key=workspace_directory_key,
+                        chat_interface=True,
                     )
                 if turn_instructions is None and turn_interactive_mode:
                     turn_instructions = get_system_prompt(
@@ -891,6 +896,7 @@ def run_session_loop(
                             else None
                         ),
                         workspace_directory_key=workspace_directory_key,
+                        chat_interface=True,
                     )
                 turn_input = _build_user_turn_input(
                     text=user_input,
@@ -995,6 +1001,7 @@ def run_session_loop(
                                     ),
                                     workspace_root=workspace,
                                     workspace_directory_key=workspace_directory_key,
+                                    chat_interface=True,
                                     explicit_agent_names=explicit_agent_names,
                                     visible_sub_agent_names=(
                                         active_command.sub_agents
@@ -1795,6 +1802,7 @@ def _open_runtime_provider(
     workspace_directory_key: str | None = None,
     explicit_agent_names: set[str] | None = None,
     visible_sub_agent_names: tuple[str, ...] | None = None,
+    chat_interface: bool = False,
 ):
     from pbi_agent.mcp import McpServerPool
 
@@ -1810,6 +1818,7 @@ def _open_runtime_provider(
         explicit_agent_names=explicit_agent_names,
         visible_agent_names=visible_sub_agent_names,
         workspace_directory_key=workspace_directory_key,
+        chat_interface=chat_interface,
     )
     effective_tool_availability_overridden = (
         runtime.tool_availability_overridden
