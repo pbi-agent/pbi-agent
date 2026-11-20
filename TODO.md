@@ -9,3 +9,5 @@
 - [x] Learn gh-449 (always_run)
 - [x] Update factory instructions: task folders are committed, not gitignored (sub-agent)
 - [x] Apply gh-449 learn proposals (AGENTS.md, factory.md, plan.md, worker.md, pytest flags in .agents commands/skills)
+- [x] Review + compress the 12 instruction files used by the gh-449 run (one sub-agent per file); discovery tests pass
+- [x] Apply follow-up decisions: drop model_profile_id/allowed_tools (27 files), PR-checks wait, no Scope line, plan-interactive, factory typed stop, verify desc, runtime.md note

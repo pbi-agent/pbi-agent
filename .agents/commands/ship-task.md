@@ -1,8 +1,6 @@
 ---
 name: ship-task
 description: Ship Task Mode
-model_profile_id: worker-pro
-allowed_tools: read-image,shell
 ---
 
 # Ship Task Mode

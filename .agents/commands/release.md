@@ -1,8 +1,6 @@
 ---
 name: release
 description: Release Workflow Mode
-model_profile_id: worker-pro
-allowed_tools: read-image,write,shell
 skills: browser-use,release-writing
 ---
 

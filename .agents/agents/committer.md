@@ -1,7 +1,6 @@
 ---
 name: committer
 description: Create final local task commits.
-model_profile_id: worker-mini
 ---
 
 # Commit Mode

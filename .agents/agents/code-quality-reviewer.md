@@ -1,7 +1,5 @@
 ---
 name: code-quality-reviewer
 description: Review changes for code quality and maintainability.
-model_profile_id: worker-pro
-allowed_tools: read-image,shell
 commands: code-quality-review
 ---
