@@ -5,11 +5,28 @@ description: 'Commands, global options, and runtime defaults for pbi-agent.'
 
 # CLI Reference
 
-`pbi-agent` uses `argparse`, so `-h` and `--help` are available at the root and on every subcommand.
+`pbi-agent` uses `argparse`, so `-h` and `--help` are available at the root and on every subcommand. `--doc` is available at the same levels and prints a long-form Markdown guide.
 
 ::: tip
-If you run `pbi-agent` without a command, the CLI inserts `web` automatically. Global-option-only invocations such as `pbi-agent --api-key ...` therefore launch the browser UI.
+If you run `pbi-agent` without a command, the CLI inserts `web` automatically. Global-option-only invocations such as `pbi-agent --verbose` therefore launch the browser UI. Runtime provider/model flags such as `--api-key` are rejected with `web`, including this implicit `web`.
 :::
+
+## Built-in Guides (`--doc`)
+
+Every level of the CLI has a built-in usage guide: the root (`pbi-agent --doc`) and every command and subcommand at any depth (`pbi-agent <command> [<subcommand> ...] --doc`). Each guide covers purpose, usage, options, examples, workflows, related commands and pitfalls. Parent guides list their subcommands and the `--doc` command for each one, and the root guide covers global options, settings resolution and an index of all commands, so an agent can learn any part of the CLI from the terminal.
+
+- Output is plain Markdown on stdout, with no colors and no pager, and the command exits `0`.
+- `--doc` behaves like `--help`: it exits during argument parsing, so missing required arguments are ignored (`pbi-agent run --doc` needs no `--prompt`). It starts no server, makes no provider or network calls, writes no config, and works without saved config or API keys.
+- `pbi-agent --doc` prints the root overview; it does not start `web`.
+- Aliases show the guide of their target: `pbi-agent update --doc` prints the `upgrade` guide.
+- Put `--doc` after the deepest command name. `pbi-agent --doc run` prints the root guide, not the `run` guide.
+- Subcommands accept abbreviated long options, so `--d` is ambiguous where a command also has `--dev`, `--detach` or `--disable` (`web`, `sandbox`, `sandbox web`, `channels telegram configure`). Spell options out.
+
+```bash
+pbi-agent --doc
+pbi-agent config providers create --doc
+pbi-agent run --doc > run-guide.md
+```
 
 ## Global Options
 
@@ -21,7 +38,7 @@ If you run `pbi-agent` without a command, the CLI inserts `web` automatically. G
 | `--model` | `PBI_AGENT_MODEL` | per-provider | Model override for the selected provider. Generic omits `model` when this is unset. |
 | `--sub-agent-model` | `PBI_AGENT_SUB_AGENT_MODEL` | per-provider sub-model | Optional model override for `sub_agent`. When unset, child agents use the provider-specific sub-agent default from `config.py`. |
 | `--max-tokens` | `PBI_AGENT_MAX_TOKENS` | `16384` | Max output tokens for the selected provider. |
-| `--reasoning-effort` | `PBI_AGENT_REASONING_EFFORT` | `xhigh` for OpenAI; `high` otherwise | Requested reasoning effort: `low`, `medium`, `high`, or `xhigh`. |
+| `--reasoning-effort` | `PBI_AGENT_REASONING_EFFORT` | `medium` | Requested reasoning effort: `low`, `medium`, `high`, or `xhigh`. |
 | `--max-tool-workers` | `PBI_AGENT_MAX_TOOL_WORKERS` | `4` | Maximum parallel workers for tool execution. |
 | `--max-retries` | `PBI_AGENT_MAX_RETRIES` | `3` | Maximum retries for transient provider failures and rate limits. |
 | `--compact-threshold` | `PBI_AGENT_COMPACT_THRESHOLD` | `200000` | Context compaction threshold sent to OpenAI. |
@@ -324,8 +341,8 @@ Stored providers hold connection-only settings: provider kind, API key, and endp
 | Command | Purpose |
 | --- | --- |
 | `pbi-agent config providers list` | List saved providers. |
-| `pbi-agent config providers create --name NAME [--id ID] --kind PROVIDER [--auth-mode api_key|chatgpt_account|copilot_account] [--api-key KEY] [--api-key-env ENV] [--responses-url URL] [--generic-api-url URL] [--google-cloud-project PROJECT] [--google-cloud-location LOCATION]` | Create a provider. |
-| `pbi-agent config providers update ID [--name NAME] [--kind PROVIDER] [--auth-mode api_key|chatgpt_account|copilot_account] [--api-key KEY] [--api-key-env ENV] [--responses-url URL] [--generic-api-url URL] [--google-cloud-project PROJECT] [--google-cloud-location LOCATION]` | Update a provider by ID. |
+| `pbi-agent config providers create --name NAME [--id ID] --kind PROVIDER [--auth-mode api_key|chatgpt_account|copilot_account|xai_account] [--api-key KEY] [--api-key-env ENV] [--responses-url URL] [--generic-api-url URL] [--google-cloud-project PROJECT] [--google-cloud-location LOCATION]` | Create a provider. |
+| `pbi-agent config providers update ID [--name NAME] [--kind PROVIDER] [--auth-mode api_key|chatgpt_account|copilot_account|xai_account] [--api-key KEY] [--api-key-env ENV] [--responses-url URL] [--generic-api-url URL] [--google-cloud-project PROJECT] [--google-cloud-location LOCATION]` | Update a provider by ID. |
 | `pbi-agent config providers delete ID` | Delete a provider by ID. Deletion fails while any saved model profile still references it. |
 | `pbi-agent config providers auth-status ID` | Show stored account-auth status for a provider. |
 | `pbi-agent config providers auth-login ID [--method browser|device]` | Run the built-in browser or device login flow for a provider. |
@@ -446,7 +463,7 @@ pbi-agent run --session-id SESSION_ID --include-tool-history --prompt "Continue 
 
 ## Image Input Support
 
-Supported image formats are `.png`, `.jpg`, `.jpeg`, and `.webp`.
+Supported image formats are PNG, JPEG, WEBP, HEIC and HEIF, detected from file content, up to 20 MB per image.
 
 | Provider | Explicit image attachments (`--image`, `/image add`) | `read_image` tool |
 | --- | --- | --- |

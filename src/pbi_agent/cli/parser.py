@@ -23,6 +23,7 @@ from pbi_agent.config import (
 from pbi_agent.web.defaults import DEFAULT_WEB_PORT
 
 from .channels import add_channels_parser
+from .doc import attach_doc_options
 from .shared import DEFAULT_COMMAND, DEFAULT_SANDBOX_IMAGE
 
 
@@ -60,6 +61,8 @@ def build_parser() -> argparse.ArgumentParser:
         usage="%(prog)s [GLOBAL OPTIONS] [<command>] [COMMAND OPTIONS]",
         epilog=(
             "Run `pbi-agent <command> --help` for command-specific options. "
+            "Run `pbi-agent --doc` or `pbi-agent <command> [<subcommand> ...] --doc` "
+            "for a long-form Markdown guide. "
             "Defaults to `web` when no command is provided."
         ),
         formatter_class=CleanHelpFormatter,
@@ -1200,6 +1203,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     profiles_select.add_argument("profile_id", help="Model profile ID.")
 
+    attach_doc_options(parser)
     return parser
 
 
@@ -1226,7 +1230,13 @@ def _default_command_insertion_index(
     while index < len(argv):
         token = argv[index]
 
-        if token in command_names or token in {"-h", "--help", "-v", "--version"}:
+        if token in command_names or token in {
+            "-h",
+            "--help",
+            "-v",
+            "--version",
+            "--doc",
+        }:
             return None
         if token == "--":
             return index

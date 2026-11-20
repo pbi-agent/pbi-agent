@@ -17,7 +17,7 @@ The CLI calls `load_dotenv()` during settings resolution, so a local `.env` file
 | `PBI_AGENT_MODEL` | per-provider | Overrides the provider default model. For Generic, leaving this unset omits `model` from the request body. |
 | `PBI_AGENT_SUB_AGENT_MODEL` | per-provider sub-model | Optional override for the model used by `sub_agent`. When unset, child agents use the provider-specific sub-agent default from `config.py`. |
 | `PBI_AGENT_MAX_TOKENS` | `16384` | Output-token limit applied to the selected provider request body. |
-| `PBI_AGENT_REASONING_EFFORT` | `xhigh` for OpenAI; `high` otherwise | Requested reasoning effort. Providers may map this to provider-specific values internally. |
+| `PBI_AGENT_REASONING_EFFORT` | `medium` | Requested reasoning effort. Providers may map this to provider-specific values internally. |
 | `PBI_AGENT_MAX_TOOL_WORKERS` | `4` | Maximum tool execution workers. |
 | `PBI_AGENT_MAX_RETRIES` | `3` | Retry count for transient provider failures. |
 | `PBI_AGENT_COMPACT_THRESHOLD` | `200000` | Intended context compaction threshold for OpenAI. |
