@@ -26,6 +26,7 @@ from pbi_agent.models.messages import (
 )
 from pbi_agent.providers.google_provider import GoogleProvider
 from pbi_agent.session_store import MessageImageAttachment, MessageRecord
+from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ToolResult
 from pbi_agent.web import uploads
 
@@ -133,12 +134,37 @@ def test_google_build_request_body_uses_interactions_shape() -> None:
     assert body["stream"] is False
     assert body["store"] is True
     assert body["system_instruction"] == "be concise"
+    assert body["tools"]
     assert body["generation_config"] == {
         "thinking_level": "high",
         "thinking_summaries": "auto",
         "max_output_tokens": DEFAULT_MAX_TOKENS,
     }
     assert "previous_interaction_id" not in body
+
+
+def test_google_build_request_body_omits_tools_without_tools() -> None:
+    provider = GoogleProvider(
+        _make_settings(allowed_tools=()),
+        system_prompt="rewrite only",
+        tool_catalog=ToolCatalog(),
+    )
+    assert provider._tools == []
+
+    body = provider._build_request_body(
+        input_value="hello",
+        instructions="rewrite only",
+    )
+
+    assert "tools" not in body
+    assert "tool_choice" not in body
+    assert "tool_config" not in body
+    assert body["model"] == DEFAULT_GOOGLE_MODEL
+    assert body["input"] == "hello"
+    assert body["stream"] is False
+    assert body["store"] is True
+    assert body["system_instruction"] == "rewrite only"
+    assert body["generation_config"]["max_output_tokens"] == DEFAULT_MAX_TOKENS
 
 
 def test_google_build_request_body_preserves_custom_reasoning_effort() -> None:

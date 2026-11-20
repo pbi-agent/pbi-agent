@@ -24,6 +24,7 @@ from pbi_agent.models.messages import (
     WebSearchSource,
 )
 from pbi_agent.providers.xai_provider import XAIProvider
+from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ToolResult
 
 
@@ -188,6 +189,7 @@ def test_xai_build_request_body_omits_unsupported_reasoning_effort() -> None:
     assert body["max_output_tokens"] == DEFAULT_MAX_TOKENS
     assert body["stream"] is False
     assert body["parallel_tool_calls"] is True
+    assert body["tools"]
     assert body["include"] == [
         "web_search_call.action.sources",
         "reasoning.encrypted_content",
@@ -198,6 +200,31 @@ def test_xai_build_request_body_omits_unsupported_reasoning_effort() -> None:
     ]
     assert "instructions" not in body
     assert "reasoning" not in body
+
+
+def test_xai_build_request_body_omits_tool_fields_without_tools() -> None:
+    provider = XAIProvider(
+        _make_settings(allowed_tools=()),
+        system_prompt="rewrite only",
+        tool_catalog=ToolCatalog(),
+    )
+    assert provider._tools == []
+
+    body = provider._build_request_body(
+        input_items=[{"role": "user", "content": "hello"}],
+        instructions="rewrite only",
+    )
+
+    assert "tools" not in body
+    assert "tool_choice" not in body
+    assert "parallel_tool_calls" not in body
+    assert body["model"] == DEFAULT_XAI_MODEL
+    assert body["max_output_tokens"] == DEFAULT_MAX_TOKENS
+    assert body["stream"] is False
+    assert body["input"] == [
+        {"role": "system", "content": "rewrite only"},
+        {"role": "user", "content": "hello"},
+    ]
 
 
 def test_xai_build_request_body_maps_grok_3_mini_reasoning_effort() -> None:

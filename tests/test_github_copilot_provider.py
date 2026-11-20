@@ -17,6 +17,7 @@ from pbi_agent.providers.github_copilot_backend import (
     GITHUB_COPILOT_CHAT_COMPLETIONS_URL,
 )
 from pbi_agent.providers.github_copilot_provider import GitHubCopilotProvider
+from pbi_agent.tools.catalog import ToolCatalog
 
 
 class _DisplayStub:
@@ -469,6 +470,86 @@ def test_github_copilot_non_openai_model_uses_chat_completions(
     assert body["model"] == "claude-sonnet-4"
     assert body["stream"] is False
     assert body["messages"][1] == {"role": "user", "content": "Hello"}
+
+
+def test_github_copilot_chat_completions_omits_tool_fields_without_tools(
+    monkeypatch,
+) -> None:
+    request_details: dict[str, object] = {}
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del timeout
+        request_details["body"] = json.loads(request.data.decode("utf-8"))
+        return _FakeHTTPResponse(
+            json.dumps(
+                {
+                    "id": "chatcmpl_1",
+                    "model": "claude-sonnet-4",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "Rewritten"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                }
+            )
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GitHubCopilotProvider(
+        _make_settings(model="claude-sonnet-4", allowed_tools=()),
+        system_prompt="rewrite only",
+        tool_catalog=ToolCatalog(),
+    )
+    assert provider._delegate._tools == []  # type: ignore[attr-defined]
+
+    response = provider.request_turn(
+        user_input=UserTurnInput(text="fix teh grammer"),
+        display=_DisplayStub(),
+        session_usage=TokenUsage(model="claude-sonnet-4"),
+        turn_usage=TokenUsage(model="claude-sonnet-4"),
+    )
+
+    body = request_details["body"]
+    assert isinstance(body, dict)
+    assert response.text == "Rewritten"
+    assert "tools" not in body
+    assert "tool_choice" not in body
+    assert "parallel_tool_calls" not in body
+    assert body["model"] == "claude-sonnet-4"
+    assert body["max_tokens"] == DEFAULT_MAX_TOKENS
+    assert body["stream"] is False
+    assert body["messages"] == [
+        {"role": "system", "content": "rewrite only"},
+        {"role": "user", "content": "fix teh grammer"},
+    ]
+
+
+def test_github_copilot_responses_omits_tool_fields_without_tools() -> None:
+    provider = GitHubCopilotProvider(
+        _make_settings(allowed_tools=()),
+        system_prompt="rewrite only",
+        tool_catalog=ToolCatalog(),
+    )
+    delegate = provider._delegate  # type: ignore[attr-defined]
+    assert delegate._tools == []
+
+    body = delegate._build_request_body(
+        input_items=[{"role": "user", "content": "fix teh grammer"}],
+        instructions="rewrite only",
+    )
+
+    assert "tools" not in body
+    assert "tool_choice" not in body
+    assert "parallel_tool_calls" not in body
+    assert body["model"] == "gpt-5.4"
+    assert body["stream"] is True
+    assert body["instructions"] == "rewrite only"
 
 
 @pytest.mark.parametrize(

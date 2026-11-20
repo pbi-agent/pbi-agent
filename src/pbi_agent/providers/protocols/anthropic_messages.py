@@ -57,6 +57,8 @@ def build_messages_body(
         "tools": tools,
         "messages": messages,
     }
+    if not tools:
+        body.pop("tools")
 
     if supports_adaptive_thinking(settings.model):
         body["thinking"] = {"type": "adaptive"}

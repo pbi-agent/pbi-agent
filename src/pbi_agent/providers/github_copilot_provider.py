@@ -349,18 +349,9 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
     ) -> CompletedResponse:
         display.wait_start(waiting_message_for_input(input_value))
 
-        messages: list[dict[str, Any]] = [{"role": "system", "content": instructions}]
-        messages.extend(self._messages)
-
-        body: dict[str, Any] = {
-            "messages": messages,
-            "tools": self._tools,
-            "tool_choice": "auto",
-            "max_tokens": self._settings.max_tokens,
-            "stream": False,
-        }
-        if self._settings.model:
-            body["model"] = self._settings.model
+        body = self._protocol.build_request_body(instructions=instructions)
+        body["stream"] = False
+        messages: list[dict[str, Any]] = body["messages"]
 
         request_data = json.dumps(body).encode("utf-8")
         max_retries = self._settings.max_retries

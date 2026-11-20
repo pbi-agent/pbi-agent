@@ -1206,7 +1206,11 @@ class OpenAIProvider(Provider):
         }
         if self._settings.provider == "openai" and self._settings.reasoning_mode:
             body["reasoning"]["mode"] = self._settings.reasoning_mode
-        if request_options.tool_choice is not None:
+        if not self._tools:
+            # Tool-less calls (prompt enhancement, compaction) send no tool fields.
+            body.pop("tools")
+            body.pop("parallel_tool_calls")
+        elif request_options.tool_choice is not None:
             body["tool_choice"] = request_options.tool_choice
         if request_options.use_session_prompt_cache_key and session_id:
             body["prompt_cache_key"] = session_id

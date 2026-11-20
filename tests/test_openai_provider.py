@@ -278,6 +278,8 @@ def test_openai_build_request_body_uses_http_responses_shape() -> None:
     assert body["stream"] is False
     assert body["store"] is True
     assert body["parallel_tool_calls"] is True
+    assert body["tools"]
+    assert "tool_choice" not in body
     assert body["include"] == ["reasoning.encrypted_content"]
     assert body["prompt_cache_retention"] == "24h"
     assert body["context_management"] == [
@@ -346,6 +348,50 @@ def test_openai_build_request_body_uses_chatgpt_backend_contract() -> None:
         {"type": "compaction", "compact_threshold": 200000}
     ]
     assert "previous_response_id" not in body
+
+
+@pytest.mark.parametrize(
+    ("provider_name", "responses_url"),
+    [
+        ("openai", DEFAULT_RESPONSES_URL),
+        ("chatgpt", OPENAI_CHATGPT_RESPONSES_URL),
+    ],
+    ids=["openai-api", "chatgpt-codex"],
+)
+def test_openai_build_request_body_omits_tool_fields_without_tools(
+    provider_name: str,
+    responses_url: str,
+) -> None:
+    provider = OpenAIProvider(
+        _make_settings(
+            provider=provider_name,
+            responses_url=responses_url,
+            allowed_tools=(),
+        ),
+        system_prompt="rewrite only",
+        tool_catalog=ToolCatalog(),
+    )
+    assert provider._tools == []
+
+    body = provider._build_request_body(
+        input_items=[{"role": "user", "content": "hello"}],
+        instructions="rewrite only",
+        session_id="session-123",
+    )
+
+    assert "tools" not in body
+    assert "tool_choice" not in body
+    assert "parallel_tool_calls" not in body
+    assert body["model"] == DEFAULT_MODEL
+    assert body["input"] == [{"role": "user", "content": "hello"}]
+    assert body["instructions"] == "rewrite only"
+    assert body["include"] == ["reasoning.encrypted_content"]
+    assert "stream" in body
+    assert "store" in body
+    if provider_name == "chatgpt":
+        assert body["stream"] is True
+        assert body["store"] is False
+        assert body["prompt_cache_key"] == "session-123"
 
 
 def test_openai_build_request_body_does_not_send_reasoning_mode_to_chatgpt() -> None:
