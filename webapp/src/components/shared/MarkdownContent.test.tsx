@@ -59,3 +59,47 @@ describe("MarkdownContent run-in-terminal", () => {
     expect(screen.queryByRole("button", { name: "Run snippet in terminal" })).toBeNull();
   });
 });
+
+const LONG_EVIDENCE =
+  "The workspace contains several notebooks and scripts that load the raw dataset, ".repeat(5).trim();
+const WIDE_TABLE = [
+  "| Question | Evidence from the workspace | My assessment |",
+  "| --- | --- | --- |",
+  `| Is the data pipeline reproducible? | ${LONG_EVIDENCE} | Mostly |`,
+  "| Are tests present? | Some unit tests | Partial |",
+].join("\n");
+
+describe("MarkdownContent tables", () => {
+  it("wraps base tables in their own horizontal scroll container", () => {
+    render(<MarkdownContent content={WIDE_TABLE} />);
+    const wrapper = screen.getByRole("table").parentElement;
+    expect(wrapper).toHaveAttribute("data-markdown-table-scroll");
+    expect(wrapper).toHaveClass("overflow-x-auto");
+  });
+
+  it("keeps the copy action outside the scrolling table area", () => {
+    render(<MarkdownContent copyable content={WIDE_TABLE} />);
+    const wrapper = screen.getByRole("table").parentElement;
+    expect(wrapper).toHaveAttribute("data-markdown-table-scroll");
+    expect(wrapper).toHaveClass("overflow-x-auto");
+    const snippet = wrapper?.parentElement;
+    expect(snippet).toHaveAttribute("data-markdown-copyable-snippet", "table");
+    const button = screen.getByRole("button", { name: "Copy snippet" });
+    expect(snippet).toContainElement(button);
+    expect(wrapper).not.toContainElement(button);
+  });
+
+  it("preserves full-width tables, one-line cells and vertical growth", () => {
+    render(<MarkdownContent content={WIDE_TABLE} />);
+    const table = screen.getByRole("table");
+    expect(table).toHaveClass("min-w-full");
+    for (const cell of [
+      ...screen.getAllByRole("columnheader"),
+      ...screen.getAllByRole("cell"),
+    ]) {
+      expect(cell).toHaveClass("whitespace-nowrap");
+    }
+    const wrapperClass = table.parentElement?.className ?? "";
+    expect(wrapperClass).not.toMatch(/max-h-|overflow-y-/);
+  });
+});

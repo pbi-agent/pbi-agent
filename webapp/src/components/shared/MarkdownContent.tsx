@@ -194,7 +194,15 @@ type SnippetKind = "code" | "table" | "blockquote" | "list";
 
 const blockquoteClassName =
   "my-3 rounded-r-sm border-l-4 border-primary/40 bg-muted px-4 py-2 text-muted-foreground";
-const tableClassName = "my-3 min-w-full border-collapse text-xs";
+const tableClassName = "min-w-full border-collapse text-xs";
+
+function MarkdownTableScroll({ children }: { children: ReactNode }) {
+  return (
+    <div className="my-3 max-w-full min-w-0 overflow-x-auto" data-markdown-table-scroll="">
+      {children}
+    </div>
+  );
+}
 
 function CopyableSnippet({
   children,
@@ -365,7 +373,11 @@ const baseMarkdownComponents: Components = {
     );
   },
   table({ children }) {
-    return <table className={tableClassName}>{children}</table>;
+    return (
+      <MarkdownTableScroll>
+        <table className={tableClassName}>{children}</table>
+      </MarkdownTableScroll>
+    );
   },
   th({ children }) {
     return (
@@ -404,7 +416,9 @@ const copyableMarkdownComponents: Components = {
   table({ children }) {
     return (
       <CopyableSnippet kind="table" text={tableChildrenToTsv(children)}>
-        <table className={tableClassName}>{children}</table>
+        <MarkdownTableScroll>
+          <table className={tableClassName}>{children}</table>
+        </MarkdownTableScroll>
       </CopyableSnippet>
     );
   },
