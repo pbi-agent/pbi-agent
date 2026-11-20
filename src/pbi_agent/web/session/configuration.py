@@ -11,6 +11,7 @@ from pbi_agent.agents.project_installer import (
     ProjectAgentInstallResult,
     RemoteAgentCandidateSummary,
     install_project_agent,
+    is_project_agent_installed,
     list_remote_project_agents,
     resolve_default_agents_source,
 )
@@ -26,6 +27,7 @@ from pbi_agent.commands.project_installer import (
     ProjectCommandInstallResult,
     RemoteCommandCandidateSummary,
     install_project_command,
+    is_project_command_installed,
     list_remote_project_commands,
     resolve_default_commands_source,
 )
@@ -86,6 +88,7 @@ from pbi_agent.skills.project_installer import (
     ProjectSkillInstallResult,
     RemoteSkillCandidateSummary,
     install_project_skill,
+    is_project_skill_installed,
     list_remote_project_skills,
     resolve_default_skills_source,
 )
@@ -1004,6 +1007,10 @@ class ConfigurationMixin:
             "description": candidate.description,
             "model_profile_id": candidate.model_profile_id,
             "subpath": candidate.subpath,
+            "installed": is_project_command_installed(
+                candidate.command_id,
+                workspace=self._workspace_root,
+            ),
         }
 
     def _command_install_result_view(
@@ -1055,6 +1062,10 @@ class ConfigurationMixin:
             "name": candidate.name,
             "description": candidate.description,
             "subpath": candidate.subpath,
+            "installed": is_project_skill_installed(
+                candidate.name,
+                workspace=self._workspace_root,
+            ),
         }
 
     def _skill_install_result_view(
@@ -1110,6 +1121,10 @@ class ConfigurationMixin:
             "description": candidate.description,
             "model_profile_id": candidate.model_profile_id,
             "subpath": candidate.subpath,
+            "installed": is_project_agent_installed(
+                candidate.agent_name,
+                workspace=self._workspace_root,
+            ),
         }
 
     def _agent_install_result_view(
