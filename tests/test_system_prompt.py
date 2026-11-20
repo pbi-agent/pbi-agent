@@ -487,11 +487,11 @@ def test_get_system_prompt_with_project_skills(tmp_path, monkeypatch):
     )
     assert f"<location>{skill_path.resolve()}</location>" in prompt
     assert "Project skills use progressive disclosure" in prompt
-    assert "the user explicitly names it" in prompt
-    assert "Treat `$<skill-name>` in user input as an explicit request" in prompt
-    assert "strip the `$` and match `<skill-name>`" in prompt
+    assert "or user names it" in prompt
+    assert "`$<skill-name>` in user input = explicit request" in prompt
+    assert "strip `$`, match `<skill-name>`" in prompt
     assert (
-        "load its SKILL.md with `shell` (e.g. `cat <location>`) using the listed location"
+        "load its SKILL.md with `shell` (e.g. `cat <location>`) from listed location"
         in prompt
     )
 
@@ -739,10 +739,7 @@ def test_get_system_prompt_scopes_available_sub_agents_to_command_names(tmp_path
     assert "<name>reviewer</name>" in prompt
     assert "<name>fixer</name>" not in prompt
     assert "without `agent_type` for the default generalist" not in prompt
-    assert (
-        "with `agent_type` set to one of the available project sub-agent names"
-        in prompt
-    )
+    assert "with `agent_type` = one of the project sub-agent names" in prompt
 
 
 def test_get_system_prompt_includes_disabled_command_sub_agent(tmp_path):
@@ -825,7 +822,7 @@ def test_disabled_project_sub_agent_is_hidden_unless_explicitly_tagged(tmp_path)
 
     assert "<name>code-reviewer</name>" not in prompt
     assert "<name>code-reviewer</name>" in explicit_prompt
-    assert "Treat `@<agent-name> (agent)`" in explicit_prompt
+    assert "`@<agent-name> (agent)` or `@<agent-name>` in user input" in explicit_prompt
 
 
 def test_get_system_prompt_filters_tool_rules_by_active_availability(
@@ -1064,7 +1061,7 @@ def test_shell_only_prompt_tells_model_to_read_files_with_shell(tmp_path, monkey
 
     prompt = get_system_prompt(settings=settings, excluded_tools={"ask_user"})
 
-    assert "Use `shell` to read and search files." in prompt
+    assert "Use `shell` to read/search files." in prompt
     assert "prefer file edit tools" not in prompt
 
 

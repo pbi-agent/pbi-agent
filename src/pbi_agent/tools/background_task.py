@@ -18,7 +18,7 @@ SPEC = ToolSpec(
     ),
     prompt_usage=(
         "Use `background_task` only to list, inspect, read output of, or kill "
-        "tasks started by `shell` or `sub_agent` with `run_in_background`; never "
+        "tasks started by `shell`/`sub_agent` with `run_in_background`; never "
         "to run commands."
     ),
     parameters_schema={

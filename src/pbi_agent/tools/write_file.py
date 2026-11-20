@@ -20,8 +20,7 @@ SPEC = ToolSpec(
         "Best for new files, generated files, or small full-file rewrites."
     ),
     prompt_usage=(
-        "Use `write_file` to create a file or replace a whole text file with "
-        "complete content."
+        "Use `write_file` to create or fully replace a text file with complete content."
     ),
     parameters_schema={
         "type": "object",

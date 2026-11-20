@@ -30,8 +30,8 @@ SPEC = ToolSpec(
     name="apply_patch",
     description="Use the `apply_patch` tool to edit files. This is a FREEFORM tool, so do not wrap the patch in JSON.",
     prompt_usage=(
-        "Use `apply_patch` to edit files with a freeform patch; do not wrap "
-        "the patch in JSON."
+        "Use `apply_patch` to edit files with freeform patch; do not wrap "
+        "patch in JSON."
     ),
     is_destructive=True,
     freeform_format={

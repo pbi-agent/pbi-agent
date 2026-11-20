@@ -77,7 +77,7 @@ def build_spec(
             "automatically later, so do not poll."
         ),
         prompt_usage=(
-            "Use `sub_agent` only when the user requests delegation or a task "
+            "Use `sub_agent` only when user requests delegation or task "
             "benefits from isolated specialist work."
         ),
         parameters_schema={
