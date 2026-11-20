@@ -1,7 +1,6 @@
 ---
 name: explorer
 description: Explore the codebase and report focused file, module, and symbol findings.
-allowed_tools: read-image,shell
 ---
 
 # Explorer Mode

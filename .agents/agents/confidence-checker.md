@@ -1,7 +1,6 @@
 ---
 name: confidence-checker
 description: Assess readiness, risks, and confidence.
-model_profile_id: worker
 ---
 
 # Check Confidence Mode

@@ -1,8 +1,6 @@
 ---
 name: check-confidence
 description: Evaluate whether the current task or feature is ready to ship, with a calibrated confidence score, risks, and final validation gate.
-model_profile_id: worker-pro
-allowed_tools: read-image,shell
 ---
 
 # Check Confidence Mode
