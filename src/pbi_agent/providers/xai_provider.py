@@ -332,6 +332,9 @@ class XAIProvider(Provider):
             "parallel_tool_calls": True,
             "stream": False,
         }
+        if not self._tools:
+            body.pop("tools")
+            body.pop("parallel_tool_calls")
         if self._previous_response_id:
             body["previous_response_id"] = self._previous_response_id
 

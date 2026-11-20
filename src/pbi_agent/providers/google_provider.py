@@ -308,6 +308,8 @@ class GoogleProvider(Provider):
                 "max_output_tokens": self._settings.max_tokens,
             },
         }
+        if not self._tools:
+            body.pop("tools")
         if instructions:
             body["system_instruction"] = instructions
         if self._previous_interaction_id:

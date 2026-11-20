@@ -21,6 +21,7 @@ from pbi_agent.models.messages import (
 from pbi_agent.providers.anthropic_provider import ANTHROPIC_API_URL, AnthropicProvider
 from pbi_agent.providers.protocols.anthropic_messages import build_messages_body
 from pbi_agent.session_store import MessageImageAttachment, MessageRecord
+from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ToolResult
 from pbi_agent.web import uploads
 
@@ -69,6 +70,58 @@ def test_anthropic_request_body_preserves_custom_reasoning_effort() -> None:
     )
 
     assert body["output_config"] == {"effort": "focused"}
+
+
+def test_anthropic_request_body_omits_tools_without_tools(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    requests: list[dict[str, object]] = []
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ):
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        return make_http_response(
+            {
+                "id": "msg_1",
+                "content": [{"type": "text", "text": "Rewritten"}],
+                "usage": {"input_tokens": 5, "output_tokens": 2},
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = AnthropicProvider(
+        _make_settings(allowed_tools=()),
+        system_prompt="rewrite only",
+        tool_catalog=ToolCatalog(),
+    )
+    assert provider._tools == []
+
+    response = provider.request_turn(
+        user_message="fix teh grammer",
+        display=display_spy,
+        session_usage=TokenUsage(),
+        turn_usage=TokenUsage(),
+    )
+
+    assert response.text == "Rewritten"
+    body = requests[0]
+    assert "tools" not in body
+    assert "tool_choice" not in body
+    assert body["cache_control"] == {"type": "ephemeral"}
+    assert body["system"] == "rewrite only"
+    assert body["messages"] == [
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "fix teh grammer"}],
+        }
+    ]
 
 
 def test_anthropic_parse_response_extracts_cache_usage_and_tool_calls() -> None:
@@ -240,6 +293,8 @@ def test_anthropic_request_turn_preserves_history_and_wraps_tool_results(
     assert requests[0]["thinking"] == {"type": "adaptive"}
     assert requests[0]["output_config"] == {"effort": "max"}
     assert requests[0]["system"] == provider._system_prompt
+    assert requests[0]["tools"]
+    assert requests[0]["tools"] == provider._tools
     assert requests[0]["messages"] == [
         {
             "role": "user",
