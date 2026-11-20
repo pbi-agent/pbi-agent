@@ -331,6 +331,32 @@ it("copies rendered markdown tables as readable tsv snippets", async () => {
   expect(writeText).toHaveBeenCalledWith("Name\tValue\nAlpha\t1\nBeta\t2");
 });
 
+it("copies wide markdown tables as full tsv snippets", async () => {
+  const user = userEvent.setup();
+  const writeText = mockClipboardWrite();
+  const longCell = "Evidence gathered from notebooks, scripts and configs. ".repeat(8).trim();
+  const item: TimelineItem = {
+    kind: "message",
+    itemId: "msg-7b",
+    messageId: "msg-7b",
+    role: "assistant",
+    content: [
+      "| Question | Evidence from the workspace | My assessment |",
+      "| --- | --- | --- |",
+      `| Reproducible? | ${longCell} | Mostly |`,
+    ].join("\n"),
+    markdown: true,
+  };
+
+  renderTimelineEntry(item);
+
+  await user.click(screen.getByRole("button", { name: "Copy snippet" }));
+
+  expect(writeText).toHaveBeenCalledWith(
+    `Question\tEvidence from the workspace\tMy assessment\nReproducible?\t${longCell}\tMostly`,
+  );
+});
+
 it("copies rendered markdown block snippets only", async () => {
   const user = userEvent.setup();
   const writeText = mockClipboardWrite();
