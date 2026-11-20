@@ -78,4 +78,36 @@ describe("CodeBlock", () => {
     expect(pre.dataset.highlighted).toBe("false");
     expect(screen.queryByRole("alert")).toBeNull();
   });
+
+  it("highlights and scrolls to a line range in plain text", () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const { container } = render(
+      <CodeBlock value={"one\ntwo\nthree\nfour"} path="notes.unknownext" highlightLines={{ start: 2, end: 3 }} />,
+    );
+
+    const pre = container.querySelector("pre")!;
+    expect(pre.textContent).toBe("one\ntwo\nthree\nfour");
+    const highlighted = [...container.querySelectorAll("[data-line-highlight]")].map((line) => line.textContent);
+    expect(highlighted).toEqual(["two", "three"]);
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView.mock.contexts[0]).toHaveProperty("textContent", "two");
+  });
+
+  it("re-applies the line range once highlighted markup arrives", async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    highlightCodeMock.mockResolvedValue(
+      '<pre class="shiki"><code><span class="line">a</span>\n<span class="line">b</span></code></pre>',
+    );
+    const { container } = render(
+      <CodeBlock value={"a\nb"} path="main.py" highlightLines={{ start: 9, end: 9 }} />,
+    );
+
+    await waitFor(() => expect(container.querySelector("[data-highlighted='true']")).not.toBeNull());
+    const highlighted = [...container.querySelectorAll("[data-line-highlight]")].map((line) => line.textContent);
+    // Out-of-range targets scroll to the last line without highlighting anything.
+    expect(highlighted).toEqual([]);
+    expect(scrollIntoView.mock.contexts.at(-1)).toHaveProperty("textContent", "b");
+  });
 });

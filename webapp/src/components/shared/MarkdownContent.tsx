@@ -7,7 +7,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import ReactMarkdown, { type Components, type Options } from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform, type Components, type Options } from "react-markdown";
 
 type PluggableList = NonNullable<Options["remarkPlugins"]>;
 import remarkGfm from "remark-gfm";
@@ -293,6 +293,16 @@ function MarkdownCodeSnippet({
   );
 }
 
+// `README.md:42` parses as scheme `readme.md:`, which the default transform
+// blanks. Keep these file-with-line links (the name must contain a dot and the
+// rest is only digits, so no executable scheme can pass) for the timeline's
+// workspace-file click handler.
+const FILE_LINE_HREF = /^[^/:?#\s]*\.[^/:?#\s]*:\d+(?:-\d+|:\d+)?(?:[?#].*)?$/;
+
+function markdownUrlTransform(url: string): string {
+  return FILE_LINE_HREF.test(url) ? url : defaultUrlTransform(url);
+}
+
 const baseMarkdownComponents: Components = {
   p({ children }) {
     return <p className="mb-3 leading-relaxed last:mb-0">{children}</p>;
@@ -310,10 +320,13 @@ const baseMarkdownComponents: Components = {
     return <h4 className="mt-4 mb-2 text-sm font-semibold first:mt-0">{children}</h4>;
   },
   a({ children, href, title }) {
+    const opensNewTab = href !== undefined && /^(?:https?:)?\/\//i.test(href);
     return (
       <a
         href={href}
         title={title}
+        target={opensNewTab ? "_blank" : undefined}
+        rel={opensNewTab ? "noopener noreferrer" : undefined}
         className="text-primary underline underline-offset-2 transition-colors hover:text-primary/80"
       >
         {children}
@@ -443,7 +456,7 @@ export function MarkdownContent({
     [components, defaults],
   );
   return (
-    <ReactMarkdown remarkPlugins={plugins} components={mergedComponents}>
+    <ReactMarkdown remarkPlugins={plugins} components={mergedComponents} urlTransform={markdownUrlTransform}>
       {content}
     </ReactMarkdown>
   );

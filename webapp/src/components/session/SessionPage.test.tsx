@@ -1,6 +1,7 @@
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router-dom";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { SessionPage } from "./SessionPage";
 import { renderWithProviders } from "../../test/render";
 import { useLiveSessionEvents } from "../../hooks/useLiveSessionEvents";
@@ -39,17 +40,18 @@ import type {
   LiveSession,
   SessionDetailPayload,
   SessionRecord,
+  TimelineItem,
   UsagePayload,
 } from "../../types";
 
 type SessionTimelineMockProps = {
-  items: unknown[];
+  items: TimelineItem[];
   itemsVersion: unknown;
   [key: string]: unknown;
 };
 
 const usageBarMock = vi.hoisted(() => vi.fn());
-const sessionTimelineMock = vi.hoisted(() => vi.fn<(props: SessionTimelineMockProps) => void>());
+const sessionTimelineMock = vi.hoisted(() => vi.fn<(props: SessionTimelineMockProps) => ReactNode>());
 const composerFocusMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../../hooks/useLiveSessionEvents", () => ({
@@ -109,8 +111,7 @@ vi.mock("./SessionSidebar", () => ({
 
 vi.mock("./SessionTimeline", () => ({
   SessionTimeline: (props: SessionTimelineMockProps) => {
-    sessionTimelineMock(props);
-    return <div>Timeline {props.items.length}</div>;
+    return sessionTimelineMock(props) ?? <div>Timeline {props.items.length}</div>;
   },
 }));
 
@@ -624,6 +625,7 @@ function dispatchWindowKeydown(init: KeyboardEventInit) {
 
 describe("SessionPage", () => {
   beforeEach(() => {
+    sessionTimelineMock.mockReset();
     window.localStorage.clear();
     delete document.body.dataset.mockTranscript;
     useSidebarStore.setState({ isOpen: true });
@@ -1085,6 +1087,133 @@ describe("SessionPage", () => {
       expect(fetchWorkspaceFilePreview).toHaveBeenCalledWith("src/app.ts");
     });
     expect(await screen.findByText("src/app.ts")).toBeInTheDocument();
+  });
+
+  it("reveals workspace files from saved assistant links without navigating", async () => {
+    const user = userEvent.setup();
+    const { TimelineEntry } = await import("./TimelineEntry");
+    sessionTimelineMock.mockImplementation(({ items }) =>
+      items.map((item) => <TimelineEntry key={item.itemId} item={item} />),
+    );
+    const path = "docs/04_commercial_assessment.md";
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord(),
+      active_live_session: null,
+      history_items: [{
+        item_id: "msg-assessment",
+        message_id: "msg-assessment",
+        role: "assistant",
+        content: `[Pilot criteria](${path}) · [Full link](${window.location.origin}/sessions/${path}) · https://markdown.new/`,
+        markdown: true,
+        part_ids: { content: "part-assessment", file_paths: [], image_attachments: [] },
+        file_paths: [],
+        image_attachments: [],
+        historical: true,
+        created_at: "2026-11-20T09:55:38Z",
+      }],
+    });
+    vi.mocked(fetchWorkspaceFileTree).mockResolvedValue({
+      items: [{ path, kind: "file" }],
+      scan_status: "ready",
+      is_stale: false,
+      file_count: 1,
+      index_generation: "test-generation",
+      index_revision: 1,
+      truncated: false,
+      search_approximated: false,
+      error: null,
+    });
+    vi.mocked(fetchWorkspaceFilePreview).mockResolvedValue({
+      path,
+      content: "# Pilot criteria overview",
+      size_bytes: 25,
+      truncated: false,
+      error: null,
+    });
+    renderSessionRoute("/sessions/session-1");
+
+    const link = await screen.findByRole("link", { name: "Pilot criteria" });
+    const webLink = screen.getByRole("link", { name: "https://markdown.new/" });
+    expect(webLink).toHaveAttribute("target", "_blank");
+    expect(fireEvent.click(webLink)).toBe(true);
+    expect(screen.queryByRole("complementary", { name: "Workspace explorer" })).not.toBeInTheDocument();
+    expect(fireEvent.click(link)).toBe(false);
+    const explorer = screen.getByRole("complementary", { name: "Workspace explorer" });
+    const preview = within(explorer).getByRole("region", { name: "File preview" });
+    expect(await within(preview).findByRole("heading", { name: "Pilot criteria overview" })).toBeInTheDocument();
+    expect(fetchWorkspaceFilePreview).toHaveBeenCalledWith(path);
+    const selectedRow = await within(explorer).findByRole("button", { name: "04_commercial_assessment.md" });
+    expect(selectedRow).toHaveAttribute("data-selected", "true");
+
+    await user.click(within(preview).getByRole("button", { name: "Close file preview" }));
+    const search = within(explorer).getByRole("searchbox", { name: "Search files" });
+    await user.type(search, "no-match");
+    const absoluteLink = screen.getByRole("link", { name: "Full link" });
+    absoluteLink.focus();
+    await user.keyboard("{Enter}");
+    expect(search).toHaveValue("");
+    expect(within(explorer).getByRole("region", { name: "File preview" })).toHaveTextContent(path);
+    expect(within(explorer).getByRole("button", { name: "04_commercial_assessment.md" })).toHaveAttribute("data-selected", "true");
+  });
+
+  it("jumps to the linked line and shows markdown source until a tree pick", async () => {
+    const user = userEvent.setup();
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const { TimelineEntry } = await import("./TimelineEntry");
+    sessionTimelineMock.mockImplementation(({ items }) =>
+      items.map((item) => <TimelineEntry key={item.itemId} item={item} />),
+    );
+    const path = "docs/plan.md";
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord(),
+      active_live_session: null,
+      history_items: [{
+        item_id: "msg-plan",
+        message_id: "msg-plan",
+        role: "assistant",
+        content: `See [scope](${path}:2-3).`,
+        markdown: true,
+        part_ids: { content: "part-plan", file_paths: [], image_attachments: [] },
+        file_paths: [],
+        image_attachments: [],
+        historical: true,
+        created_at: "2026-11-20T09:55:38Z",
+      }],
+    });
+    vi.mocked(fetchWorkspaceFileTree).mockResolvedValue({
+      items: [{ path, kind: "file" }],
+      scan_status: "ready",
+      is_stale: false,
+      file_count: 1,
+      index_generation: "test-generation",
+      index_revision: 1,
+      truncated: false,
+      search_approximated: false,
+      error: null,
+    });
+    vi.mocked(fetchWorkspaceFilePreview).mockResolvedValue({
+      path,
+      content: "# Plan\nScope line\nMore scope\nDone",
+      size_bytes: 33,
+      truncated: false,
+      error: null,
+    });
+    renderSessionRoute("/sessions/session-1");
+
+    expect(fireEvent.click(await screen.findByRole("link", { name: "scope" }))).toBe(false);
+    const explorer = screen.getByRole("complementary", { name: "Workspace explorer" });
+    const preview = within(explorer).getByRole("region", { name: "File preview" });
+    await waitFor(() => expect(preview.querySelectorAll("[data-line-highlight]")).toHaveLength(2));
+    expect(preview).toHaveTextContent(`${path}:2-3`);
+    expect([...preview.querySelectorAll("[data-line-highlight]")].map((line) => line.textContent))
+      .toEqual(["Scope line", "More scope"]);
+    expect(scrollIntoView.mock.contexts.at(-1)).toHaveProperty("textContent", "Scope line");
+    expect(within(preview).queryByRole("heading", { name: "Plan" })).not.toBeInTheDocument();
+
+    await user.click(await within(explorer).findByRole("button", { name: "plan.md" }));
+    expect(await within(preview).findByRole("heading", { name: "Plan" })).toBeInTheDocument();
+    expect(preview.querySelector("[data-line-highlight]")).toBeNull();
   });
 
   it("renders markdown file previews as markdown", async () => {
