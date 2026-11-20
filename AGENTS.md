@@ -18,10 +18,10 @@ This file provides guidance to Coding Agent when working with code in this repos
 ## Common Commands
 
 ```bash
-uv run pytest -q --tb=short -x
-uv run pytest -q --tb=short -x tests/test_cli.py
-uv run pytest -q --tb=short -x tests/test_cli.py::DefaultWebCommandTests::test_main_defaults_to_web_for_global_options_only
-uv run pytest -q --tb=short -x -m slow
+uv run pytest                       # addopts already sets -q --tb=short -x
+uv run pytest tests/test_cli.py
+uv run pytest tests/test_cli.py::DefaultWebCommandTests::test_main_defaults_to_web_for_global_options_only
+uv run pytest -m slow
 bun run test:web
 bun run test:web:watch
 uv run ruff check .
@@ -51,7 +51,7 @@ uv tool install --reinstall .
 ## TODO
 
 - Keep a checklist in `TODO.md`. Tick each item when it’s done, and add anything new you find.
-- `TODO.md` is session-only; reset if complete, append if unfinished.
+- `TODO.md` holds only the current session's items. On the first task of a session, clear all previous items (finished or not; durable follow-ups belong in `MEMORY.md` or the task record) and start fresh. Within a session, append and update; never overwrite items added earlier in the same session.
 - Bullets: `- [ ]` pending, `- [>]` in progress, `- [x]` done, `- [!]` blocked, `- [-]` dropped. Keep it updated.
 
 ## Communication
@@ -75,11 +75,14 @@ uv tool install --reinstall .
 - Tools: `src/pbi_agent/tools/registry.py` registers all tools. Handlers receive `ToolContext` (`settings`, `display`, usage, tracer, parent context). Core tools include `apply_patch`, `shell`, `sub_agent`, `read_image`, and `read_web_url`.
 - Settings: `src/pbi_agent/config.py` resolves runtime field-by-field from CLI flags, `PBI_AGENT_*` env vars, provider-specific env vars, saved providers/model profiles in `~/.pbi-agent/config.json`, then defaults, and loads `.env` via `python-dotenv`.
 - Models and usage accounting: `src/pbi_agent/models/messages.py` defines `TokenUsage`, `ToolCall`, and `CompletedResponse`, and also loads model pricing/context windows (with optional user overrides from `~/.pbi-agent/model_catalog.json`).
+- CLI `--doc`: every parser path has a packaged guide `src/pbi_agent/cli/guides/<dotted.path>.md` (root: `pbi-agent.md`), attached post-build by `src/pbi_agent/cli/doc.py`. Adding or renaming a command, subcommand or visible option requires updating its guide (and the parent's `## Subcommands` plus the root `## Commands` index); `tests/cli/test_doc.py` fails on missing guides, undocumented options, stale flags and usage drift.
 
 ## Testing Conventions
 
 - Test files: `tests/test_*.py`, auto-discovered by pytest.
 - Prefer pytest-style with plain `assert` and `@pytest.mark.parametrize`.
+- `pyproject.toml` `addopts` already sets `-q --tb=short -x`; adding `-q` again yields `-qq` and hides the summary line. Read pass/fail from the exit code, or drop the extra `-q` to see totals.
+- Known flaky: `tests/test_web_serve.py::test_lost_manager_lease_rejects_new_live_sessions` (fails about 1 in 7 on clean `master`). If it is the only failure, rerun it once in isolation and rerun the suite once; record both results. Do not treat it as a regression or loop on it. Fixing it is a tracked follow-up.
 - Shared fixtures live in `tests/conftest.py`; `DisplaySpy` is the main display test double.
 - Webapp tests use Vitest + jsdom + Testing Library and live alongside the frontend source under `webapp/src/**/*.test.ts` and `webapp/src/**/*.test.tsx`.
 - Webapp test setup lives in `webapp/src/test/setup.ts`; shared frontend test helpers live under `webapp/src/test/`.
@@ -108,7 +111,7 @@ uv tool install --reinstall .
 - Workspace confinement: `shell` tool rejects path traversal; all file tools validate paths against workspace boundaries.
 - Keep the web implementation aligned with the current FastAPI backend plus Vite/React frontend; do not introduce a parallel web framework or client stack.
 - Validation by touched surface:
-  - Python changes: `uv run ruff check .`, `uv run ruff format --check .`, `uv run basedpyright`, and the relevant `uv run pytest -q --tb=short -x ...` scope.
+  - Python changes: `uv run ruff check .`, `uv run ruff format --check .`, `uv run basedpyright`, and the relevant `uv run pytest ...` scope.
   - Frontend changes: `bun run test:web`, `bun run lint`, `bun run typecheck`, and `bun run web:build`.
   - Docs changes: `bun run docs:build`.
-- Before handoff on broad changes, the repo-level checks are `uv run ruff check .`, `uv run ruff format --check .`, `uv run basedpyright`, `bun run lint`, `bun run typecheck`, and `uv run pytest -q --tb=short -x`.
+- Before handoff on broad changes, the repo-level checks are `uv run ruff check .`, `uv run ruff format --check .`, `uv run basedpyright`, `bun run lint`, `bun run typecheck`, and `uv run pytest`.

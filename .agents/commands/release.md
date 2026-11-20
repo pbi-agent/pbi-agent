@@ -94,7 +94,7 @@ When user asks to continue, merge, or publish existing release workflow:
    - `uv run basedpyright`
    - `uv run python scripts/dead_code.py`
    - `bun run lint` (ESLint + `@shadcn/lint` rules)
-   - `uv run pytest -q --tb=short -x`
+   - `uv run pytest`
    - `bun run docs:build`
 12. Stage only release-scoped paths and inspect `git diff --cached`.
 13. Commit `chore: release v<version>`.

@@ -77,6 +77,8 @@ Final plan must be plan-only, concise by default, and include:
 * A brief summary section
 * Important changes or additions to public APIs/interfaces/types
 * Test cases and scenarios
+
+If the change adds hand-written content that mirrors code (guides, doc tables, option or schema lists), the test plan must guard both directions: every code item appears in the content, and every item named in the content still exists in the code. Name the test for each direction.
 * Explicit assumptions and defaults chosen where needed
 
 When possible, prefer compact structure with 3-5 short sections, usually: Summary, Key Changes or Implementation Changes, Test Plan, and Assumptions. Do not include separate Scope section unless scope boundaries matter to avoid mistakes.

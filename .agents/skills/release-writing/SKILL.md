@@ -98,7 +98,7 @@ Omit empty categories. Use active voice, user-facing impact, minimal jargon.
    - `uv run basedpyright`
    - `uv run python scripts/dead_code.py`
    - `bun run lint`
-   - `uv run pytest -q --tb=short -x`
+   - `uv run pytest`
    - `bun run docs:build`
 8. Stage only release-scoped paths (`pyproject.toml`, `uv.lock`, changelog files, VitePress config). Re-check `git diff --cached`.
 9. Commit: `chore: release v<version>`.

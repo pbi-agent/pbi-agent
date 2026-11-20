@@ -170,7 +170,7 @@ If review fails: do not proceed; state the blocking issue briefly; rerun `review
 ## Final Validation
 
 Run validation for every touched surface:
-- Python: `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q --tb=short -x`
+- Python: `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest`
 - Frontend: `bun run test:web`, `bun run lint`, `bun run typecheck`, `bun run web:build`
 - API/SSE contract changes: run project codegen command and codegen tests
 - Static web assets: verify rebuilt hashed chunks are tracked

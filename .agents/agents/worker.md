@@ -64,4 +64,6 @@ At finish, give compact handoff:
 - validation run + result
 - unrelated dirty files or pre-existing validation failures
 
+When you correct a factual claim in docs or packaged guides, grep `docs/` and other packaged docs for the same claim. Fix every occurrence in the same change, or list each one you leave under `Contradictions left` in your handoff with file:line, so it is routed before review.
+
 Preserve unrelated changes. Name unrelated changes; do not imply whole workspace clean unless repo-wide validation passed.

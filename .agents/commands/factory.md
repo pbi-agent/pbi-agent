@@ -61,6 +61,10 @@ status: running | awaiting_approval | blocked | rejected | done
 ## Stage files
 ## Gate log
 | stage | gate | decision | note |
+<!-- decision is one of: auto_pass, skipped, approved_unchanged, approved_with_changes, rejected, blocked -->
+## Stage log
+| stage | round | result | note |
+<!-- reviewer and fixer rounds, validation runs, release outcome -->
 ```
 
 Update `stage` and `status` in `task.md` before every stage starts and at every stop, so `resume` works from a fresh session.
@@ -96,13 +100,13 @@ Effective gate per stage is the profile gate, raised to `approve` when risk is `
 
 Stage notes:
 
-- **Intake.** For an issue, use `gh issue view <n> --json number,title,body,labels,comments,state,url`. If a folder for the id exists and is not `done`, treat the call as `resume`. Run `git status --short --branch`; record unrelated dirty files in `task.md` and stop if a merge or rebase is in progress. Ask one `ask_user` batch only when the goal or acceptance criteria cannot be inferred.
+- **Intake.** For an issue, use `gh issue view <n> --json number,title,body,labels,comments,state,url`. If a folder for the id exists and is not `done`, treat the call as `resume`. Run `git status --short --branch`; record unrelated dirty files in `task.md` and stop if a merge or rebase is in progress. Ask one `ask_user` batch only when the goal or acceptance criteria cannot be inferred. Also run `git rev-list --oneline origin/<base>..<base>`. If the base branch has unpushed commits, list them under `## Environment notes` in `task.md`. They are out of scope unless the human includes them: the release-gate question then adds the options `Ship them as separate commits in this PR`, `Exclude them (release from origin/<base>)`, `Stop`. Pass the chosen scope to `operator` verbatim. Without that decision, release must not start from a base that is ahead of its upstream.
 - **Triage.** `triage: needs-human` forces an `approve` gate. `triage: reject` (duplicate, already fixed, not worth doing) goes to the human with the reason.
-- **Build.** Never trust a success claim: inspect the diff and rerun the checks yourself. Reassess type and risk against the real diff.
+- **Build.** Never trust a success claim: inspect the diff and rerun the checks yourself. Reassess type and risk against the real diff. Stage agents do not spawn sub-agents (the pbi-agent runtime rejects nested runs for agents without a scoped `sub_agents` list, and nested time counts against the parent's cap). When `plan.md` splits the work into groups, run `worker` once per group in plan order, each writing `build-<group>.md` and running that group's checks, then one final `worker` pass that integrates, runs the full checks and writes `build.md`.
 - **Review.** Run the profile's reviewers in order, each as its own loop: reviewer → `fixer` with the exact findings file → conductor reruns validation → same reviewer again, until it reports no findings. Human change requests go to `review-human-N.md`, then through `fixer` and the agent reviewers again.
-- **Release.** Run full validation for the touched surfaces first (full `uv run pytest -q --tb=short -x`, full `bun run test:web`, plus lint, type and build checks). Then delegate to `operator`, giving it the issue number when there is one, the task-scoped paths from `build.md` and the fix files, and the task folder `.agents/factory/tasks/<id>/`.
+- **Release.** Run full validation for the touched surfaces first (full `uv run pytest`, full `bun run test:web`, plus lint, type and build checks). Then delegate to `operator`, giving it the issue number when there is one, the task-scoped paths from `build.md` and the fix files, and the task folder `.agents/factory/tasks/<id>/`.
 - **Verify.** Read `release.md`. Confirm each acceptance criterion against merged `master` and record the evidence per criterion.
-- **Learn.** Always runs, also for blocked and rejected tasks. Afterwards append one row per gate decision to `.agents/factory/tasks/ledger.md` (`date | task | profile | stage | gate | decision`), apply the promotion rule from the profiles file, and append the `MEMORY.md` daily-log entry. Leave the post-release task files and ledger rows uncommitted for the next factory release. Do not apply the proposals in `learn.md`; report them.
+- **Learn.** Always runs, also for blocked and rejected tasks. Afterwards append one row per gate decision to `.agents/factory/tasks/ledger.md` (`date | task | profile | stage | gate | decision`), apply the promotion rule from the profiles file (ledger rows come only from `## Gate log`; one row per gated stage, and the combined review+release question logs two rows), and append the `MEMORY.md` daily-log entry. Leave the post-release task files and ledger rows uncommitted for the next factory release. Do not apply the proposals in `learn.md`; report them.
 
 ## Routing on failure
 

@@ -4,7 +4,8 @@
 - [x] Build gh-449 (always_run)
 - [x] Review gh-449 (approve): reviewer rounds 1-2
 - [x] Review gh-449: code-quality-reviewer rounds 1-2
-- [>] Release gh-449 (approve)
-- [ ] Verify gh-449 (always_run)
-- [ ] Learn gh-449 (always_run)
+- [x] Release gh-449 (approve)
+- [x] Verify gh-449 (always_run)
+- [x] Learn gh-449 (always_run)
 - [x] Update factory instructions: task folders are committed, not gitignored (sub-agent)
+- [x] Apply gh-449 learn proposals (AGENTS.md, factory.md, plan.md, worker.md, pytest flags in .agents commands/skills)

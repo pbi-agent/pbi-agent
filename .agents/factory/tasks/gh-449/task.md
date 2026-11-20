@@ -5,8 +5,8 @@ type_reason: Labels enhancement+documentation+cli; adds a new CLI flag (behavior
 source: https://github.com/pbi-agent/pbi-agent/issues/449
 risk: high
 risk_triggers: diff estimate >500 lines and >15 files (~56 guides); unknown on import-time sessions.db creation vs AC3 (triage)
-stage: release
-status: running
+stage: done
+status: done
 ---
 # Add integrated --doc documentation to every pbi-agent CLI command
 
@@ -47,6 +47,8 @@ Open assumptions (from issue): hidden/suppressed aliases need no own `--doc` ent
 - quality (latest): quality-2.md
 - fix (latest): fix-2.md
 - release: release.md
+- verify: verify.md
+- learn: learn.md
 
 ## Gate log
 | stage | gate | decision | note |
@@ -64,3 +66,8 @@ Open assumptions (from issue): hidden/suppressed aliases need no own `--doc` ent
 | release | approve | approved_unchanged | human: Approve and release; PR scope = 'add factory' + separate commit for task-folder instruction edits (operator.md, factory.md, MEMORY.md, TODO.md) + #449 commit |
 | release | validation | pass | ruff/format/basedpyright clean; full pytest 2526 passed in 3/4 runs, 1 run hit pre-existing flake tests/test_web_serve.py::test_lost_manager_lease_rejects_new_live_sessions (2/15 fails on clean HEAD, 3/15 with change; unrelated); test:web 890 passed; docs:build ok; uv build: 56 guides in wheel+sdist |
 | release | pre-commit /verify | pass | scratch workspace: bare `pbi-agent` and `pbi-agent --verbose` launch web (index 200, POST /api/sessions ok); `--doc`, `--verbose --doc`, `web --doc` print guides, rc 0, no server; user's 7424 server untouched |
+| release | approve | shipped | PR #451 merged 2e68f9a6; CI green; issue closed |
+| verify | always_run | auto_pass | all 7 AC confirmed on merged master (verify.md) |
+| learn | always_run | auto_pass | learn: 8 proposals; ledger rows appended; no gate eligible for promotion |
+
+Learn proposals 1-8 applied on human request (2026-11-20).
