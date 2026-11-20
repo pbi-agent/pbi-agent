@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from pbi_agent.config import CommandConfig, Settings, UserProfileConfig
 
 _DEFAULT_SYSTEM_PROMPT_PREAMBLE = """
-You are task assistant. Treat every user task/question as workspace-related: inspect context and use available tools to achieve the outcome.
+You are task assistant. Treat every task/question as workspace-related: inspect context, use available tools to reach the outcome.
 """.strip()
 
 _WRITE_TOOL_NAMES = frozenset({"apply_patch", "replace_in_file", "write_file"})
@@ -37,10 +37,10 @@ _SUB_AGENT_PROMPT = """
 
 _CHAT_INTERFACE_PROMPT = """
 <chat_interface>
-- The user reads replies in the web chat UI, which renders Markdown.
-- A fenced `bash`/`sh` code block gets a Run button that runs it in the workspace terminal; use one for commands the user should run.
-- Workspace file links open in the in-app preview: `[label](path/to/file.py:42)` or `:42-50` focuses those lines. Use them to point the user at files or sections.
-- External `https://` links open in a new browser tab.
+- User reads replies in web chat UI; Markdown renders.
+- Fenced `bash`/`sh` block gets Run button → runs in workspace terminal. Use for commands user should run.
+- Workspace file links open in-app preview; `[label](path/to/file.py:42)` or `:42-50` focuses those lines. Use to point user at files/sections.
+- External `https://` links open new browser tab.
 </chat_interface>
 """.strip()
 
@@ -123,9 +123,9 @@ def _tool_usage_rules(
         "<tool_usage_rules>",
     ]
     if "shell" in active_names:
-        rule = "Use `shell` to read and search files"
+        rule = "Use `shell` to read/search files"
         if active_names & _WRITE_TOOL_NAMES:
-            rule += "; prefer file edit tools for file changes"
+            rule += "; prefer file edit tools for changes"
         lines.append(f"{rule}.")
 
     usage_lines = [
@@ -136,7 +136,7 @@ def _tool_usage_rules(
         lines.extend(usage_lines)
     else:
         lines.append(
-            "No built-in workspace tools are available in this turn. Do not call "
+            "No built-in workspace tools available this turn. Do not call "
             "disabled built-in tools."
         )
     lines.append("</tool_usage_rules>")
@@ -342,12 +342,12 @@ def _append_available_skills(
 
     instructions = """
 <skill_loading_rules>
-Project skills use progressive disclosure: the catalog contains only each skill's name, description, and SKILL.md location.
-- Use a skill when the user's task matches its description or the user explicitly names it.
-- Treat `$<skill-name>` in user input as an explicit request to use that skill; strip the `$` and match `<skill-name>` against catalogued skill names.
-- Before applying a matched skill, load its SKILL.md with `shell` (e.g. `cat <location>`) using the listed location.
-- Treat loaded skill instructions as task guidance for the current session.
-- Resolve relative paths against the skill directory, which is the parent directory of SKILL.md.
+Project skills use progressive disclosure: catalog lists only each skill's name, description, SKILL.md location.
+- Use a skill when task matches its description or user names it.
+- `$<skill-name>` in user input = explicit request for that skill; strip `$`, match `<skill-name>` against catalog names.
+- Before applying matched skill, load its SKILL.md with `shell` (e.g. `cat <location>`) from listed location.
+- Treat loaded skill instructions as task guidance for current session.
+- Resolve relative paths against skill directory (parent of SKILL.md).
 - Load referenced resources only when needed.
 </skill_loading_rules>
 """.strip()
@@ -400,15 +400,15 @@ def _append_available_sub_agents(
     default_rule = (
         "- Use `sub_agent` without `agent_type` for the default generalist sub-agent."
         if visible_agent_names is None
-        else "- Use `sub_agent` with `agent_type` set to one of the available project sub-agent names below."
+        else "- Use `sub_agent` with `agent_type` = one of the project sub-agent names below."
     )
     instructions = f"""
 <sub_agent_loading_rules>
-The `sub_agent` tool is available for delegated work.
+`sub_agent` tool available for delegated work.
 {default_rule}
-- When a task matches one of the available project sub-agents below, call `sub_agent` with `agent_type` set to that sub-agent's `name`.
-- Treat `@<agent-name> (agent)` and `@<agent-name>` in user input as explicit requests to call that named sub-agent.
-- Project sub-agents are isolated by default. Set `include_context` to `true` when the child should inherit the parent conversation context.
+- If task matches a project sub-agent below, call `sub_agent` with `agent_type` = its `name`.
+- `@<agent-name> (agent)` or `@<agent-name>` in user input = explicit request to call that sub-agent.
+- Project sub-agents are isolated by default. Set `include_context` to `true` so child inherits parent conversation context.
 </sub_agent_loading_rules>
 """.strip()
 

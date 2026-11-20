@@ -39,11 +39,10 @@ SPEC = ToolSpec(
     name="shell",
     description=("Run a shell command. Returns stdout, stderr, and exit code."),
     prompt_usage=(
-        "Use `shell` for command execution, including git commands; byte-cap "
-        "commands with unknown or potentially large output. Set "
-        "`run_in_background` for long-running commands; the result arrives "
-        "automatically later, so do not poll with sleep. Use "
-        "`background_task` to list, inspect, or kill background tasks."
+        "Use `shell` for commands, incl. git; byte-cap commands with unknown "
+        "or possibly large output. Set `run_in_background` for long-running "
+        "commands; result arrives automatically later, do not poll with sleep. "
+        "Use `background_task` to list, inspect, or kill background tasks."
     ),
     parameters_schema={
         "type": "object",

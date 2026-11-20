@@ -21,8 +21,8 @@ SPEC = ToolSpec(
         "for targeted edits; include enough old_string context to make the match unique."
     ),
     prompt_usage=(
-        "Use `replace_in_file` for targeted text edits after reading enough "
-        "context to make the match unique."
+        "Use `replace_in_file` for targeted text edits; first read enough "
+        "context to make match unique."
     ),
     parameters_schema={
         "type": "object",

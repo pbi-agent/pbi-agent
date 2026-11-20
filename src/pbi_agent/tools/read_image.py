@@ -14,8 +14,8 @@ SPEC = ToolSpec(
         "context so you can see it. Use `shell` for text files."
     ),
     prompt_usage=(
-        "Use `read_image` to view an image file, e.g. "
-        '`{"path":"docs/screenshot.png"}`; read and search text with `shell`.'
+        "Use `read_image` to view image files, e.g. "
+        '`{"path":"docs/screenshot.png"}`; read/search text with `shell`.'
     ),
     parameters_schema={
         "type": "object",
