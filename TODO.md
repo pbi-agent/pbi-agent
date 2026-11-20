@@ -1,13 +1,13 @@
-- [x] Intake gh-449 (always_run)
-- [x] Triage gh-449 (approve)
-- [x] Plan gh-449 (approve)
-- [x] Build gh-449 (always_run)
-- [x] Review gh-449 (approve): reviewer rounds 1-2
-- [x] Review gh-449: code-quality-reviewer rounds 1-2
-- [x] Release gh-449 (approve)
-- [x] Verify gh-449 (always_run)
-- [x] Learn gh-449 (always_run)
-- [x] Update factory instructions: task folders are committed, not gitignored (sub-agent)
-- [x] Apply gh-449 learn proposals (AGENTS.md, factory.md, plan.md, worker.md, pytest flags in .agents commands/skills)
-- [x] Review + compress the 12 instruction files used by the gh-449 run (one sub-agent per file); discovery tests pass
-- [x] Apply follow-up decisions: drop model_profile_id/allowed_tools (27 files), PR-checks wait, no Scope line, plan-interactive, factory typed stop, verify desc, runtime.md note
+- [x] Intake gh-450 (always_run)
+- [x] Triage gh-450 (auto)
+- [x] Plan gh-450 (auto)
+- [x] Build gh-450 (always_run)
+- [x] Review gh-450 (approve): reviewer round 1
+- [x] Review gh-450: code-quality-reviewer round 1
+- [x] Review+release gate gh-450 (human): Approve and release
+- [x] Release gh-450 (approve)
+- [x] Verify gh-450 (always_run)
+- [x] Learn gh-450 (always_run)
+- [x] Apply gh-450 learn proposals (verify skill to .agents + recipe/pkill gotcha, factory evidence reuse, AGENTS.md static bundle)
+- [x] Factory: verify stage before release
+- [x] Factory: issue updates = one brief final comment / blocked comment, no stage files
