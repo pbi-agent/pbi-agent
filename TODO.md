@@ -1,13 +1,5 @@
-- [x] Intake gh-455 (always_run)
-- [x] Triage gh-455 (approve)
-- [x] Plan gh-455 (approve)
-- [x] Build gh-455 (always_run)
-- [x] Review gh-455 (approve): reviewer round 1
-- [x] Review gh-455: code-quality-reviewer round 1 (findings: 1)
-- [x] Fix gh-455: fix-1 (quality-1)
-- [x] Review gh-455: code-quality-reviewer round 2
-- [x] Verify gh-455 (always_run)
-- [x] Review+release gate gh-455 (human): Approve and release
-- [x] Release gh-455 (approve)
-- [x] Learn gh-455 (always_run)
-- [x] Apply gh-455 learn proposals (plan/plan-interactive shared-owner rule, factory task-folder ruff format, AGENTS.md ruff md fences, verify skill uv --directory PID + stop check)
+- [x] Release: inspect history and pick next version (v0.66.0, 10 PRs since v0.65.0)
+- [x] Release: create branch, bump version, uv lock, changelog
+- [x] Release: run full validation
+- [x] Release: commit, push, open PR (#458)
+- [x] Release: merge PR, verify Release workflow, tag, GitHub Release, PyPI
