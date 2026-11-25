@@ -249,7 +249,7 @@ export type BackgroundResultInfo = {
 
 /**
  * Parses the synthetic user message of a finished background task. The first
- * line is a header, `<task_id> <status>[ · <duration>][ — <intent>]`, followed
+ * line is a header, `<status>[ · <duration>][ — <intent>]`, followed
  * by the output (see `render_background_result` in the backend).
  */
 export function parseBackgroundResult(item: TimelineItem): BackgroundResultInfo | null {
@@ -258,9 +258,8 @@ export function parseBackgroundResult(item: TimelineItem): BackgroundResultInfo 
   if (!match) return null;
   const [, taskId, content] = match;
   const newline = content.indexOf("\n");
-  let header = newline === -1 ? content : content.slice(0, newline);
+  const header = newline === -1 ? content : content.slice(0, newline);
   const body = newline === -1 ? "" : content.slice(newline + 1);
-  if (header.startsWith(`${taskId} `)) header = header.slice(taskId.length + 1);
   const separator = header.indexOf(" — ");
   const status = (separator === -1 ? header : header.slice(0, separator)).trim();
   const intent = separator === -1 ? "" : header.slice(separator + 3).trim();

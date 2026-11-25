@@ -1,16 +1,2 @@
-- [x] Review `feat/codex-inspired-harness` against `master` (10 findings)
-- [x] Fix: timeline `parseBackgroundResult` matches the new `<background_task_result task_id>` + header-line format
-- [x] Fix: generic tool renderer no longer turns all-false/empty payloads into `ok`
-- [x] Fix: `tty` `exec` only for executables (`command -v` check), builtins/functions run unchanged
-- [x] Fix: foreground `tty` output cleaned (CR/escapes) on complete, interrupt, kill and hand-off
-- [x] Fix: failed hand-off reports the real reason (e.g. task cap) instead of "not available here"
-- [x] Fix: adopted task cursors set before the watch thread starts (no duplicate output)
-- [x] Fix: interrupt during end-of-turn background wait raises `SessionTurnInterrupted`
-- [x] Fix: `background_task input` counts output that arrived before the wait started
-- [x] Validation: ruff, format, basedpyright, pytest, web tests, lint, typecheck, Bun 1.4.4 bundle
-- [-] Single-turn end-of-turn wait has no time cap: left as designed (user decision pending)
-- [-] Wake turns not persisted in single-turn runs: left, same pattern as stop-hook continuation (user decision pending)
-- [x] Live check (CLI `run` + web UI in Chrome, scratch DBs/workspace): tty builtin + executable, tty output cleaning, prompt `input` return, hand-off dedup, timeline background card
-- [x] Fix from live check: hand-off failure reason was hidden from the model text (`handoff_error` line)
-- [x] Fix from live check: `background_task kill` rendered as `background <id>`; now `kill requested <id>`
-- [ ] Not live-checked: interrupt during end-of-turn wait via `display.interrupt_requested` (CLI Ctrl-C takes the KeyboardInterrupt path); generic-renderer all-false payload (unit tests only)
+- [x] Identify the latest merged PR on `master` and review its changes for the summary.
+- [x] Background result header: drop the repeated task id (tag already carries it); timeline parser, tests, bundle updated

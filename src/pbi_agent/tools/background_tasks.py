@@ -718,6 +718,8 @@ def render_background_result(task: BackgroundTask) -> str:
         return _render_sub_agent_result(task)
     body = render_shell_output(read_task_output(task))
     header, _, rest = body.partition("\n")
+    # The tag already carries the task id.
+    header = header.removeprefix(f"{task.task_id} ")
     label = task.intent or task.command
     lines = [
         f'<{BACKGROUND_RESULT_TAG} task_id="{task.task_id}">',
@@ -841,7 +843,7 @@ def background_output_payload(
 
 def _render_sub_agent_result(task: BackgroundTask) -> str:
     duration = task.summary()["elapsed_seconds"]
-    header = f"{task.task_id} {task.status} sub_agent · {duration:.1f}s"
+    header = f"{task.status} sub_agent · {duration:.1f}s"
     if task.intent:
         header = f"{header} — {task.intent}"
     lines = [
