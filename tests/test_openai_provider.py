@@ -318,7 +318,10 @@ def test_openai_build_request_body_uses_chatgpt_backend_contract() -> None:
     assert body["instructions"] == "be concise"
     function_tools = [tool for tool in body["tools"] if tool.get("type") == "function"]
     assert function_tools
-    assert all("strict" not in tool for tool in function_tools)
+    assert all(tool["strict"] is False for tool in function_tools)
+    assert all(
+        "strict" not in tool for tool in body["tools"] if tool.get("type") != "function"
+    )
     shell_tool = next(tool for tool in function_tools if tool["name"] == "shell")
     shell_parameters = shell_tool["parameters"]
     assert shell_parameters["required"] == ["intent", "command"]
