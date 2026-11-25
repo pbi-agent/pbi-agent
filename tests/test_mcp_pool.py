@@ -205,7 +205,7 @@ def test_tool_runtime_executes_dynamic_mcp_tool_without_batch_errors(
         )
 
     assert batch.had_errors is False
-    payload = json.loads(batch.results[0].output_json)
+    payload = batch.results[0].payload
     assert payload["ok"] is True
     assert payload["result"]["server"] == "echo"
     assert payload["result"]["tool"] == "say hi"

@@ -6,7 +6,6 @@ shape while the provider wrapper owns auth, endpoint selection, and transport.
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from pbi_agent.agent.system_prompt import get_system_prompt
@@ -413,7 +412,7 @@ def _response_model_name(response_json: dict[str, object]) -> str:
 def _tool_result_response_payload(result: ToolResult) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "call_id": result.call_id,
-        "output": _decode_tool_output(result.output_json),
+        "output": result.output,
     }
     if result.is_error:
         payload["is_error"] = True
@@ -426,13 +425,6 @@ def _tool_result_response_payload(result: ToolResult) -> dict[str, Any]:
             for attachment in result.attachments
         ]
     return payload
-
-
-def _decode_tool_output(output_json: str) -> Any:
-    try:
-        return json.loads(output_json)
-    except json.JSONDecodeError:
-        return output_json
 
 
 def _normalize_gemini_schema(value: Any) -> Any:

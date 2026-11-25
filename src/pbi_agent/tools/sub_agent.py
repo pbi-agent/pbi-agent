@@ -9,6 +9,7 @@ from typing import Any
 
 from pbi_agent.agent.reference_resolution import resolve_sub_agent_references
 from pbi_agent.agent.sub_agent_discovery import discover_project_sub_agents
+from pbi_agent.tools.model_output import render_sub_agent_output
 from pbi_agent.tools.types import ToolContext, ToolSpec
 
 _DEFAULT_AGENT_TYPE = "default"
@@ -118,6 +119,7 @@ def build_spec(
             "required": required,
             "additionalProperties": False,
         },
+        render_output=render_sub_agent_output,
     )
 
 
@@ -339,8 +341,4 @@ def _start_background(
         "background": True,
         "task_id": task.task_id,
         "status": "running",
-        "message": (
-            "Sub-agent started in background. The result will be delivered "
-            "automatically when it finishes; do not poll."
-        ),
     }

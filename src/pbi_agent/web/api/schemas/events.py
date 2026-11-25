@@ -248,7 +248,7 @@ class ToolCallMetadataModel(BaseModel):
     error: Any = None
     command: str | None = None
     working_directory: str | None = None
-    timeout_ms: int | str | None = None
+    yield_time_ms: int | str | None = None
     exit_code: int | None = None
     timed_out: bool | None = None
     interrupted: bool | None = None

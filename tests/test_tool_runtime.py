@@ -33,7 +33,10 @@ def test_execute_tool_calls_reports_unknown_tool_error(monkeypatch) -> None:
 
     assert batch.had_errors is True
     assert len(batch.results) == 1
-    assert json.loads(batch.results[0].output_json) == {
+    assert batch.results[0].output == (
+        "error unknown_tool: Tool 'missing_tool' is not registered."
+    )
+    assert batch.results[0].payload == {
         "ok": False,
         "error": {
             "type": "unknown_tool",
@@ -51,7 +54,7 @@ def test_execute_tool_calls_rejects_disabled_builtin_tool() -> None:
     )
 
     assert batch.had_errors is True
-    assert json.loads(batch.results[0].output_json) == {
+    assert batch.results[0].payload == {
         "ok": False,
         "error": {
             "type": "disabled_tool",
@@ -86,10 +89,11 @@ def test_execute_tool_calls_preserves_tool_output_error_state() -> None:
 
     assert batch.had_errors is True
     assert batch.results[0].is_error is True
-    assert json.loads(batch.results[0].output_json) == {
+    assert batch.results[0].payload == {
         "ok": False,
         "result": {"message": "failed"},
     }
+    assert batch.results[0].output == "error: message: failed"
 
 
 def test_execute_tool_calls_rejects_invalid_json_arguments(monkeypatch) -> None:
@@ -112,7 +116,7 @@ def test_execute_tool_calls_rejects_invalid_json_arguments(monkeypatch) -> None:
 
     assert invoked is False
     assert batch.had_errors is True
-    assert json.loads(batch.results[0].output_json) == {
+    assert batch.results[0].payload == {
         "ok": False,
         "error": {
             "type": "invalid_arguments",
@@ -141,15 +145,16 @@ def test_execute_tool_calls_wraps_success_payload_and_output_items(monkeypatch) 
 
     assert batch.had_errors is False
     assert seen == [({"value": 7}, True)]
-    assert json.loads(batch.results[0].output_json) == {
+    assert batch.results[0].payload == {
         "ok": True,
         "result": {"echo": 7},
     }
+    assert batch.results[0].output == "echo: 7"
     assert tool_runtime.to_function_call_output_items(batch.results) == [
         {
             "type": "function_call_output",
             "call_id": "call_1",
-            "output": batch.results[0].output_json,
+            "output": batch.results[0].output,
         }
     ]
 
@@ -295,7 +300,7 @@ def test_execute_tool_calls_falls_back_to_serial_when_threads_are_exhausted(
         "call_2",
         "call_3",
     ]
-    assert [json.loads(result.output_json)["result"] for result in batch.results] == [
+    assert [result.payload["result"] for result in batch.results] == [
         "parallel",
         "serial-1",
         "serial-2",
@@ -319,7 +324,7 @@ def test_execute_tool_calls_wraps_handler_exceptions(monkeypatch) -> None:
     )
 
     assert batch.had_errors is True
-    assert json.loads(batch.results[0].output_json) == {
+    assert batch.results[0].payload == {
         "ok": False,
         "error": {
             "type": "tool_execution_failed",
@@ -368,7 +373,7 @@ def test_execute_tool_calls_serializes_truncated_shell_output(
         max_workers=1,
     )
 
-    payload = json.loads(batch.results[0].output_json)
+    payload = batch.results[0].payload
     result = payload["result"]
 
     assert payload["ok"] is True
@@ -423,11 +428,19 @@ def test_execute_tool_calls_serializes_compressed_shell_output(
         max_workers=1,
     )
 
-    output = json.loads(batch.results[0].output_json)
+    output = batch.results[0].payload
     assert output["ok"] is True
     result = output["result"]
     raw_output_path = result.pop("raw_output_path")
     notice = result.pop("notice")
+    assert isinstance(result.pop("duration_ms"), int)
+    assert batch.results[0].output == (
+        "exit 0\n"
+        "compressed: raw stdout\n"
+        "[stderr]\n"
+        "compressed: raw stderr\n"
+        f"[compressed; full: {raw_output_path}]"
+    )
     assert result == {
         "stdout": "compressed: raw stdout",
         "stderr": "compressed: raw stderr",
@@ -511,7 +524,7 @@ def test_execute_tool_calls_serializes_truncated_apply_patch_error(
         max_workers=1,
     )
 
-    payload = json.loads(batch.results[0].output_json)
+    payload = batch.results[0].payload
     result = payload["result"]
 
     assert payload["ok"] is True
@@ -556,7 +569,7 @@ def test_execute_tool_calls_keeps_apply_patch_display_metadata_out_of_output(
         max_workers=1,
     )
 
-    payload = json.loads(batch.results[0].output_json)
+    payload = batch.results[0].payload
 
     assert "diff_line_numbers" not in payload["result"]
     assert batch.results[0].display_metadata == {
@@ -599,7 +612,7 @@ def test_execute_tool_calls_accepts_apply_patch_freeform_input(
         [call], max_workers=1, context=ToolContext(tracer=tracer)
     )
 
-    assert batch.results[0].output_json == (
+    assert batch.results[0].output == (
         "Success. Updated the following files:\nA notes.txt\n"
     )
     assert tool_runtime.to_function_call_output_items(batch.results, [call]) == [
@@ -617,7 +630,7 @@ def test_execute_tool_calls_accepts_apply_patch_freeform_input(
 
 def test_to_function_call_output_items_uses_custom_output_for_freeform_calls() -> None:
     items = tool_runtime.to_function_call_output_items(
-        [ToolResult(call_id="call_1", output_json='{"ok": true}')],
+        [ToolResult(call_id="call_1", output='{"ok": true}')],
         [
             ToolCall(
                 call_id="call_1",
@@ -667,7 +680,7 @@ def test_execute_tool_calls_formats_apply_patch_freeform_failure(
 
     assert batch.had_errors is True
     assert batch.results[0].is_error is True
-    assert batch.results[0].output_json == "patch must start with '*** Begin Patch'."
+    assert batch.results[0].output == "patch must start with '*** Begin Patch'."
 
 
 def test_execute_tool_calls_passes_runtime_context_to_handler(monkeypatch) -> None:
@@ -741,7 +754,7 @@ def test_display_tool_results_routes_apply_patch_with_diff_to_patch_display(
 
     result = ToolResult(
         call_id="call_patch_1",
-        output_json=json.dumps(
+        output=json.dumps(
             {"ok": True, "result": {"status": "completed", "message": "ok"}}
         ),
     )
@@ -790,7 +803,7 @@ def test_display_tool_results_forwards_apply_patch_line_numbers(
 
     result = ToolResult(
         call_id="call_patch_1",
-        output_json=json.dumps(
+        output=json.dumps(
             {"ok": True, "result": {"status": "completed", "message": "ok"}}
         ),
         display_metadata={
@@ -827,3 +840,26 @@ def test_display_tool_results_forwards_apply_patch_line_numbers(
             },
         }
     ]
+
+
+def test_execute_tool_calls_traces_model_facing_text(monkeypatch) -> None:
+    logged: list[dict[str, Any]] = []
+
+    class _Tracer:
+        def log_tool_call(self, **kwargs: Any) -> None:
+            logged.append(kwargs)
+
+    monkeypatch.setattr(
+        tool_runtime,
+        "get_tool_handler",
+        lambda name: lambda arguments, context: {"echo": "hi"},
+    )
+
+    batch = tool_runtime.execute_tool_calls(
+        [ToolCall(call_id="call_1", name="shell", arguments={})],
+        max_workers=1,
+        context=ToolContext(tracer=cast(Any, _Tracer())),
+    )
+
+    assert batch.results[0].output == "echo: hi"
+    assert logged[0]["tool_output"] == "echo: hi"

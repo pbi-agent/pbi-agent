@@ -28,7 +28,7 @@ Unset optional fields are stored empty, and the provider or runtime default appl
 - `--allowed-tools ALLOWED_TOOLS`: comma-separated built-in tool groups: `read-image` (alias `read`), `write`, `web`, `sub-agent`, `shell`. Unset allows all; an empty string allows none of them.
 - `--max-tool-workers MAX_TOOL_WORKERS`: parallel tool workers, >= 1 (default 4).
 - `--max-retries MAX_RETRIES`: retries for transient provider errors, >= 0 (default 3).
-- `--compact-threshold COMPACT_THRESHOLD`: context-token compaction threshold, >= 0 (default 200000).
+- `--compact-threshold COMPACT_THRESHOLD`: context-token compaction threshold, >= 0; `0` disables (default: 90% of the model context window).
 - `--compact-tail-turns COMPACT_TAIL_TURNS`: recent user turns kept verbatim after compaction, >= 0 (default 2).
 - `--compact-preserve-recent-tokens COMPACT_PRESERVE_RECENT_TOKENS`: token budget for that preserved tail, >= 0 (default 8000).
 - `--compact-tool-output-max-chars COMPACT_TOOL_OUTPUT_MAX_CHARS`: max characters per tool result in compaction prompts, >= 0 (default 2000).

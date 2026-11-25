@@ -71,7 +71,7 @@ def _display_function_result(
     call: ToolCall | None,
     result: ToolResult,
 ) -> None:
-    payload = _output_payload(result.output_json)
+    payload = result.payload
     display.function_result(
         name=call.name if call else "unknown",
         success=not result.is_error,
@@ -123,7 +123,7 @@ def _display_apply_patch_result(
     # per-line patch view. The tool output only contains success/failure, so
     # carry the diff from the tool-call arguments into the display metadata.
     arguments = _arguments_dict(call.arguments)
-    payload = _output_payload(result.output_json)
+    payload = result.payload
     success = _patch_success(result, payload)
     display_diff = result.display_metadata.get("diff")
     if not isinstance(display_diff, str):
@@ -144,7 +144,7 @@ def _display_apply_patch_result(
         display_operation,
         success,
         call_id=result.call_id,
-        detail=_patch_detail(payload, result.output_json if result.is_error else ""),
+        detail=_patch_detail(payload, result.output if result.is_error else ""),
         diff=display_diff,
         diff_line_numbers=diff_line_numbers_metadata(
             result.display_metadata.get("diff_line_numbers")
@@ -166,14 +166,6 @@ def _arguments_dict(arguments: dict[str, Any] | str | None) -> dict[str, Any]:
         if isinstance(parsed, dict):
             return parsed
     return {}
-
-
-def _output_payload(output_json: str) -> dict[str, Any]:
-    try:
-        parsed = json.loads(output_json)
-    except json.JSONDecodeError:
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
 
 
 def _patch_success(result: ToolResult, payload: dict[str, Any]) -> bool:

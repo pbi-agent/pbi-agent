@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { TooltipProvider } from "../ui/tooltip";
-import { SessionTimeline } from "./SessionTimeline";
+import { SessionTimeline, parseBackgroundResult } from "./SessionTimeline";
 import type { TimelineItem, UsagePayload } from "../../types";
 import { projectMainTimelineItems } from "../../sessionTimelineProjection";
 
@@ -4862,7 +4862,7 @@ describe("SessionTimeline background task results", () => {
             kind: "message",
             itemId: "bg1",
             role: "user",
-            content: '<background_task_result task_id="bg-1" status="timed_out" exit_code="none" duration_seconds="3.0">\ncommand: sleep 30\nstdout:\nstart\n</background_task_result>\nContinue.',
+            content: '<background_task_result task_id="bg-1">\nbg-1 timeout · 3.0s — Sleep a while\nstart\n</background_task_result>',
             markdown: false,
           },
           {
@@ -4889,7 +4889,22 @@ describe("SessionTimeline background task results", () => {
     expect(trigger).toHaveTextContent(/1 background result/);
     fireEvent.click(trigger);
     openWorking();
-    expect(screen.getByText("bg-1 · timed out")).toBeInTheDocument();
+    expect(screen.getByText("Sleep a while · timeout · 3.0s")).toBeInTheDocument();
+  });
+  it.each([
+    ["bg-2 exit 0", { intent: null, status: "exit 0", body: "" }],
+    ["bg-2 exit 1 · 4.2s — Run tests\nFAILED a — b", { intent: "Run tests", status: "exit 1 · 4.2s", body: "FAILED a — b" }],
+    ["bg-2 completed sub_agent · 9.0s — Review diff\nLooks good", { intent: "Review diff", status: "completed sub_agent · 9.0s", body: "Looks good" }],
+  ])("parses the background result header %j", (content, expected) => {
+    expect(
+      parseBackgroundResult({
+        kind: "message",
+        itemId: "bg2",
+        role: "user",
+        content: `<background_task_result task_id="bg-2">\n${content}\n</background_task_result>`,
+        markdown: false,
+      }),
+    ).toEqual({ taskId: "bg-2", ...expected });
   });
   it("shows the last tool intent in the collapsed Working header and animates updates", () => {
     const shell = (command: string, intent: string) => ({

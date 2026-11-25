@@ -18,7 +18,7 @@ from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import execute_tool_calls as _execute_tool_calls
 from pbi_agent.auth.models import OAuthSessionAuth
 from pbi_agent.auth.service import build_runtime_request_auth, refresh_runtime_auth
-from pbi_agent.config import Settings
+from pbi_agent.config import Settings, effective_compact_threshold
 from pbi_agent.display.protocol import DisplayProtocol
 from pbi_agent.media import data_url_for_image
 from pbi_agent.models.messages import (
@@ -1222,7 +1222,7 @@ class OpenAIProvider(Provider):
             body["context_management"] = [
                 {
                     "type": "compaction",
-                    "compact_threshold": self._settings.compact_threshold,
+                    "compact_threshold": effective_compact_threshold(self._settings),
                 }
             ]
         if instructions:

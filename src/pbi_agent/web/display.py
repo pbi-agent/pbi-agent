@@ -1009,7 +1009,7 @@ class _EventDisplayBase(DisplayProtocol):
         *,
         call_id: str = "",
         working_directory: str = ".",
-        timeout_ms: int | str = "default",
+        yield_time_ms: int | str = "default",
         result: Any = None,
     ) -> None:
         tool_name, text = route_function_result(
@@ -1020,7 +1020,7 @@ class _EventDisplayBase(DisplayProtocol):
             arguments={
                 "command": command,
                 "working_directory": working_directory,
-                "timeout_ms": timeout_ms,
+                "yield_time_ms": yield_time_ms,
             },
         )
         result_body = _tool_result_body(result)
@@ -1034,13 +1034,13 @@ class _EventDisplayBase(DisplayProtocol):
             "arguments": {
                 "command": command,
                 "working_directory": working_directory,
-                "timeout_ms": timeout_ms,
+                "yield_time_ms": yield_time_ms,
             },
             "result": result_body,
             "error": _tool_error_payload(result),
             "command": command,
             "working_directory": working_directory,
-            "timeout_ms": timeout_ms,
+            "yield_time_ms": yield_time_ms,
             "exit_code": exit_code,
             "timed_out": timed_out,
         }

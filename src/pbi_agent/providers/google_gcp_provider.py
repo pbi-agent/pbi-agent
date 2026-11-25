@@ -1918,10 +1918,10 @@ def _anthropic_history_item_to_message(item: dict[str, Any]) -> dict[str, Any] |
 
 def _anthropic_tool_result_content(result: ToolResult) -> str | list[dict[str, Any]]:
     if not result.attachments:
-        return result.output_json
+        return result.output
 
     blocks = [_anthropic_image_block(image) for image in result.attachments]
-    blocks.append({"type": "text", "text": result.output_json})
+    blocks.append({"type": "text", "text": result.output})
     return blocks
 
 

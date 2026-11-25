@@ -568,11 +568,11 @@ def test_xai_execute_tool_calls_returns_function_call_outputs(
         results=[
             ToolResult(
                 call_id="call_1",
-                output_json='{"ok": true, "result": "/workspace"}',
+                output='{"ok": true, "result": "/workspace"}',
             ),
             ToolResult(
                 call_id="call_2",
-                output_json=(
+                output=(
                     '{"ok": false, "error": {"type": "tool_execution_failed", '
                     '"message": "boom"}}'
                 ),

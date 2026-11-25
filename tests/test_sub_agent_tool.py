@@ -1221,7 +1221,8 @@ def test_sub_agent_background_starts_task_and_forwards_intent(
     assert task.sub_agent_id == "subagent-7"  # type: ignore[attr-defined]
     assert task.status == "completed"  # type: ignore[attr-defined]
     rendered = render_background_result(task)  # type: ignore[arg-type]
-    assert "intent: Audit auth module" in rendered
+    assert "completed sub_agent" in rendered
+    assert "— Audit auth module" in rendered
     assert "all good" in rendered
 
 

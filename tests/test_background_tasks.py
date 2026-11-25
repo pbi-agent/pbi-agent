@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -15,6 +16,7 @@ from pbi_agent.tools.background_tasks import (
     BackgroundTask,
     BackgroundTaskManager,
     render_background_result,
+    spawn_attached_process,
 )
 from pbi_agent.tools.types import ToolContext
 
@@ -56,8 +58,14 @@ def test_completed_task_reports_output_and_exit_code() -> None:
     assert task.status == "failed"
     assert task.exit_code == 3
     rendered = render_background_result(task)
-    assert f'task_id="{task.task_id}" status="failed" exit_code="3"' in rendered
-    assert "out" in rendered and "err" in rendered
+    assert rendered == (
+        f'<background_task_result task_id="{task.task_id}">\n'
+        f"{task.task_id} exit 3 — echo out; echo err >&2; exit 3\n"
+        "out\n"
+        "[stderr]\n"
+        "err\n"
+        "</background_task_result>"
+    )
 
 
 def test_kill_marks_task_killed() -> None:
@@ -120,18 +128,19 @@ def test_shell_run_in_background_returns_task_id(tmp_path: Path) -> None:
     task = manager.get(result["task_id"])
     assert task is not None
     assert task.summary()["intent"] == "Run test command"
-    assert "intent: Run test command" in render_background_result(task)
+    assert f"{task.task_id} exit 0 — Run test command" in render_background_result(task)
 
 
-def test_shell_background_rejected_for_sub_agents_and_unsupported(
+def test_shell_background_allowed_for_sub_agents_and_rejected_when_unsupported(
     tmp_path: Path,
 ) -> None:
-    manager, _finished, _done = _collecting_manager()
+    manager, _finished, done = _collecting_manager()
     sub = shell_tool.handle(
         {"intent": "Run test command", "command": "true", "run_in_background": True},
         _context(tmp_path, manager, depth=1),
     )
-    assert "sub-agents" in sub["error"]
+    assert sub["status"] == "running"
+    assert done.wait(timeout=5)
     unsupported = shell_tool.handle(
         {"intent": "Run test command", "command": "true", "run_in_background": True},
         _context(tmp_path, None),
@@ -215,27 +224,18 @@ def test_background_task_list_status_and_kill(tmp_path: Path) -> None:
     assert done.wait(timeout=10)
 
 
-def test_background_task_rejected_for_sub_agents_and_unsupported(
+def test_background_task_allowed_for_sub_agents_and_rejected_when_unsupported(
     tmp_path: Path,
 ) -> None:
     manager, _finished, _done = _collecting_manager()
     sub = background_task_tool.handle(
         {"action": "list"}, _context(tmp_path, manager, depth=1)
     )
-    assert "sub-agents" in sub["error"]
+    assert sub == {"tasks": []}
     unsupported = background_task_tool.handle(
         {"action": "list"}, _context(tmp_path, None)
     )
     assert "not supported" in unsupported["error"]
-
-
-def test_stream_tail_keeps_tail_of_oversized_chunk() -> None:
-    from pbi_agent.tools.background_tasks import TAIL_MAX_CHARS, _StreamTail
-
-    tail = _StreamTail()
-    tail.append("a" * 10 + "b" * TAIL_MAX_CHARS)
-    assert tail.text() == "b" * TAIL_MAX_CHARS
-    assert tail.dropped is True
 
 
 def test_cancellable_display_propagates_to_nested_sub_agents() -> None:
@@ -272,31 +272,29 @@ def test_background_result_includes_raw_output_notice_when_truncated(
 
     rendered = render_background_result(task)
 
-    assert "stdout (truncated):" in rendered
-    assert "Output truncated. Full raw output saved to" in rendered
     files = list(raw_dir.iterdir())
     assert len(files) == 1
-    assert f"raw_output_path: {files[0]}" in rendered
+    assert f"[truncated; full: {files[0]}]" in rendered
     assert rendered.count(str(files[0])) == 1
     assert "a" * size in files[0].read_text(encoding="utf-8")
-    assert "earlier output was dropped and cannot be recovered" not in rendered
+    assert "middle dropped" not in rendered
 
 
-def test_background_result_notes_partial_raw_output_when_tail_dropped(
+def test_background_result_notes_partial_raw_output_when_middle_dropped(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from pbi_agent.tools.background_tasks import TAIL_MAX_CHARS
+    from pbi_agent.tools.stream_buffer import HEAD_MAX_CHARS, TAIL_MAX_CHARS
 
     monkeypatch.setattr(raw_output, "raw_output_dir", lambda: tmp_path / "raw")
     manager, _finished, done = _collecting_manager()
-    size = TAIL_MAX_CHARS * 2
+    size = (HEAD_MAX_CHARS + TAIL_MAX_CHARS) * 2
     task = _start(manager, f"{sys.executable} -c \"print('a' * {size})\"")
     assert done.wait(timeout=10)
 
     rendered = render_background_result(task)
 
     assert task.stdout.dropped is True
-    assert "earlier output was dropped and cannot be recovered" in rendered
+    assert "middle dropped" in rendered
 
 
 def test_background_result_without_truncation_creates_no_raw_file(
@@ -383,11 +381,11 @@ def test_background_output_payload_writes_no_file_while_running(
     assert not raw_dir.exists()
 
 
-def test_background_output_payload_explains_dropped_tail_without_truncation(
+def test_background_output_payload_explains_dropped_middle_without_truncation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from pbi_agent.tools.background_tasks import (
-        TAIL_DROPPED_NOTE,
+        MIDDLE_DROPPED_NOTE,
         background_output_payload,
     )
 
@@ -403,20 +401,21 @@ def test_background_output_payload_explains_dropped_tail_without_truncation(
         compression=False,
     )
 
-    assert payload["stdout_tail_dropped"] is True
+    assert payload["stdout_middle_dropped"] is True
     assert "stdout_truncated" not in payload
-    assert payload["notice"] == TAIL_DROPPED_NOTE
+    assert payload["notice"] == MIDDLE_DROPPED_NOTE
     assert not raw_dir.exists()
 
 
-def test_background_task_output_action_separates_tail_dropped_from_truncated(
+def test_background_task_output_action_separates_middle_dropped_from_truncated(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from pbi_agent.tools.background_tasks import TAIL_MAX_CHARS
+    from pbi_agent.tools.stream_buffer import HEAD_MAX_CHARS, TAIL_MAX_CHARS
 
     monkeypatch.setattr(raw_output, "raw_output_dir", lambda: tmp_path / "raw")
     manager, _finished, done = _collecting_manager()
-    task = _start(manager, f"{sys.executable} -c \"print('a' * {TAIL_MAX_CHARS * 2})\"")
+    size = (HEAD_MAX_CHARS + TAIL_MAX_CHARS) * 2
+    task = _start(manager, f"{sys.executable} -c \"print('a' * {size})\"")
     assert done.wait(timeout=10)
     context = _context(tmp_path, manager)
 
@@ -424,12 +423,254 @@ def test_background_task_output_action_separates_tail_dropped_from_truncated(
         {"action": "output", "task_id": task.task_id}, context
     )
     second = background_task_tool.handle(
-        {"action": "output", "task_id": task.task_id}, context
+        {"action": "output", "task_id": task.task_id, "from_start": True}, context
     )
 
-    assert first["stdout_tail_dropped"] is True
+    assert first["stdout_middle_dropped"] is True
     assert first["stdout_truncated"] is True
-    assert "cannot be recovered" in first["notice"]
+    assert "the middle was dropped" in first["notice"]
     assert first["raw_output_path"] == second["raw_output_path"]
     assert first["raw_output_path"] not in first["notice"]
-    assert "raw_output_path" in first["notice"]
+
+
+def test_foreground_shell_closes_stdin(tmp_path: Path) -> None:
+    manager, _finished, _done = _collecting_manager()
+
+    result = shell_tool.handle(
+        {"intent": "Read stdin", "command": "read value; echo got:$value"},
+        _context(tmp_path, manager),
+    )
+
+    assert result["exit_code"] == 0
+    assert result["stdout"] == "got:\n"
+    assert manager.list() == []
+
+
+def test_foreground_shell_moves_running_command_to_background(tmp_path: Path) -> None:
+    manager, finished, done = _collecting_manager()
+    context = _context(tmp_path, manager)
+
+    result = shell_tool.handle(
+        {
+            "intent": "Slow command",
+            "command": "echo start; sleep 1; echo end",
+            "yield_time_ms": 300,
+        },
+        context,
+    )
+
+    assert result["background"] is True
+    assert result["status"] == "running"
+    assert result["stdout"] == "start\n"
+    assert done.wait(timeout=5)
+    task = finished[0]
+    assert task.task_id == result["task_id"]
+    assert task.status == "completed"
+    assert task.intent == "Slow command"
+    rendered = render_background_result(task)
+    assert f"{task.task_id} exit 0" in rendered
+    assert "\nend\n[6 earlier chars already shown]\n" in rendered
+    assert "start" not in rendered
+
+
+def test_foreground_shell_kills_at_yield_without_background_manager(
+    tmp_path: Path,
+) -> None:
+    context = ToolContext(
+        display=SimpleNamespace(interrupt_requested=lambda: False),  # type: ignore[arg-type]
+        workspace_root=tmp_path,
+    )
+
+    result = shell_tool.handle(
+        {
+            "intent": "Slow command",
+            "command": "echo start; sleep 5",
+            "yield_time_ms": 200,
+        },
+        context,
+    )
+
+    assert result["timed_out"] is True
+    assert result["stdout"] == "start\n"
+    assert result["error"] == (
+        "Command killed after 200ms; background tasks are not available here."
+    )
+
+
+def test_foreground_shell_kills_at_yield_when_background_is_full(
+    tmp_path: Path,
+) -> None:
+    manager, _finished, _done = _collecting_manager(max_concurrent=1)
+    _start(manager, "sleep 30")
+    try:
+        result = shell_tool.handle(
+            {"intent": "Slow command", "command": "sleep 5", "yield_time_ms": 200},
+            _context(tmp_path, manager),
+        )
+    finally:
+        manager.close()
+
+    assert result["timed_out"] is True
+    assert "could not move it to the background" in result["error"]
+    assert "Too many background tasks running (1/1)" in result["error"]
+
+
+def test_adopt_marks_shown_output_before_the_task_can_finish(tmp_path: Path) -> None:
+    manager, finished, done = _collecting_manager()
+    attached = spawn_attached_process(
+        "printf shown", working_directory=str(tmp_path), shell_executable=None
+    )
+    attached.process.wait(timeout=5)
+    attached.join_readers()
+    shown = attached.stdout.read_since(0)
+
+    manager.adopt(
+        attached,
+        display_command="printf shown",
+        working_directory=str(tmp_path),
+        timeout_ms=5_000,
+        compression=False,
+        tool_call_id=None,
+        stdout_cursor=shown.cursor,
+    )
+
+    assert done.wait(timeout=5)
+    rendered = render_background_result(finished[0])
+    assert "(no output)" in rendered
+    assert "[5 earlier chars already shown]" in rendered
+
+
+def test_foreground_tty_output_is_cleaned(tmp_path: Path) -> None:
+    manager, _finished, _done = _collecting_manager()
+
+    result = shell_tool.handle(
+        {
+            "intent": "Print lines",
+            "command": "printf 'a\\nb\\n'",
+            "tty": True,
+            "compression": False,
+        },
+        _context(tmp_path, manager),
+    )
+
+    assert result["exit_code"] == 0
+    assert result["stdout"] == "a\nb\n"
+
+
+def test_wait_for_output_counts_output_that_arrived_before_the_wait(
+    tmp_path: Path,
+) -> None:
+    manager, _finished, _done = _collecting_manager()
+    task = _start(manager, "echo ready; sleep 30")
+    try:
+        for _ in range(100):
+            if task.stdout.total:
+                break
+            threading.Event().wait(0.02)
+        started = time.monotonic()
+        manager.wait_for_output(task, wait_ms=10_000, seen=0)
+        elapsed = time.monotonic() - started
+    finally:
+        manager.close()
+
+    assert task.stdout.total > 0
+    assert elapsed < 5
+
+
+def test_background_task_output_returns_only_new_output(tmp_path: Path) -> None:
+    manager, _finished, done = _collecting_manager()
+    context = _context(tmp_path, manager)
+    task = _start(manager, "echo one; sleep 0.4; echo two")
+
+    first = None
+    for _ in range(40):
+        first = background_task_tool.handle(
+            {"action": "output", "task_id": task.task_id}, context
+        )
+        if first["stdout"]:
+            break
+        threading.Event().wait(0.05)
+    assert first is not None and first["stdout"] == "one\n"
+    assert done.wait(timeout=5)
+    second = background_task_tool.handle(
+        {"action": "output", "task_id": task.task_id}, context
+    )
+    again = background_task_tool.handle(
+        {"action": "output", "task_id": task.task_id, "from_start": True}, context
+    )
+
+    assert second["stdout"] == "two\n"
+    assert second["earlier_chars"] == 4
+    assert again["stdout"] == "one\ntwo\n"
+
+
+def test_background_task_input_requires_tty(tmp_path: Path) -> None:
+    manager, _finished, _done = _collecting_manager()
+    context = _context(tmp_path, manager)
+    task = _start(manager, "sleep 30")
+    try:
+        result = background_task_tool.handle(
+            {"action": "input", "task_id": task.task_id, "chars": "x"}, context
+        )
+    finally:
+        manager.close()
+
+    assert "start the command with 'tty': true" in result["error"]
+
+
+def test_tty_task_accepts_input_and_ctrl_c(tmp_path: Path) -> None:
+    manager, _finished, done = _collecting_manager()
+    context = _context(tmp_path, manager)
+    started = shell_tool.handle(
+        {
+            "intent": "Python REPL",
+            "command": f"{sys.executable} -q -i",
+            "tty": True,
+            "yield_time_ms": 500,
+        },
+        context,
+    )
+    task_id = started["task_id"]
+    try:
+        answer = background_task_tool.handle(
+            {"action": "input", "task_id": task_id, "chars": "6*7\n", "wait_ms": 5000},
+            context,
+        )
+        background_task_tool.handle(
+            {
+                "action": "input",
+                "task_id": task_id,
+                "chars": "import time; time.sleep(30)\n",
+                "wait_ms": 200,
+            },
+            context,
+        )
+        interrupted = background_task_tool.handle(
+            {"action": "input", "task_id": task_id, "chars": "\u0003", "wait_ms": 5000},
+            context,
+        )
+        background_task_tool.handle(
+            {"action": "input", "task_id": task_id, "chars": "\u0004", "wait_ms": 0},
+            context,
+        )
+        assert done.wait(timeout=5)
+    finally:
+        manager.close()
+
+    assert "42" in answer["stdout"]
+    assert "\x1b" not in answer["stdout"]
+    assert "KeyboardInterrupt" in interrupted["stdout"]
+
+
+def test_foreground_shell_without_handoff_kills_at_yield(tmp_path: Path) -> None:
+    manager, _finished, _done = _collecting_manager()
+    context = _context(tmp_path, manager)
+    context.background_handoff = False
+
+    result = shell_tool.handle(
+        {"intent": "User command", "command": "sleep 5", "yield_time_ms": 200},
+        context,
+    )
+
+    assert result["timed_out"] is True
+    assert manager.list() == []

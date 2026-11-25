@@ -202,7 +202,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--compact-threshold",
         type=int,
         default=None,
-        help="Context compaction token threshold (default: 200000).",
+        help=(
+            "Context compaction token threshold; 0 disables "
+            "(default: 90%% of the model context window)."
+        ),
     )
     runtime_group.add_argument(
         "--compact-tail-turns",

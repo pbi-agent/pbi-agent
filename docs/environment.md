@@ -20,7 +20,7 @@ The CLI calls `load_dotenv()` during settings resolution, so a local `.env` file
 | `PBI_AGENT_REASONING_EFFORT` | `medium` | Requested reasoning effort. Providers may map this to provider-specific values internally. |
 | `PBI_AGENT_MAX_TOOL_WORKERS` | `4` | Maximum tool execution workers. |
 | `PBI_AGENT_MAX_RETRIES` | `3` | Retry count for transient provider failures. |
-| `PBI_AGENT_COMPACT_THRESHOLD` | `200000` | Intended context compaction threshold for OpenAI. |
+| `PBI_AGENT_COMPACT_THRESHOLD` | 90% of the model context window | Auto-compaction token threshold; `0` disables. |
 | `PBI_AGENT_RESPONSES_URL` | provider-specific | Responses, Interactions, or Vertex endpoint override for OpenAI API, ChatGPT, GitHub Copilot, Azure, xAI, Google, or Google Cloud Vertex AI. |
 | `PBI_AGENT_GOOGLE_CLOUD_PROJECT` | none | Google Cloud project ID for the `google_gcp` provider. `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_PROJECT_ID` are also checked when deriving Vertex endpoints. |
 | `PBI_AGENT_GOOGLE_CLOUD_LOCATION` | `global` | Google Cloud Vertex AI location for the `google_gcp` provider. `PBI_AGENT_GOOGLE_CLOUD_REGION`, `GOOGLE_CLOUD_LOCATION`, and `GOOGLE_CLOUD_REGION` are also checked. |

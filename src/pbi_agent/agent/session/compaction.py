@@ -33,7 +33,7 @@ from pbi_agent.agent.session.shared import (
 from pbi_agent.agent.session.shared import (
     selected_model as _selected_model,
 )
-from pbi_agent.config import ResolvedRuntime, Settings
+from pbi_agent.config import ResolvedRuntime, Settings, effective_compact_threshold
 from pbi_agent.display.protocol import DisplayProtocol
 from pbi_agent.hooks.runtime import HookRuntime
 from pbi_agent.hooks.schemas import HookEventName
@@ -131,7 +131,7 @@ def _should_auto_compact(
     store: SessionStore | None,
     session_id: str | None,
 ) -> bool:
-    threshold = max(settings.compact_threshold, 0)
+    threshold = effective_compact_threshold(settings)
     if threshold <= 0:
         return False
     context_tokens = session_usage.snapshot().context_tokens

@@ -371,7 +371,7 @@ export type TokenUsagePayloadModel = { input_tokens: number; cached_input_tokens
 
 export type ToolCallInterruptRequest = { sub_agent_id?: string | null };
 
-export type ToolCallMetadataModel = { tool_name?: string | null; path?: string | null; operation?: string | null; success?: boolean | null; detail?: string | null; diff?: string | null; operation_count?: number | null; affected_paths?: string[] | null; diff_line_numbers?: DiffLineNumberModel[] | null; call_id?: string | null; status?: "running" | "completed" | "failed" | null; arguments?: Record<string, unknown> | string | null; result?: Record<string, unknown> | string | null; error?: unknown; command?: string | null; working_directory?: string | null; timeout_ms?: number | string | null; exit_code?: number | null; timed_out?: boolean | null; interrupted?: boolean | null };
+export type ToolCallMetadataModel = { tool_name?: string | null; path?: string | null; operation?: string | null; success?: boolean | null; detail?: string | null; diff?: string | null; operation_count?: number | null; affected_paths?: string[] | null; diff_line_numbers?: DiffLineNumberModel[] | null; call_id?: string | null; status?: "running" | "completed" | "failed" | null; arguments?: Record<string, unknown> | string | null; result?: Record<string, unknown> | string | null; error?: unknown; command?: string | null; working_directory?: string | null; yield_time_ms?: number | string | null; exit_code?: number | null; timed_out?: boolean | null; interrupted?: boolean | null };
 
 export type ToolGroupAddedSseEventModel = { seq: number; created_at: string; type: "tool_group_added"; payload: ToolGroupAddedSseEventPayloadModel };
 

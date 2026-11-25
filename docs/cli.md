@@ -41,7 +41,7 @@ pbi-agent run --doc > run-guide.md
 | `--reasoning-effort` | `PBI_AGENT_REASONING_EFFORT` | `medium` | Requested reasoning effort: `low`, `medium`, `high`, or `xhigh`. |
 | `--max-tool-workers` | `PBI_AGENT_MAX_TOOL_WORKERS` | `4` | Maximum parallel workers for tool execution. |
 | `--max-retries` | `PBI_AGENT_MAX_RETRIES` | `3` | Maximum retries for transient provider failures and rate limits. |
-| `--compact-threshold` | `PBI_AGENT_COMPACT_THRESHOLD` | `200000` | Context compaction threshold sent to OpenAI. |
+| `--compact-threshold` | `PBI_AGENT_COMPACT_THRESHOLD` | 90% of the model context window | Auto-compaction token threshold; `0` disables. |
 | `--responses-url` | `PBI_AGENT_RESPONSES_URL` | provider-specific | Override the Responses, Interactions, or Vertex endpoint for OpenAI API, ChatGPT, GitHub Copilot, Azure, xAI, Google, or Google Cloud Vertex AI. Ignored by Anthropic and Generic. |
 | `--google-cloud-project` | `PBI_AGENT_GOOGLE_CLOUD_PROJECT` | none | Google Cloud project ID for the `google_gcp` provider. |
 | `--google-cloud-location` / `--google-cloud-region` | `PBI_AGENT_GOOGLE_CLOUD_LOCATION` / `PBI_AGENT_GOOGLE_CLOUD_REGION` | `global` for derived Vertex endpoints | Google Cloud Vertex AI location for the `google_gcp` provider. |

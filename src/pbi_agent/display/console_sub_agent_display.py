@@ -234,7 +234,7 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
         *,
         call_id: str = "",
         working_directory: str = ".",
-        timeout_ms: int | str = "default",
+        yield_time_ms: int | str = "default",
         result: Any = None,
     ) -> None:
         del result
@@ -246,7 +246,7 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
                 status=status_markup(timed_out=timed_out, exit_code=exit_code),
                 call_id=call_id,
                 working_directory=working_directory,
-                timeout_ms=timeout_ms,
+                yield_time_ms=yield_time_ms,
             ),
             classes=tool_item_class("shell"),
         )

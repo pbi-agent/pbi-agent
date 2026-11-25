@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -70,7 +69,7 @@ def test_tool_runtime_pre_rewrite_and_post_replacement(tmp_path: Path) -> None:
         ),
     )
 
-    assert batch.results[0].output_json == "hook feedback"
+    assert batch.results[0].output == "hook feedback"
     assert hook_runtime.calls[0][1]["tool_input"] == {"value": "original"}
     assert hook_runtime.calls[1][1]["tool_input"] == {"value": "rewritten"}
     assert batch.results[0].display_metadata["hook_context"] == (
@@ -123,7 +122,7 @@ def test_tool_runtime_preserves_pre_context_without_post_replacement(
         ),
     )
 
-    assert json.loads(batch.results[0].output_json)["hook_context"] == "pre context"
+    assert batch.results[0].output.endswith("\n[hook]\npre context")
     assert batch.results[0].display_metadata["hook_context"] == "pre context"
 
 
@@ -167,4 +166,4 @@ def test_tool_runtime_pre_block(tmp_path: Path) -> None:
     )
 
     assert batch.results[0].is_error
-    assert "blocked" in batch.results[0].output_json
+    assert "blocked" in batch.results[0].output
