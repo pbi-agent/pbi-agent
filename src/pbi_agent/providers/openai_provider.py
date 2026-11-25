@@ -1230,14 +1230,22 @@ class OpenAIProvider(Provider):
                     "compact_threshold": effective_compact_threshold(self._settings),
                 }
             ]
-        if instructions:
-            body["instructions"] = instructions
         if (
             include_previous_response_id
             and self._previous_response_id
             and self._supports_previous_response_id()
         ):
             body["previous_response_id"] = self._previous_response_id
+        if instructions:
+            if not request_options.instructions_as_developer_input:
+                body["instructions"] = instructions
+            elif "previous_response_id" not in body:
+                # A chained request already carries the developer item from the
+                # first request of the chain; only full payloads need it.
+                body["input"] = [
+                    {"role": "developer", "content": instructions},
+                    *input_payload,
+                ]
         if self._settings.service_tier:
             body["service_tier"] = self._settings.service_tier
         return body
