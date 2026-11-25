@@ -1,2 +1,3 @@
-- [x] Identify the latest merged PR on `master` and review its changes for the summary.
-- [x] Background result header: drop the repeated task id (tag already carries it); timeline parser, tests, bundle updated
+- [x] Diagnose why GPT models emit every tool parameter (omitted `strict` on Responses function tools; Codex sends `strict: false`)
+- [x] Send `strict: false` on OpenAI/ChatGPT function tools; update `tests/test_openai_provider.py`
+- [x] Live-check with a ChatGPT model: shell call sent only `command` + `intent`

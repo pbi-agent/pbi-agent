@@ -158,7 +158,12 @@ class OpenAIProvider(Provider):
         base_tools = self._tool_catalog.get_openai_tool_definitions(
             excluded_names=excluded_tools
         )
-        self._tools = self._chatgpt_backend.serialize_tools(base_tools)
+        # The Responses API treats an omitted `strict` as strict mode, which
+        # forces the model to emit every property, including optional ones.
+        self._tools = [
+            {**tool, "strict": False} if tool.get("type") == "function" else tool
+            for tool in self._chatgpt_backend.serialize_tools(base_tools)
+        ]
 
     def restore_messages(self, messages: list[MessageRecord]) -> None:
         self._restored_input_items = [
