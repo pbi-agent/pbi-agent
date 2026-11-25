@@ -15,17 +15,23 @@ import subprocess
 import time
 from contextlib import suppress
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from codetool_shell import compress_text
 
+from pbi_agent.tools.background_tasks import (
+    DEFAULT_BACKGROUND_TIMEOUT_MS,
+    AttachedProcess,
+    spawn_attached_process,
+)
+from pbi_agent.tools.model_output import render_shell_output
 from pbi_agent.tools.output import MAX_OUTPUT_CHARS as DEFAULT_MAX_OUTPUT_CHARS
 from pbi_agent.tools.output import bound_output, decode_output
 from pbi_agent.tools.raw_output import raw_output_notice, save_raw_output
 from pbi_agent.tools.types import ToolContext, ToolSpec
 
-DEFAULT_TIMEOUT_MS = 30_000
-MAX_TIMEOUT_MS = 300_000
+DEFAULT_YIELD_TIME_MS = 30_000
+MAX_YIELD_TIME_MS = 300_000
 MAX_STDOUT_CHARS = 12_000
 MAX_STDERR_CHARS = 12_000
 MAX_OUTPUT_CHARS = DEFAULT_MAX_OUTPUT_CHARS
@@ -40,9 +46,11 @@ SPEC = ToolSpec(
     description=("Run a shell command. Returns stdout, stderr, and exit code."),
     prompt_usage=(
         "Use `shell` for commands, incl. git; byte-cap commands with unknown "
-        "or possibly large output. Set `run_in_background` for long-running "
-        "commands; result arrives automatically later, do not poll with sleep. "
-        "Use `background_task` to list, inspect, or kill background tasks."
+        "or possibly large output. Commands still running after "
+        "`yield_time_ms` move to background; set `run_in_background` to start "
+        "there. Background results arrive automatically; do not poll with "
+        "sleep. Use `background_task` to list, inspect, or kill them; kill "
+        "ones you no longer need before finishing."
     ),
     parameters_schema={
         "type": "object",
@@ -65,11 +73,13 @@ SPEC = ToolSpec(
                     "from the workspace root. Defaults to the workspace root."
                 ),
             },
-            "timeout_ms": {
+            "yield_time_ms": {
                 "type": "integer",
                 "description": (
-                    "Timeout in milliseconds. Defaults to 30 000 (30 seconds), "
-                    "maximum 300 000 (5 minutes)."
+                    "How long to wait for the command, in milliseconds. If it "
+                    "is still running then, it moves to the background and keeps "
+                    "running; its result is delivered automatically. Defaults to "
+                    "30 000 (30 seconds), maximum 300 000 (5 minutes)."
                 ),
             },
             "run_in_background": {
@@ -88,6 +98,14 @@ SPEC = ToolSpec(
                     "1 800 000 (30 minutes), maximum 7 200 000 (2 hours)."
                 ),
             },
+            "tty": {
+                "type": "boolean",
+                "description": (
+                    "Run under a pseudo-terminal (stdout+stderr merged) so the "
+                    "task can take input via `background_task` `input` "
+                    "(REPLs, prompts). Defaults to false: stdin is closed."
+                ),
+            },
             "compression": {
                 "type": "boolean",
                 "description": (
@@ -100,6 +118,7 @@ SPEC = ToolSpec(
         "additionalProperties": False,
     },
     is_destructive=True,
+    render_output=render_shell_output,
 )
 
 
@@ -118,6 +137,16 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     run_in_background = arguments.get("run_in_background")
     if run_in_background is not None and run_in_background is not False:
         return _handle_background(arguments, context)
+    started = time.monotonic()
+    result = _handle_foreground(arguments, context)
+    if "stdout" in result or "stderr" in result:
+        result["duration_ms"] = int((time.monotonic() - started) * 1000)
+    return result
+
+
+def _handle_foreground(
+    arguments: dict[str, Any], context: ToolContext
+) -> dict[str, Any]:
     intent_error = _intent_error(arguments)
     if intent_error is not None:
         return {"error": intent_error}
@@ -140,21 +169,29 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     working_directory = _resolve_working_directory(
         root, arguments.get("working_directory")
     )
+    if "timeout_ms" in arguments:
+        return {"error": _TIMEOUT_MS_REPLACED_ERROR}
+    tty = arguments.get("tty", False)
+    if not isinstance(tty, bool):
+        return {"error": "'tty' must be a boolean."}
     try:
-        timeout_ms = _normalize_timeout_ms(arguments.get("timeout_ms"))
+        yield_time_ms = _normalize_yield_time_ms(arguments.get("yield_time_ms"))
     except ValueError as exc:
         return {"error": str(exc)}
 
-    effective_command = _bootstrap_command(command)
+    effective_command = _bootstrap_command(_tty_command(command) if tty else command)
     shell_executable = os.environ.get(SHELL_EXECUTABLE_ENV) or None
 
     try:
-        if isinstance(context, ToolContext) and context.display is not None:
+        if tty or (isinstance(context, ToolContext) and context.display is not None):
             return _run_interruptible(
                 effective_command,
+                tty=tty,
+                display_command=command,
+                intent=str(arguments["intent"]).strip(),
                 working_directory=working_directory,
                 shell_executable=shell_executable,
-                timeout_ms=timeout_ms,
+                yield_time_ms=yield_time_ms,
                 compression=compression,
                 context=context,
             )
@@ -162,11 +199,12 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             effective_command,
             cwd=str(working_directory),
             check=False,
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=False,
             shell=True,
             executable=shell_executable,
-            timeout=(timeout_ms / 1000.0),
+            timeout=(yield_time_ms / 1000.0),
         )
         return {
             **_build_output_payload(
@@ -177,16 +215,12 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             "exit_code": completed.returncode,
         }
     except subprocess.TimeoutExpired as exc:
-        return {
-            **_build_output_payload(
-                stdout=decode_output(exc.stdout),
-                stderr=decode_output(exc.stderr),
-                compression=compression,
-            ),
-            "exit_code": None,
-            "timed_out": True,
-            "error": f"Command timed out after {timeout_ms}ms.",
-        }
+        return _timed_out_payload(
+            stdout=decode_output(exc.stdout),
+            stderr=decode_output(exc.stderr),
+            compression=compression,
+            yield_time_ms=yield_time_ms,
+        )
     except Exception as exc:
         stderr, stderr_truncated = bound_output(str(exc))
         return {
@@ -198,6 +232,30 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         }
 
 
+_TIMEOUT_MS_REPLACED_ERROR = (
+    "'timeout_ms' is not supported; use 'yield_time_ms' (commands still running "
+    "after it move to the background instead of being killed)."
+)
+
+
+def _timed_out_payload(
+    *,
+    stdout: str,
+    stderr: str,
+    compression: bool,
+    yield_time_ms: int,
+) -> dict[str, Any]:
+    return {
+        **_build_output_payload(stdout=stdout, stderr=stderr, compression=compression),
+        "exit_code": None,
+        "timed_out": True,
+        "error": (
+            f"Command killed after {yield_time_ms}ms; background tasks are not "
+            "available here."
+        ),
+    }
+
+
 def _background_manager(context: ToolContext) -> Any:
     display = context.display
     return getattr(display, "background_task_manager", None) if display else None
@@ -206,8 +264,6 @@ def _background_manager(context: ToolContext) -> Any:
 def _handle_background(
     arguments: dict[str, Any], context: ToolContext
 ) -> dict[str, Any]:
-    if context.sub_agent_depth > 0:
-        return {"error": "Background shell tasks are not available to sub-agents."}
     manager = _background_manager(context)
     if manager is None:
         return {
@@ -235,6 +291,9 @@ def _handle_background(
         )
     except ValueError as exc:
         return {"error": str(exc)}
+    tty = arguments.get("tty", False)
+    if not isinstance(tty, bool):
+        return {"error": "'tty' must be a boolean."}
     root = (
         context.workspace_root if context.workspace_root is not None else Path.cwd()
     ).resolve()
@@ -243,7 +302,7 @@ def _handle_background(
             root, arguments.get("working_directory")
         )
         task = manager.start(
-            _bootstrap_command(command),
+            _bootstrap_command(_tty_command(command) if tty else command),
             display_command=command,
             intent=str(arguments["intent"]).strip(),
             working_directory=str(working_directory),
@@ -251,6 +310,7 @@ def _handle_background(
             timeout_ms=timeout_ms,
             compression=compression,
             tool_call_id=context.tool_call_id,
+            tty=tty,
         )
     except Exception as exc:
         return {"error": f"Failed to start background task: {exc}"}
@@ -258,10 +318,6 @@ def _handle_background(
         "background": True,
         "task_id": task.task_id,
         "status": "running",
-        "message": (
-            "Started in background. The result will be delivered automatically "
-            "when it finishes; do not poll."
-        ),
     }
 
 
@@ -281,81 +337,121 @@ def _normalize_background_timeout_ms(raw: Any) -> int:
 def _run_interruptible(
     command: str,
     *,
+    display_command: str,
+    intent: str,
     working_directory: Path,
     shell_executable: str | None,
-    timeout_ms: int,
+    yield_time_ms: int,
     compression: bool,
     context: ToolContext,
+    tty: bool = False,
 ) -> dict[str, Any]:
     if _interrupt_requested(context):
-        return _interrupted_payload(stdout=b"", stderr=b"", compression=compression)
+        return _interrupted_payload(stdout="", stderr="", compression=compression)
 
-    popen_kwargs: dict[str, Any] = {}
-    if os.name == "nt":
-        popen_kwargs["creationflags"] = getattr(
-            subprocess,
-            "CREATE_NEW_PROCESS_GROUP",
-            0,
-        )
-    else:
-        popen_kwargs["start_new_session"] = True
-
-    process = cast(
-        subprocess.Popen[bytes],
-        subprocess.Popen(
-            command,
-            cwd=str(working_directory),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=False,
-            shell=True,
-            executable=shell_executable,
-            **popen_kwargs,
-        ),
+    attached = spawn_attached_process(
+        command,
+        working_directory=str(working_directory),
+        shell_executable=shell_executable,
+        tty=tty,
     )
-    deadline = time.monotonic() + (timeout_ms / 1000.0)
+    process = attached.process
+    deadline = time.monotonic() + (yield_time_ms / 1000.0)
     try:
         while True:
             if _interrupt_requested(context):
-                stdout, stderr = _stop_process(process)
+                _stop_attached(attached)
                 return _interrupted_payload(
-                    stdout=stdout,
-                    stderr=stderr,
+                    stdout=attached.stdout.text(),
+                    stderr=attached.stderr.text(),
                     compression=compression,
                 )
 
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                stdout, stderr = _stop_process(process)
-                return {
-                    **_build_output_payload(
-                        stdout=decode_output(stdout),
-                        stderr=decode_output(stderr),
-                        compression=compression,
-                    ),
-                    "exit_code": None,
-                    "timed_out": True,
-                    "error": f"Command timed out after {timeout_ms}ms.",
-                }
-
-            try:
-                stdout, stderr = process.communicate(
-                    timeout=min(INTERRUPT_POLL_SECONDS, remaining)
+                return _yield_or_kill(
+                    attached,
+                    display_command=display_command,
+                    intent=intent,
+                    working_directory=working_directory,
+                    yield_time_ms=yield_time_ms,
+                    compression=compression,
+                    context=context,
                 )
-            except subprocess.TimeoutExpired:
+
+            poll = min(INTERRUPT_POLL_SECONDS, remaining)
+            if process.poll() is None:
+                try:
+                    process.wait(timeout=poll)
+                except subprocess.TimeoutExpired:
+                    continue
+            # Descendants may still hold the pipes after the shell exits.
+            alive = [reader for reader in attached.readers if reader.is_alive()]
+            if alive:
+                alive[0].join(timeout=poll)
                 continue
             return {
                 **_build_output_payload(
-                    stdout=decode_output(stdout),
-                    stderr=decode_output(stderr),
+                    stdout=attached.stdout.text(),
+                    stderr=attached.stderr.text(),
                     compression=compression,
                 ),
                 "exit_code": process.returncode,
             }
     except BaseException:
         with suppress(Exception):
-            _stop_process(process)
+            _stop_attached(attached)
         raise
+
+
+def _yield_or_kill(
+    attached: AttachedProcess,
+    *,
+    display_command: str,
+    intent: str,
+    working_directory: Path,
+    yield_time_ms: int,
+    compression: bool,
+    context: ToolContext,
+) -> dict[str, Any]:
+    """Hand a still-running command to the background manager, else kill it."""
+    manager = _background_manager(context) if context.background_handoff else None
+    if manager is not None:
+        try:
+            task = manager.adopt(
+                attached,
+                display_command=display_command,
+                intent=intent,
+                working_directory=str(working_directory),
+                timeout_ms=DEFAULT_BACKGROUND_TIMEOUT_MS,
+                compression=compression,
+                tool_call_id=context.tool_call_id,
+            )
+        except Exception:
+            task = None
+        if task is not None:
+            stdout = attached.stdout.read_since(0)
+            stderr = attached.stderr.read_since(0)
+            task.stdout_cursor = stdout.cursor
+            task.stderr_cursor = stderr.cursor
+            return {
+                **_build_output_payload(
+                    stdout=stdout.text,
+                    stderr=stderr.text,
+                    compression=compression,
+                    save_raw=False,
+                ),
+                "background": True,
+                "task_id": task.task_id,
+                "status": "running",
+            }
+    _stop_attached(attached)
+    return _timed_out_payload(
+        stdout=attached.stdout.text(),
+        stderr=attached.stderr.text(),
+        compression=compression,
+        yield_time_ms=yield_time_ms,
+    )
 
 
 def _interrupt_requested(context: ToolContext) -> bool:
@@ -369,21 +465,18 @@ def _interrupt_requested(context: ToolContext) -> bool:
     return bool(call_id and callable(checker) and checker(call_id))
 
 
-def _stop_process(process: subprocess.Popen[bytes]) -> tuple[bytes, bytes]:
+def _stop_attached(attached: AttachedProcess) -> None:
+    process = attached.process
     _kill_process_tree(process)
     try:
-        return process.communicate(timeout=PROCESS_STOP_TIMEOUT_SECONDS)
-    except subprocess.TimeoutExpired as exc:
+        process.wait(timeout=PROCESS_STOP_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
         if process.poll() is None:
             process.kill()
-        try:
-            return process.communicate(timeout=INTERRUPT_POLL_SECONDS)
-        except subprocess.TimeoutExpired as final_exc:
-            _close_process_pipes(process)
-            return (
-                _timeout_stream(final_exc.stdout, fallback=exc.stdout),
-                _timeout_stream(final_exc.stderr, fallback=exc.stderr),
-            )
+        with suppress(subprocess.TimeoutExpired):
+            process.wait(timeout=INTERRUPT_POLL_SECONDS)
+    attached.join_readers(timeout=INTERRUPT_POLL_SECONDS * 5)
+    _close_process_pipes(process)
 
 
 def _kill_process_tree(process: subprocess.Popen[bytes]) -> None:
@@ -424,33 +517,36 @@ def _close_process_pipes(process: subprocess.Popen[bytes]) -> None:
         process.stderr.close()
 
 
-def _timeout_stream(
-    value: bytes | str | None, *, fallback: bytes | str | None
-) -> bytes:
-    selected = value if value is not None else fallback
-    if isinstance(selected, bytes):
-        return selected
-    if isinstance(selected, str):
-        return selected.encode()
-    return b""
-
-
 def _interrupted_payload(
     *,
-    stdout: bytes,
-    stderr: bytes,
+    stdout: str,
+    stderr: str,
     compression: bool,
 ) -> dict[str, Any]:
     return {
         **_build_output_payload(
-            stdout=decode_output(stdout),
-            stderr=decode_output(stderr),
+            stdout=stdout,
+            stderr=stderr,
             compression=compression,
         ),
         "exit_code": 130,
         "interrupted": True,
         "error": "Command interrupted by user.",
     }
+
+
+_SHELL_SYNTAX_CHARS = frozenset(";&|<>()$`\\\n*?[]{}~!#=")
+
+
+def _tty_command(command: str) -> str:
+    """``exec`` a simple command so it, not the wrapping shell, owns the PTY.
+
+    Ctrl-C then reaches only the command (the shell would otherwise die and
+    report its own signal exit code).
+    """
+    if os.name == "nt" or any(char in _SHELL_SYNTAX_CHARS for char in command):
+        return command
+    return f"exec {command}"
 
 
 def _bootstrap_command(command: str) -> str:
@@ -482,14 +578,12 @@ def _resolve_working_directory(root: Path, raw: Any) -> Path:
     return resolved
 
 
-def _normalize_timeout_ms(raw_timeout: Any) -> int:
-    if raw_timeout is None:
-        return DEFAULT_TIMEOUT_MS
-    if isinstance(raw_timeout, bool) or not isinstance(raw_timeout, int):
-        raise ValueError("'timeout_ms' must be a positive integer.")
-    if raw_timeout < 1:
-        raise ValueError("'timeout_ms' must be a positive integer.")
-    return min(raw_timeout, MAX_TIMEOUT_MS)
+def _normalize_yield_time_ms(raw: Any) -> int:
+    if raw is None:
+        return DEFAULT_YIELD_TIME_MS
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
+        raise ValueError("'yield_time_ms' must be a positive integer.")
+    return min(raw, MAX_YIELD_TIME_MS)
 
 
 def _normalize_compression(raw_compression: Any) -> bool:

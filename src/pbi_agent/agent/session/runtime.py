@@ -12,6 +12,10 @@ from pbi_agent.agent.reference_resolution import (
     resolve_command_references,
     resolve_sub_agent_references,
 )
+from pbi_agent.agent.session.background import (
+    RunBackgroundTasks,
+    run_background_tasks,
+)
 from pbi_agent.agent.session.commands import (
     build_user_turn_input as _build_user_turn_input,
 )
@@ -360,16 +364,19 @@ def run_single_turn(
             explicit_agent_names=explicit_agent_names,
             workspace_directory_key=workspace_directory_key,
         )
-        with _open_runtime_provider(
-            settings,
-            system_prompt=system_prompt,
-            excluded_tools=INTERACTIVE_ONLY_TOOLS,
-            tool_availability_overridden=runtime.tool_availability_overridden,
-            workspace_root=workspace,
-            workspace_directory_key=workspace_directory_key,
-            explicit_agent_names=explicit_agent_names,
-            visible_sub_agent_names=active_command_sub_agent_names,
-        ) as provider:
+        with (
+            _open_runtime_provider(
+                settings,
+                system_prompt=system_prompt,
+                excluded_tools=INTERACTIVE_ONLY_TOOLS,
+                tool_availability_overridden=runtime.tool_availability_overridden,
+                workspace_root=workspace,
+                workspace_directory_key=workspace_directory_key,
+                explicit_agent_names=explicit_agent_names,
+                visible_sub_agent_names=active_command_sub_agent_names,
+            ) as provider,
+            run_background_tasks(display) as background,
+        ):
             display.assistant_start()
             hook_coordinator = SessionHookCoordinator(hook_runtime)
             session_start_context = hook_coordinator.run_session_start(
@@ -456,7 +463,24 @@ def run_single_turn(
                 tracer=tracer,
                 hook_runtime=hook_runtime,
                 current_turn_tool_exchanges=[],
+                background=background,
             )
+            response, wake_had_errors, _ = _wake_on_background_results(
+                background=background,
+                provider=provider,
+                response=response,
+                display=display,
+                session_usage=session_usage,
+                turn_usage=turn_usage,
+                tracer=tracer,
+                session_id=session_id,
+                instructions=turn_instructions,
+                max_workers=settings.max_tool_workers,
+                store=store,
+                current_user_turn_text=user_turn_history_text,
+                hook_runtime=hook_runtime,
+            )
+            had_tool_errors = had_tool_errors or wake_had_errors
             stop_hook = hook_coordinator.run_stop(response, tracer=tracer)
             if stop_hook.continuation_prompt:
                 response, stop_had_errors = hook_coordinator.run_stop_continuation(
@@ -1500,47 +1524,52 @@ def run_sub_agent_task(
             if nested_sub_agents_enabled
             else SUB_AGENT_DISABLED_TOOLS
         )
-        with _open_runtime_provider(
-            child_settings,
-            system_prompt=get_sub_agent_system_prompt(
-                agent_prompt_override=(
-                    agent_definition.system_prompt
-                    if agent_definition is not None
-                    else None
+        with (
+            _open_runtime_provider(
+                child_settings,
+                system_prompt=get_sub_agent_system_prompt(
+                    agent_prompt_override=(
+                        agent_definition.system_prompt
+                        if agent_definition is not None
+                        else None
+                    ),
+                    settings=child_settings,
+                    excluded_tools=child_excluded_tools,
+                    cwd=workspace,
+                    explicit_skill_names=extract_explicit_skill_names(task_instruction),
+                    visible_skill_names=(
+                        getattr(agent_definition, "skills", None)
+                        if agent_definition is not None
+                        else None
+                    ),
+                    skill_source_label=(
+                        f"Sub-agent '{agent_definition.name}' frontmatter"
+                        if agent_definition is not None
+                        else "Sub-agent frontmatter"
+                    ),
+                    visible_agent_names=(
+                        visible_nested_agent_names
+                        if nested_sub_agents_enabled
+                        else None
+                    ),
+                    agent_source_label=(
+                        f"Sub-agent '{agent_definition.name}' frontmatter"
+                        if agent_definition is not None
+                        else "Sub-agent frontmatter"
+                    ),
+                    component_commands=component_commands,
+                    workspace_directory_key=workspace_directory_key,
                 ),
-                settings=child_settings,
                 excluded_tools=child_excluded_tools,
-                cwd=workspace,
-                explicit_skill_names=extract_explicit_skill_names(task_instruction),
-                visible_skill_names=(
-                    getattr(agent_definition, "skills", None)
-                    if agent_definition is not None
-                    else None
-                ),
-                skill_source_label=(
-                    f"Sub-agent '{agent_definition.name}' frontmatter"
-                    if agent_definition is not None
-                    else "Sub-agent frontmatter"
-                ),
-                visible_agent_names=(
+                tool_catalog=tool_catalog,
+                workspace_root=workspace,
+                workspace_directory_key=workspace_directory_key,
+                visible_sub_agent_names=(
                     visible_nested_agent_names if nested_sub_agents_enabled else None
                 ),
-                agent_source_label=(
-                    f"Sub-agent '{agent_definition.name}' frontmatter"
-                    if agent_definition is not None
-                    else "Sub-agent frontmatter"
-                ),
-                component_commands=component_commands,
-                workspace_directory_key=workspace_directory_key,
-            ),
-            excluded_tools=child_excluded_tools,
-            tool_catalog=tool_catalog,
-            workspace_root=workspace,
-            workspace_directory_key=workspace_directory_key,
-            visible_sub_agent_names=(
-                visible_nested_agent_names if nested_sub_agents_enabled else None
-            ),
-        ) as provider:
+            ) as provider,
+            run_background_tasks(child_display, own=True) as background,
+        ):
             child_hook_runtime = HookRuntime(
                 workspace=workspace,
                 settings=child_settings,
@@ -1603,7 +1632,26 @@ def run_sub_agent_task(
                 max_elapsed_seconds=SUB_AGENT_MAX_ELAPSED_SECONDS,
                 tracer=child_tracer,
                 hook_runtime=child_hook_runtime,
+                background=background,
             )
+            response, wake_had_errors, request_count = _wake_on_background_results(
+                background=background,
+                provider=provider,
+                response=response,
+                display=child_display,
+                session_usage=child_session_usage,
+                turn_usage=child_turn_usage,
+                tracer=child_tracer,
+                deadline=started_at + SUB_AGENT_MAX_ELAPSED_SECONDS,
+                request_count=request_count,
+                max_requests=SUB_AGENT_MAX_REQUESTS,
+                max_workers=child_settings.max_tool_workers,
+                sub_agent_depth=sub_agent_depth + 1,
+                started_at=started_at,
+                max_elapsed_seconds=SUB_AGENT_MAX_ELAPSED_SECONDS,
+                hook_runtime=child_hook_runtime,
+            )
+            had_tool_errors = had_tool_errors or wake_had_errors
             stop_hook_result = child_hooks.run_subagent_stop(
                 agent_type=agent_type or "default",
                 task_instruction=task_instruction,
@@ -1641,6 +1689,7 @@ def run_sub_agent_task(
                         max_elapsed_seconds=SUB_AGENT_MAX_ELAPSED_SECONDS,
                         tracer=child_tracer,
                         hook_runtime=child_hook_runtime,
+                        background=background,
                     )
                 )
                 had_tool_errors = had_tool_errors or continuation_tool_errors
@@ -1925,6 +1974,7 @@ def _run_tool_iterations(
     current_turn_tool_exchanges: (
         list[tuple[list[ToolCall], list[dict[str, Any]]]] | None
     ) = None,
+    background: RunBackgroundTasks | None = None,
 ) -> tuple[CompletedResponse, bool, int]:
     had_errors = False
     tool_exchanges = current_turn_tool_exchanges
@@ -2046,6 +2096,18 @@ def _run_tool_iterations(
             store=store,
             session_id=session_id,
         )
+        background_results = (
+            background.drain_results() if background is not None else None
+        )
+        if background_results:
+            steer_user_input = UserTurnInput(
+                text=(
+                    f"{steer_user_input.text}\n\n{background_results}"
+                    if steer_user_input is not None and steer_user_input.text
+                    else background_results
+                ),
+                images=list(steer_user_input.images) if steer_user_input else [],
+            )
 
         try:
             if compacted_after_tools:
@@ -2107,6 +2169,68 @@ def _run_tool_iterations(
             _log.exception("Follow-up request after tool execution failed")
             raise
 
+    return response, had_errors, request_count
+
+
+def _wake_on_background_results(
+    *,
+    background: RunBackgroundTasks | None,
+    provider: Any,
+    response: CompletedResponse,
+    display: DisplayProtocol,
+    session_usage: TokenUsage,
+    turn_usage: TokenUsage,
+    tracer: RunTracer | None,
+    deadline: float | None = None,
+    request_count: int = 0,
+    max_requests: int | None = None,
+    session_id: str | None = None,
+    instructions: str | None = None,
+    **tool_iteration_kwargs: Any,
+) -> tuple[CompletedResponse, bool, int]:
+    """Wake the model with background results after it ended its turn.
+
+    Only runs that own their background tasks (single-turn runs, sub-agents)
+    pass ``background``. Returns the final response, whether tool errors
+    occurred, and the updated provider request count.
+    """
+    had_errors = False
+    while background is not None:
+        if max_requests is not None and request_count >= max_requests:
+            break
+        results = background.next_wake_input(
+            deadline=deadline,
+            interrupted=lambda: _interrupt_requested(display),
+        )
+        if results is None:
+            break
+        _raise_if_interrupted(display)
+        display.render_user_message(results)
+        response = provider.request_turn(
+            user_message=results,
+            instructions=instructions,
+            session_id=session_id,
+            display=display,
+            session_usage=session_usage,
+            turn_usage=turn_usage,
+            tracer=tracer,
+        )
+        request_count += 1
+        response, loop_errors, request_count = _run_tool_iterations(
+            provider=provider,
+            response=response,
+            display=display,
+            session_usage=session_usage,
+            turn_usage=turn_usage,
+            tracer=tracer,
+            session_id=session_id,
+            instructions=instructions,
+            request_count=request_count,
+            max_requests=max_requests,
+            background=background,
+            **tool_iteration_kwargs,
+        )
+        had_errors = had_errors or loop_errors
     return response, had_errors, request_count
 
 

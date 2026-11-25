@@ -156,8 +156,13 @@ with common fields:
 ```
 
 Event-specific fields include `prompt`, `tool_name`, `tool_input`,
-`tool_response`, compaction reason, sub-agent instruction, and final response
-text where relevant.
+`tool_response`, `tool_result`, compaction reason, sub-agent instruction, and
+final response text where relevant.
+
+In `PostToolUse`, `tool_response` is the plain-text tool result the model sees
+(for example `exit 0` followed by the command output), and `tool_result` is the
+structured payload (`{"ok": true, "result": {...}}`). A replacement returned by
+the hook is sent to the model as-is, so keep it plain text.
 
 ## Hook output
 

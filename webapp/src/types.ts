@@ -734,7 +734,7 @@ export type ApplyPatchToolMetadata = {
   error?: unknown;
   command?: string;
   working_directory?: string;
-  timeout_ms?: number | string;
+  yield_time_ms?: number | string;
   exit_code?: number | null;
   timed_out?: boolean;
   interrupted?: boolean;

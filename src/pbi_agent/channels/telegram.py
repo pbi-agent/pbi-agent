@@ -316,7 +316,7 @@ class TelegramDisplay:
         *,
         call_id: str = "",
         working_directory: str = ".",
-        timeout_ms: int | str = "default",
+        yield_time_ms: int | str = "default",
         result: Any = None,
     ) -> None:
         return

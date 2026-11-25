@@ -819,9 +819,9 @@ def _google_function_result_history_step(
 
 def _google_function_result_value(result) -> str | list[dict[str, Any]]:
     if not result.attachments:
-        return result.output_json
+        return result.output
 
-    content = [{"type": "text", "text": result.output_json}]
+    content = [{"type": "text", "text": result.output}]
     content.extend(_google_image_part(image) for image in result.attachments)
     return content
 

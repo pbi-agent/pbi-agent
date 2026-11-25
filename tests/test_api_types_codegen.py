@@ -106,7 +106,7 @@ def test_high_value_sse_payload_schemas_match_emitted_shapes() -> None:
                             "path": "README.md",
                             "success": True,
                             "diff_line_numbers": [{"old": 1, "new": 2}],
-                            "timeout_ms": "1000",
+                            "yield_time_ms": "1000",
                             "exit_code": 0,
                         },
                     }

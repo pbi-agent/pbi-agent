@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
@@ -24,6 +25,9 @@ class ToolSpec:
     is_destructive: bool = False
     freeform_format: dict[str, str] | None = None
     prompt_usage: str | None = None
+    # Renders the handler payload as model-facing text; ``None`` uses the
+    # generic renderer in ``pbi_agent.tools.model_output``.
+    render_output: Callable[[Any], str] | None = None
 
     @property
     def is_freeform(self) -> bool:
@@ -64,15 +68,22 @@ class ToolContext:
     turn_id: str | None = None
     current_model: str | None = None
     tool_call_id: str | None = None
+    # False for user-typed shell commands: a command outliving its yield time
+    # is killed instead of handed to the model's background tasks.
+    background_handoff: bool = True
 
 
 @dataclass(slots=True)
 class ToolResult:
     call_id: str
-    output_json: str
+    # Model-facing text (what providers send back as the tool result).
+    output: str
     is_error: bool = False
     attachments: list[ImageAttachment] = field(default_factory=list)
     display_metadata: dict[str, Any] = field(default_factory=dict)
+    # Structured envelope (``{"ok", "result"}`` or ``{"ok", "error", "tool"}``)
+    # kept for display renderers and hooks; never sent to the model.
+    payload: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

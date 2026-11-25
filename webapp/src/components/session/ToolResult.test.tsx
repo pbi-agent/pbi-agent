@@ -28,7 +28,7 @@ describe("ToolResult", () => {
             arguments: {
               command: "bun run web:build",
               working_directory: ".",
-              timeout_ms: 180000,
+              yield_time_ms: 180000,
             },
           }}
         />,
@@ -87,7 +87,7 @@ describe("ToolResult", () => {
             tool_name: "shell",
             call_id: "call_1",
             status: "running",
-            arguments: { command: "ls", working_directory: ".", timeout_ms: 180000 },
+            arguments: { command: "ls", working_directory: ".", yield_time_ms: 180000 },
           }}
         />,
       );
@@ -182,10 +182,10 @@ describe("ToolResult", () => {
             call_id: "call_1",
             status: "completed",
             success: true,
-            arguments: { command: "ls", working_directory: ".", timeout_ms: 180000 },
+            arguments: { command: "ls", working_directory: ".", yield_time_ms: 180000 },
             command: "ls",
             working_directory: ".",
-            timeout_ms: 180000,
+            yield_time_ms: 180000,
             exit_code: 0,
             timed_out: false,
             result: { stdout: "README.md\n", stderr: "", exit_code: 0 },

@@ -7,16 +7,20 @@ session can deliver results (checkpoint steering or idle wake-up).
 
 from __future__ import annotations
 
+import codecs
+import contextlib
 import os
+import re
 import subprocess
 import threading
 import time
 import uuid
-from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, cast
+
+from pbi_agent.tools.stream_buffer import HEAD_MAX_CHARS, TAIL_MAX_CHARS, StreamBuffer
 
 BackgroundTaskStatus = Literal["running", "completed", "failed", "killed", "timed_out"]
 BackgroundTaskKind = Literal["shell", "sub_agent"]
@@ -24,34 +28,201 @@ BackgroundTaskKind = Literal["shell", "sub_agent"]
 DEFAULT_BACKGROUND_TIMEOUT_MS = 30 * 60 * 1000
 MAX_BACKGROUND_TIMEOUT_MS = 2 * 60 * 60 * 1000
 MAX_CONCURRENT_BACKGROUND_TASKS = 4
-TAIL_MAX_CHARS = 64_000
+OUTPUT_SETTLE_MS = 300
 _READ_CHUNK = 4096
 
 
+TTY_UNSUPPORTED_ERROR = "'tty' is not supported on Windows yet."
+_ANSI_ESCAPE_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*\x07|[@-Z\\-_])")
+
+
+class TerminalInput:
+    """Owns a PTY master fd; safe to write to until closed (no fd reuse)."""
+
+    def __init__(self, fd: int) -> None:
+        self._fd: int | None = fd
+        self._lock = threading.Lock()
+
+    @property
+    def fd(self) -> int | None:
+        return self._fd
+
+    def write(self, data: bytes) -> None:
+        with self._lock:
+            if self._fd is None:
+                raise OSError("terminal is closed")
+            view = memoryview(data)
+            while view:
+                written = os.write(self._fd, view)
+                view = view[written:]
+
+    def close(self) -> None:
+        with self._lock:
+            fd, self._fd = self._fd, None
+        if fd is not None:
+            with contextlib.suppress(OSError):
+                os.close(fd)
+
+
 @dataclass(slots=True)
-class _StreamTail:
-    chunks: deque[str] = field(default_factory=deque)
-    size: int = 0
-    dropped: bool = False
+class AttachedProcess:
+    """A running shell process whose output is pumped into stream buffers.
 
-    def append(self, text: str) -> None:
-        if not text:
-            return
-        if len(text) > TAIL_MAX_CHARS:
-            # Keep the tail of an oversized chunk instead of discarding it whole.
-            text = text[-TAIL_MAX_CHARS:]
-            self.chunks.clear()
-            self.size = 0
-            self.dropped = True
-        self.chunks.append(text)
-        self.size += len(text)
-        while self.size > TAIL_MAX_CHARS and self.chunks:
-            removed = self.chunks.popleft()
-            self.size -= len(removed)
-            self.dropped = True
+    With ``tty`` the process runs under a pseudo-terminal: stdout and stderr
+    are merged into ``stdout`` and input can be written to ``terminal``.
+    """
 
-    def text(self) -> str:
-        return "".join(self.chunks)
+    process: subprocess.Popen[bytes]
+    stdout: StreamBuffer
+    stderr: StreamBuffer
+    readers: list[threading.Thread]
+    started_monotonic: float = field(default_factory=time.monotonic)
+    tty: bool = False
+    terminal: TerminalInput | None = None
+
+    def join_readers(self, timeout: float = 2.0) -> None:
+        for reader in self.readers:
+            reader.join(timeout=timeout)
+
+
+def clean_tty_text(text: str) -> str:
+    """Strip terminal escape sequences and carriage returns from PTY output."""
+    text = _ANSI_ESCAPE_RE.sub("", text)
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def spawn_attached_process(
+    command: str,
+    *,
+    working_directory: str,
+    shell_executable: str | None,
+    tty: bool = False,
+) -> AttachedProcess:
+    """Start ``command`` in its own process group.
+
+    Without ``tty`` stdin is closed, so commands that prompt fail fast.
+    """
+    if tty:
+        return _spawn_tty_process(
+            command,
+            working_directory=working_directory,
+            shell_executable=shell_executable,
+        )
+    popen_kwargs: dict[str, Any] = {}
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = getattr(
+            subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+        )
+    else:
+        popen_kwargs["start_new_session"] = True
+    process = cast(
+        subprocess.Popen[bytes],
+        subprocess.Popen(
+            command,
+            cwd=working_directory,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=False,
+            shell=True,
+            executable=shell_executable,
+            **popen_kwargs,
+        ),
+    )
+    stdout = StreamBuffer()
+    stderr = StreamBuffer()
+    readers = [
+        threading.Thread(target=_pump, args=(process.stdout, stdout), daemon=True),
+        threading.Thread(target=_pump, args=(process.stderr, stderr), daemon=True),
+    ]
+    for reader in readers:
+        reader.start()
+    return AttachedProcess(
+        process=process, stdout=stdout, stderr=stderr, readers=readers
+    )
+
+
+def _spawn_tty_process(
+    command: str,
+    *,
+    working_directory: str,
+    shell_executable: str | None,
+) -> AttachedProcess:
+    if os.name == "nt":
+        raise OSError(TTY_UNSUPPORTED_ERROR)
+    import pty
+
+    master_fd, slave_fd = pty.openpty()
+    env = dict(os.environ)
+    # A dumb terminal keeps colors and cursor tricks out of model-facing output.
+    env["TERM"] = "dumb"
+    try:
+        process = cast(
+            subprocess.Popen[bytes],
+            subprocess.Popen(
+                command,
+                cwd=working_directory,
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                shell=True,
+                executable=shell_executable,
+                env=env,
+                start_new_session=True,
+                close_fds=True,
+                preexec_fn=_acquire_controlling_terminal,
+            ),
+        )
+    except BaseException:
+        os.close(master_fd)
+        raise
+    finally:
+        os.close(slave_fd)
+    terminal = TerminalInput(master_fd)
+    stdout = StreamBuffer()
+    reader = threading.Thread(
+        target=_pump_terminal, args=(terminal, stdout), daemon=True
+    )
+    reader.start()
+    return AttachedProcess(
+        process=process,
+        stdout=stdout,
+        stderr=StreamBuffer(),
+        readers=[reader],
+        tty=True,
+        terminal=terminal,
+    )
+
+
+def _acquire_controlling_terminal() -> None:  # pragma: no cover - runs in child
+    """Make the PTY (stdin) the child's controlling terminal.
+
+    Runs after ``setsid`` (``start_new_session``), so Ctrl-C/Ctrl-Z written to
+    the terminal reach the foreground process group as signals.
+    """
+    import fcntl
+    import termios
+
+    fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+
+
+def _pump_terminal(terminal: TerminalInput, buffer: StreamBuffer) -> None:
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    try:
+        while True:
+            fd = terminal.fd
+            if fd is None:
+                return
+            try:
+                chunk = os.read(fd, _READ_CHUNK)
+            except OSError:  # EIO once the terminal's last writer exits
+                chunk = b""
+            if not chunk:
+                buffer.append(decoder.decode(b"", final=True))
+                return
+            buffer.append(decoder.decode(chunk))
+    finally:
+        terminal.close()
 
 
 @dataclass(slots=True)
@@ -67,8 +238,14 @@ class BackgroundTask:
     ended_at: float | None = None
     exit_code: int | None = None
     process: subprocess.Popen[bytes] | None = field(default=None, repr=False)
-    stdout: _StreamTail = field(default_factory=_StreamTail, repr=False)
-    stderr: _StreamTail = field(default_factory=_StreamTail, repr=False)
+    stdout: StreamBuffer = field(default_factory=StreamBuffer, repr=False)
+    stderr: StreamBuffer = field(default_factory=StreamBuffer, repr=False)
+    readers: list[threading.Thread] = field(default_factory=list, repr=False)
+    tty: bool = False
+    terminal: TerminalInput | None = field(default=None, repr=False)
+    # Characters of each stream the model has already been shown.
+    stdout_cursor: int = 0
+    stderr_cursor: int = 0
     kill_reason: BackgroundTaskStatus | None = None
     intent: str = ""
     kind: BackgroundTaskKind = "shell"
@@ -131,48 +308,103 @@ class BackgroundTaskManager:
         timeout_ms: int,
         compression: bool,
         tool_call_id: str | None,
+        tty: bool = False,
     ) -> BackgroundTask:
         with self._lock:
-            if self._closed:
-                raise RuntimeError("Background tasks are no longer accepted.")
-            running = sum(1 for t in self._tasks.values() if t.status == "running")
-            if running >= self._max_concurrent:
-                raise RuntimeError(
-                    f"Too many background tasks running ({running}/"
-                    f"{self._max_concurrent}). Kill or wait for one first."
-                )
-            task = BackgroundTask(
-                task_id=f"bg-{uuid.uuid4().hex[:8]}",
-                command=display_command,
+            self._check_capacity()
+            attached = spawn_attached_process(
+                command,
+                working_directory=working_directory,
+                shell_executable=shell_executable,
+                tty=tty,
+            )
+            task = self._register(
+                attached,
+                display_command=display_command,
                 intent=intent,
                 working_directory=working_directory,
-                tool_call_id=tool_call_id,
                 timeout_ms=timeout_ms,
                 compression=compression,
+                tool_call_id=tool_call_id,
                 started_at=time.time(),
             )
-            popen_kwargs: dict[str, Any] = {}
-            if os.name == "nt":
-                popen_kwargs["creationflags"] = getattr(
-                    subprocess, "CREATE_NEW_PROCESS_GROUP", 0
-                )
-            else:
-                popen_kwargs["start_new_session"] = True
-            task.process = cast(
-                subprocess.Popen[bytes],
-                subprocess.Popen(
-                    command,
-                    cwd=working_directory,
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=False,
-                    shell=True,
-                    executable=shell_executable,
-                    **popen_kwargs,
-                ),
+        self._start_watch(task)
+        return task
+
+    def adopt(
+        self,
+        attached: AttachedProcess,
+        *,
+        display_command: str,
+        intent: str = "",
+        working_directory: str,
+        timeout_ms: int,
+        compression: bool,
+        tool_call_id: str | None,
+    ) -> BackgroundTask:
+        """Take over a running foreground process instead of killing it.
+
+        The process keeps its stream buffers and reader threads, so no output
+        is lost. ``timeout_ms`` counts from the original process start.
+        """
+        elapsed = time.monotonic() - attached.started_monotonic
+        with self._lock:
+            self._check_capacity()
+            task = self._register(
+                attached,
+                display_command=display_command,
+                intent=intent,
+                working_directory=working_directory,
+                timeout_ms=timeout_ms,
+                compression=compression,
+                tool_call_id=tool_call_id,
+                started_at=time.time() - elapsed,
             )
-            self._tasks[task.task_id] = task
+        self._start_watch(task)
+        return task
+
+    def _check_capacity(self) -> None:
+        if self._closed:
+            raise RuntimeError("Background tasks are no longer accepted.")
+        running = sum(1 for t in self._tasks.values() if t.status == "running")
+        if running >= self._max_concurrent:
+            raise RuntimeError(
+                f"Too many background tasks running ({running}/"
+                f"{self._max_concurrent}). Kill or wait for one first."
+            )
+
+    def _register(
+        self,
+        attached: AttachedProcess,
+        *,
+        display_command: str,
+        intent: str,
+        working_directory: str,
+        timeout_ms: int,
+        compression: bool,
+        tool_call_id: str | None,
+        started_at: float,
+    ) -> BackgroundTask:
+        task = BackgroundTask(
+            task_id=f"bg-{uuid.uuid4().hex[:8]}",
+            command=display_command,
+            intent=intent,
+            working_directory=working_directory,
+            tool_call_id=tool_call_id,
+            timeout_ms=timeout_ms,
+            compression=compression,
+            started_at=started_at,
+            process=attached.process,
+            stdout=attached.stdout,
+            stderr=attached.stderr,
+            readers=attached.readers,
+            tty=attached.tty,
+            terminal=attached.terminal,
+        )
+        self._tasks[task.task_id] = task
+        return task
+
+    def _start_watch(self, task: BackgroundTask) -> None:
         threading.Thread(
             target=self._watch,
             args=(task,),
@@ -180,7 +412,6 @@ class BackgroundTaskManager:
             name=f"pbi-agent-bg-{task.task_id}",
         ).start()
         self._notify_changed()
-        return task
 
     def start_sub_agent(
         self,
@@ -194,14 +425,7 @@ class BackgroundTaskManager:
     ) -> BackgroundTask:
         """Run a sub-agent callable in a background thread."""
         with self._lock:
-            if self._closed:
-                raise RuntimeError("Background tasks are no longer accepted.")
-            running = sum(1 for t in self._tasks.values() if t.status == "running")
-            if running >= self._max_concurrent:
-                raise RuntimeError(
-                    f"Too many background tasks running ({running}/"
-                    f"{self._max_concurrent}). Kill or wait for one first."
-                )
+            self._check_capacity()
             task = BackgroundTask(
                 task_id=f"bg-{uuid.uuid4().hex[:8]}",
                 command=task_instruction,
@@ -230,6 +454,48 @@ class BackgroundTaskManager:
             raise KeyError(task_id)
         self._terminate(task, reason="killed")
         return task
+
+    def send_input(self, task_id: str, chars: str) -> BackgroundTask:
+        """Write ``chars`` to a running ``tty`` task's terminal."""
+        task = self.get(task_id)
+        if task is None:
+            raise KeyError(task_id)
+        if task.status != "running":
+            raise ValueError(f"Task {task_id} is not running ({task.status}).")
+        if task.terminal is None:
+            raise ValueError(
+                f"Task {task_id} has no terminal input; start the command with "
+                "'tty': true to send input."
+            )
+        try:
+            task.terminal.write(chars.encode("utf-8"))
+        except OSError as exc:
+            raise ValueError(f"Could not write to task {task_id}: {exc}") from exc
+        return task
+
+    def wait_for_output(self, task: BackgroundTask, *, wait_ms: int) -> None:
+        """Wait up to ``wait_ms`` for ``task`` to exit or its output to settle.
+
+        Returns early once new output has arrived and then stayed quiet for
+        ``OUTPUT_SETTLE_MS`` (e.g. a REPL answered and shows its prompt).
+        """
+        deadline = time.monotonic() + wait_ms / 1000.0
+        seen = task.stdout.total + task.stderr.total
+        settled_at: float | None = None
+        while time.monotonic() < deadline and task.status == "running":
+            time.sleep(0.05)
+            current = task.stdout.total + task.stderr.total
+            if current != seen:
+                seen = current
+                settled_at = time.monotonic()
+            elif (
+                settled_at is not None
+                and time.monotonic() - settled_at >= OUTPUT_SETTLE_MS / 1000.0
+            ):
+                return
+        if task.status != "running":
+            for reader in task.readers:
+                reader.join(timeout=1.0)
 
     def close(self) -> None:
         """Stop accepting tasks and kill every running process."""
@@ -268,7 +534,13 @@ class BackgroundTaskManager:
 
     # -- internals -----------------------------------------------------
 
-    def _terminate(self, task: BackgroundTask, *, reason: BackgroundTaskStatus) -> None:
+    def _terminate(
+        self,
+        task: BackgroundTask,
+        *,
+        reason: BackgroundTaskStatus,
+        force: bool = False,
+    ) -> None:
         from pbi_agent.tools.shell import _kill_process_tree
 
         if task.kind == "sub_agent":
@@ -277,7 +549,9 @@ class BackgroundTaskManager:
                 task.cancel_event.set()
             return
         process = task.process
-        if task.status != "running" or process is None or process.poll() is not None:
+        if task.status != "running" or process is None:
+            return
+        if process.poll() is not None and not force and not _readers_alive(task):
             return
         task.kill_reason = reason
         try:
@@ -289,26 +563,26 @@ class BackgroundTaskManager:
     def _watch(self, task: BackgroundTask) -> None:
         process = task.process
         assert process is not None
-        readers = [
-            threading.Thread(
-                target=_pump, args=(process.stdout, task.stdout), daemon=True
-            ),
-            threading.Thread(
-                target=_pump, args=(process.stderr, task.stderr), daemon=True
-            ),
-        ]
-        for reader in readers:
-            reader.start()
+        elapsed = max(0.0, time.time() - task.started_at)
+        remaining = max(0.0, task.timeout_ms / 1000.0 - elapsed)
+        deadline = time.monotonic() + remaining
         try:
-            process.wait(timeout=task.timeout_ms / 1000.0)
+            process.wait(timeout=remaining)
+            # Descendants (e.g. a REPL left behind when its shell got Ctrl-C)
+            # may keep the output open after the shell exits: the task runs
+            # until its output closes.
+            for reader in task.readers:
+                reader.join(timeout=max(0.0, deadline - time.monotonic()))
+            if any(reader.is_alive() for reader in task.readers):
+                raise subprocess.TimeoutExpired(task.command, remaining)
         except subprocess.TimeoutExpired:
-            self._terminate(task, reason="timed_out")
+            self._terminate(task, reason="timed_out", force=True)
             try:
                 process.wait(timeout=5.0)
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
-        for reader in readers:
+        for reader in task.readers:
             reader.join(timeout=2.0)
         with self._lock:
             task.ended_at = time.time()
@@ -382,9 +656,12 @@ class BackgroundTaskManager:
             pass
 
 
-def _pump(stream: Any, tail: _StreamTail) -> None:
-    from pbi_agent.tools.output import decode_output
+def _readers_alive(task: BackgroundTask) -> bool:
+    return any(reader.is_alive() for reader in task.readers)
 
+
+def _pump(stream: Any, buffer: StreamBuffer) -> None:
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
     if stream is None:
         return
     try:
@@ -395,8 +672,9 @@ def _pump(stream: Any, tail: _StreamTail) -> None:
                 else stream.read(_READ_CHUNK)
             )
             if not chunk:
+                buffer.append(decoder.decode(b"", final=True))
                 return
-            tail.append(decode_output(chunk))
+            buffer.append(decoder.decode(chunk))
     except (OSError, ValueError):
         return
     finally:
@@ -415,48 +693,72 @@ def is_background_result_text(text: str) -> bool:
 
 
 def render_background_result(task: BackgroundTask) -> str:
-    """Render a finished task as a model-facing synthetic user input."""
+    """Render a finished task as a model-facing synthetic user input.
+
+    Shows only output the model has not seen yet and marks it as seen.
+    """
+    from pbi_agent.tools.model_output import render_shell_output
+
     if task.kind == "sub_agent":
         return _render_sub_agent_result(task)
-    payload = background_output_payload(
-        task,
-        stdout=task.stdout.text(),
-        stderr=task.stderr.text(),
-        stdout_dropped=task.stdout.dropped,
-        stderr_dropped=task.stderr.dropped,
-        compression=task.compression,
-    )
-    duration = task.summary()["elapsed_seconds"]
-    exit_code = "none" if task.exit_code is None else str(task.exit_code)
+    body = render_shell_output(read_task_output(task))
+    header, _, rest = body.partition("\n")
+    label = task.intent or task.command
     lines = [
-        f'<{BACKGROUND_RESULT_TAG} task_id="{task.task_id}" status="{task.status}" '
-        f'exit_code="{exit_code}" duration_seconds="{duration}">',
-        *([f"intent: {task.intent}"] if task.intent else []),
-        f"command: {task.command}",
+        f'<{BACKGROUND_RESULT_TAG} task_id="{task.task_id}">',
+        f"{header} — {label}" if label else header,
     ]
-    if payload.get("stdout_tail_dropped") or payload.get("stdout_truncated"):
-        lines.append("stdout (truncated):")
-    else:
-        lines.append("stdout:")
-    lines.append(payload["stdout"])
-    if payload["stderr"]:
-        lines.append("stderr:")
-        lines.append(payload["stderr"])
-    if payload.get("raw_output_path"):
-        lines.append(f"raw_output_path: {payload['raw_output_path']}")
-    if payload.get("notice"):
-        lines.append(payload["notice"])
+    if rest:
+        lines.append(rest)
     lines.append(f"</{BACKGROUND_RESULT_TAG}>")
-    lines.append(
-        "This background shell task you started has finished. Continue the task "
-        "using this result."
-    )
     return "\n".join(lines)
 
 
-TAIL_DROPPED_NOTE = (
-    f"Background output keeps only the last {TAIL_MAX_CHARS} chars per stream; "
-    "earlier output was dropped and cannot be recovered."
+def read_task_output(
+    task: BackgroundTask,
+    *,
+    from_start: bool = False,
+) -> dict[str, Any]:
+    """Return a model-facing snapshot of output not yet shown, and mark it seen.
+
+    ``from_start`` re-reads everything retained. The payload carries the task
+    summary, bounded ``stdout``/``stderr`` and ``earlier_chars`` (output the
+    model was already shown).
+    """
+    status = task.status
+    stdout_cursor = 0 if from_start else task.stdout_cursor
+    stderr_cursor = 0 if from_start else task.stderr_cursor
+    stdout_read = task.stdout.read_since(stdout_cursor)
+    stderr_read = task.stderr.read_since(stderr_cursor)
+    task.stdout_cursor = stdout_read.cursor
+    task.stderr_cursor = stderr_read.cursor
+    stdout = stdout_read.text
+    stderr = stderr_read.text
+    if task.tty:
+        stdout = clean_tty_text(stdout)
+        stderr = clean_tty_text(stderr)
+    payload = {
+        **task.summary(),
+        "status": status,
+        **background_output_payload(
+            task,
+            stdout=stdout,
+            stderr=stderr,
+            stdout_dropped=stdout_read.skipped > 0,
+            stderr_dropped=stderr_read.skipped > 0,
+            compression=task.compression,
+            status=status,
+        ),
+    }
+    earlier = stdout_cursor + stderr_cursor
+    if earlier:
+        payload["earlier_chars"] = earlier
+    return payload
+
+
+MIDDLE_DROPPED_NOTE = (
+    f"Background output keeps only the first {HEAD_MAX_CHARS} and last "
+    f"{TAIL_MAX_CHARS} chars per stream; the middle was dropped."
 )
 
 
@@ -472,11 +774,11 @@ def background_output_payload(
 ) -> dict[str, Any]:
     """Bound/compress a background task output snapshot for the model.
 
-    ``stdout``/``stderr``, the ``*_dropped`` flags, and ``status`` (read before
-    the text) must come from the same snapshot; ``status`` defaults to the
-    task's current status. ``*_tail_dropped`` marks head loss in the retained tail, distinct
-    from ``*_truncated`` (bounded for display). A raw output file is written
-    only once a task has finished, then reused for later reads.
+    ``stdout``/``stderr`` are the text to show; ``*_dropped`` marks output
+    lost between the retained head and tail (``*_middle_dropped``), distinct
+    from ``*_truncated`` (bounded for display). Once a lossy task has finished,
+    its full retained output is written to one raw output file, reused for
+    later reads.
     """
     from pbi_agent.tools.raw_output import raw_output_notice, save_raw_output
     from pbi_agent.tools.shell import _build_output_payload
@@ -485,54 +787,55 @@ def background_output_payload(
         stdout=stdout, stderr=stderr, compression=compression, save_raw=False
     )
     if stdout_dropped:
-        payload["stdout_tail_dropped"] = True
+        payload["stdout_middle_dropped"] = True
     if stderr_dropped:
-        payload["stderr_tail_dropped"] = True
+        payload["stderr_middle_dropped"] = True
     compressed = bool(
         payload.get("stdout_compressed") or payload.get("stderr_compressed")
     )
     truncated = bool(payload.get("stdout_truncated") or payload.get("stderr_truncated"))
-    tail_note = TAIL_DROPPED_NOTE if stdout_dropped or stderr_dropped else None
+    middle_note = MIDDLE_DROPPED_NOTE if stdout_dropped or stderr_dropped else None
     if not (compressed or truncated):
-        if tail_note:
-            payload["notice"] = tail_note
+        if middle_note:
+            payload["notice"] = middle_note
         return payload
     if (status or task.status) == "running":
         notice = (
             "Output compressed or truncated. A raw output file is saved once the "
             "task finishes; read the task output again then."
         )
-        payload["notice"] = f"{notice} {tail_note}" if tail_note else notice
+        payload["notice"] = f"{notice} {middle_note}" if middle_note else notice
         return payload
     if task.raw_output_path is None:
-        task.raw_output_path = save_raw_output(stdout=stdout, stderr=stderr)
+        full_stdout = task.stdout.text()
+        full_stderr = task.stderr.text()
+        if task.tty:
+            full_stdout = clean_tty_text(full_stdout)
+        task.raw_output_path = save_raw_output(stdout=full_stdout, stderr=full_stderr)
     if task.raw_output_path is not None:
         payload["raw_output_path"] = str(task.raw_output_path)
         payload["notice"] = raw_output_notice(
             compressed=compressed,
             truncated=truncated,
-            extra_note=tail_note,
+            extra_note=middle_note,
         )
-    elif tail_note:
-        payload["notice"] = tail_note
+    elif middle_note:
+        payload["notice"] = middle_note
     return payload
 
 
 def _render_sub_agent_result(task: BackgroundTask) -> str:
     duration = task.summary()["elapsed_seconds"]
+    header = f"{task.task_id} {task.status} sub_agent · {duration:.1f}s"
+    if task.intent:
+        header = f"{header} — {task.intent}"
     lines = [
-        f'<{BACKGROUND_RESULT_TAG} task_id="{task.task_id}" status="{task.status}" '
-        f'exit_code="none" kind="sub_agent" duration_seconds="{duration}">',
-        *([f"intent: {task.intent}"] if task.intent else []),
-        "final_output:",
+        f'<{BACKGROUND_RESULT_TAG} task_id="{task.task_id}">',
+        header,
         task.stdout.text() or "(no output)",
     ]
     if task.stderr.text():
-        lines.append("error:")
+        lines.append("[error]")
         lines.append(task.stderr.text())
     lines.append(f"</{BACKGROUND_RESULT_TAG}>")
-    lines.append(
-        "This background sub-agent you started has finished. Continue the task "
-        "using this result."
-    )
     return "\n".join(lines)

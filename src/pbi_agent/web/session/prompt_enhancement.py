@@ -217,7 +217,7 @@ class NoopPromptEnhancementDisplay:
         *,
         call_id: str = "",
         working_directory: str = ".",
-        timeout_ms: int | str = "default",
+        yield_time_ms: int | str = "default",
         result: Any = None,
     ) -> None:
         del (
@@ -226,7 +226,7 @@ class NoopPromptEnhancementDisplay:
             timed_out,
             call_id,
             working_directory,
-            timeout_ms,
+            yield_time_ms,
             result,
         )
 

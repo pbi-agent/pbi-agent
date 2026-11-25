@@ -58,7 +58,7 @@ def test_tool_group_end_prints_tool_summary_lines() -> None:
         arguments={
             "command": "pwd",
             "working_directory": "/tmp/report",
-            "timeout_ms": 5000,
+            "yield_time_ms": 5000,
         },
     )
     display.function_result(

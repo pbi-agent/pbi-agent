@@ -326,17 +326,20 @@ def test_openai_build_request_body_uses_chatgpt_backend_contract() -> None:
         "intent",
         "command",
         "working_directory",
-        "timeout_ms",
+        "yield_time_ms",
         "run_in_background",
         "background_timeout_ms",
+        "tty",
         "compression",
     ]
     assert shell_parameters["properties"]["working_directory"]["description"] == (
         "Working directory for the command. Relative paths resolve "
         "from the workspace root. Defaults to the workspace root."
     )
-    assert shell_parameters["properties"]["timeout_ms"]["description"] == (
-        "Timeout in milliseconds. Defaults to 30 000 (30 seconds), "
+    assert shell_parameters["properties"]["yield_time_ms"]["description"] == (
+        "How long to wait for the command, in milliseconds. If it is still "
+        "running then, it moves to the background and keeps running; its "
+        "result is delivered automatically. Defaults to 30 000 (30 seconds), "
         "maximum 300 000 (5 minutes)."
     )
     assert shell_parameters["properties"]["compression"]["description"] == (
@@ -2283,11 +2286,11 @@ def test_openai_execute_tool_calls_returns_function_call_outputs(
         results=[
             ToolResult(
                 call_id="call_1",
-                output_json='{"ok": true, "result": "/workspace"}',
+                output='{"ok": true, "result": "/workspace"}',
             ),
             ToolResult(
                 call_id="call_2",
-                output_json=(
+                output=(
                     '{"ok": false, "error": {"type": "tool_execution_failed", '
                     '"message": "boom"}}'
                 ),
@@ -2409,11 +2412,11 @@ def test_openai_execute_tool_calls_returns_only_outputs_for_chatgpt_backend(
         results=[
             ToolResult(
                 call_id="call_1",
-                output_json='{"ok": true, "result": "/workspace"}',
+                output='{"ok": true, "result": "/workspace"}',
             ),
             ToolResult(
                 call_id="call_2",
-                output_json='{"ok": true, "result": {"created": true}}',
+                output='{"ok": true, "result": {"created": true}}',
             ),
         ],
         had_errors=False,
@@ -2496,7 +2499,7 @@ def test_openai_execute_tool_calls_clears_only_chatgpt_sub_agent_continuation(
         results=[
             ToolResult(
                 call_id="call_1",
-                output_json='{"ok": true, "result": {"status":"completed"}}',
+                output='{"ok": true, "result": {"status":"completed"}}',
             )
         ],
         had_errors=False,
@@ -2567,7 +2570,7 @@ def test_openai_execute_tool_calls_skips_generic_display_for_sub_agent(
         results=[
             ToolResult(
                 call_id="call_1",
-                output_json='{"ok": true, "result": {"status":"completed"}}',
+                output='{"ok": true, "result": {"status":"completed"}}',
             )
         ],
         had_errors=False,
@@ -3842,7 +3845,7 @@ def test_openai_chatgpt_full_history_replay_resumes_continuation(
         executed_calls.extend(call.call_id for call in calls)
         return ToolExecutionBatch(
             results=[
-                ToolResult(call_id=call.call_id, output_json='{"result": "/workspace"}')
+                ToolResult(call_id=call.call_id, output='{"result": "/workspace"}')
                 for call in calls
             ],
             had_errors=False,
@@ -4719,7 +4722,7 @@ def test_openai_execute_tool_calls_serializes_image_attachments(
         results=[
             ToolResult(
                 call_id="call_1",
-                output_json='{"ok": true, "result": {"path": "chart.png"}}',
+                output='{"ok": true, "result": {"path": "chart.png"}}',
                 attachments=[
                     ImageAttachment(
                         path="chart.png",

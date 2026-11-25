@@ -50,7 +50,7 @@ Model behavior:
 Runtime and resilience:
 - `--max-tool-workers MAX_TOOL_WORKERS`: parallel tool workers. Env `PBI_AGENT_MAX_TOOL_WORKERS`. Default `4`.
 - `--max-retries MAX_RETRIES`: retries for transient failures and rate limits. Env `PBI_AGENT_MAX_RETRIES`. Default `3`.
-- `--compact-threshold COMPACT_THRESHOLD`: context compaction token threshold. Env `PBI_AGENT_COMPACT_THRESHOLD`. Default `200000`.
+- `--compact-threshold COMPACT_THRESHOLD`: context compaction token threshold. Env `PBI_AGENT_COMPACT_THRESHOLD`. Default: 90% of the model context window; `0` disables.
 - `--compact-tail-turns COMPACT_TAIL_TURNS`: recent user turns kept verbatim after compaction. Env `PBI_AGENT_COMPACT_TAIL_TURNS`. Default `2`.
 - `--compact-preserve-recent-tokens COMPACT_PRESERVE_RECENT_TOKENS`: token budget for the preserved recent tail. Env `PBI_AGENT_COMPACT_PRESERVE_RECENT_TOKENS`. Default `8000`.
 - `--compact-tool-output-max-chars COMPACT_TOOL_OUTPUT_MAX_CHARS`: max characters per tool-result string in compaction prompts. Env `PBI_AGENT_COMPACT_TOOL_OUTPUT_MAX_CHARS`. Default `2000`.

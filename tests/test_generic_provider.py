@@ -965,11 +965,11 @@ def test_generic_execute_tool_calls_returns_chat_completion_tool_messages(
         results=[
             ToolResult(
                 call_id="call_1",
-                output_json='{"ok": true, "result": "/workspace"}',
+                output='{"ok": true, "result": "/workspace"}',
             ),
             ToolResult(
                 call_id="call_2",
-                output_json=(
+                output=(
                     '{"ok": false, "error": {"type": "tool_execution_failed", '
                     '"message": "boom"}}'
                 ),
@@ -1057,7 +1057,7 @@ def test_generic_execute_tool_calls_serializes_image_attachments(
         results=[
             ToolResult(
                 call_id="call_image",
-                output_json='{"ok": true, "result": {"path": "chart"}}',
+                output='{"ok": true, "result": {"path": "chart"}}',
                 attachments=[
                     ImageAttachment(
                         path="chart",

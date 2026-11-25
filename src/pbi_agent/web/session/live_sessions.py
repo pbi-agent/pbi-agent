@@ -14,7 +14,11 @@ from pbi_agent.agent.session import (
     _normalize_user_command,
     _parse_init_command_force,
 )
-from pbi_agent.config import ConfigError, find_command_config_by_alias
+from pbi_agent.config import (
+    ConfigError,
+    effective_compact_threshold,
+    find_command_config_by_alias,
+)
 from pbi_agent.display.protocol import QueuedInput, UserQuestionAnswer
 from pbi_agent.extensions import find_extension_for_slash
 from pbi_agent.media import load_workspace_image
@@ -709,6 +713,7 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
                     settings=live_session.runtime.settings,
                     display=live_session.display,
                     workspace_root=self._workspace_root,
+                    background_handoff=False,
                 ),
             )
             exit_code = result.get("exit_code") if isinstance(result, dict) else 1
@@ -915,7 +920,9 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
             "provider": live_session.runtime.settings.provider,
             "model": live_session.runtime.settings.model,
             "reasoning_effort": live_session.runtime.settings.reasoning_effort,
-            "compact_threshold": live_session.runtime.settings.compact_threshold,
+            "compact_threshold": effective_compact_threshold(
+                live_session.runtime.settings
+            ),
             "created_at": live_session.created_at,
             "status": live_session.status,
             "exit_code": live_session.exit_code,
@@ -1045,7 +1052,9 @@ class LiveSessionsMixin(FollowUpsMixin, ImageUploadsMixin):
                 "provider": live_session.runtime.settings.provider,
                 "model": live_session.runtime.settings.model,
                 "reasoning_effort": live_session.runtime.settings.reasoning_effort,
-                "compact_threshold": live_session.runtime.settings.compact_threshold,
+                "compact_threshold": effective_compact_threshold(
+                    live_session.runtime.settings
+                ),
             },
         )
 

@@ -1807,3 +1807,35 @@ def test_resolve_settings_falls_back_to_unsaved_runtime_defaults(monkeypatch) ->
     assert settings.model == "gemini-3.1-pro-preview"
     assert settings.sub_agent_model == "gemini-3-flash-preview"
     assert settings.api_key == "google-key"
+
+
+def test_resolve_web_runtime_defaults_compact_threshold_to_auto(monkeypatch) -> None:
+    monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
+    _clear_runtime_env(monkeypatch)
+    monkeypatch.delenv("PBI_AGENT_PROVIDER", raising=False)
+    monkeypatch.delenv("PBI_AGENT_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("PBI_AGENT_COMPACT_THRESHOLD", raising=False)
+
+    create_provider_config(
+        ProviderConfig(
+            id="openai-main",
+            name="OpenAI Main",
+            kind="openai",
+            api_key="saved-openai-key",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="auto-compact",
+            name="Auto Compact",
+            provider_id="openai-main",
+            model="gpt-5.3-codex",
+        )
+    )
+    select_active_model_profile("auto-compact")
+
+    runtime = resolve_web_runtime()
+
+    assert runtime.settings.compact_threshold is None
+    assert config_module.effective_compact_threshold(runtime.settings) == 244_800

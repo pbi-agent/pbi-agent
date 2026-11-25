@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
-from pbi_agent.config import ResolvedRuntime
+from pbi_agent.config import ResolvedRuntime, effective_compact_threshold
 from pbi_agent.session_store import (
     KanbanStageConfigRecord,
     KanbanTaskRecord,
@@ -618,7 +618,7 @@ def _serialize_saved_session_runtime(  # pyright: ignore[reportUnusedFunction] -
         "provider": runtime.settings.provider,
         "model": runtime.settings.model,
         "reasoning_effort": runtime.settings.reasoning_effort,
-        "compact_threshold": runtime.settings.compact_threshold,
+        "compact_threshold": effective_compact_threshold(runtime.settings),
         "created_at": record.updated_at,
         "status": "idle",
         "exit_code": None,
@@ -694,7 +694,7 @@ def _runtime_summary(runtime: ResolvedRuntime | None) -> dict[str, Any]:
         "profile_id": runtime.profile_id,
         "model": runtime.settings.model,
         "reasoning_effort": runtime.settings.reasoning_effort,
-        "compact_threshold": runtime.settings.compact_threshold,
+        "compact_threshold": effective_compact_threshold(runtime.settings),
     }
 
 
@@ -717,7 +717,7 @@ def _resolved_runtime_view(  # pyright: ignore[reportUnusedFunction] - imported 
         ),
         "max_tool_workers": runtime.settings.max_tool_workers,
         "max_retries": runtime.settings.max_retries,
-        "compact_threshold": runtime.settings.compact_threshold,
+        "compact_threshold": effective_compact_threshold(runtime.settings),
         "compact_tail_turns": runtime.settings.compact_tail_turns,
         "compact_preserve_recent_tokens": runtime.settings.compact_preserve_recent_tokens,
         "compact_tool_output_max_chars": runtime.settings.compact_tool_output_max_chars,

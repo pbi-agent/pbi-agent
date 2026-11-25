@@ -329,7 +329,7 @@ def format_shell_tool_item(
     status: str,
     call_id: str = "",
     working_directory: str = ".",
-    timeout_ms: int | str = "default",
+    yield_time_ms: int | str = "default",
 ) -> str:
     cmd_text = escape_markup_text(shorten(command, 96))
     if bold_command:
@@ -339,7 +339,7 @@ def format_shell_tool_item(
     lines = [
         first_line,
         f"[dim]wd:[/dim] {escape_markup_text(format_informal_path(working_directory))}  "
-        f"[dim]timeout_ms:[/dim] {escape_markup_text(str(timeout_ms))}",
+        f"[dim]yield_time_ms:[/dim] {escape_markup_text(str(yield_time_ms))}",
     ]
     _append_verbose_call_id(lines, call_id, verbose)
     return "\n".join(lines)
@@ -523,7 +523,7 @@ def route_function_result(
             status=status,
             call_id=call_id,
             working_directory=str(args.get("working_directory", ".")),
-            timeout_ms=args.get("timeout_ms", "default"),
+            yield_time_ms=args.get("yield_time_ms", "default"),
         )
 
     if name == "apply_patch":

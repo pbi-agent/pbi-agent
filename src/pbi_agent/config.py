@@ -30,6 +30,7 @@ from pbi_agent.auth.service import (
 )
 from pbi_agent.frontmatter import FrontmatterParseError, parse_simple_frontmatter
 from pbi_agent.models.capabilities import reasoning_capabilities_for_model
+from pbi_agent.models.messages import context_window_for_model
 from pbi_agent.tools.availability import (
     BUILTIN_TOOL_CATEGORIES,
     UI_ONLY_TOOL_CATEGORIES,
@@ -179,7 +180,7 @@ class Settings:
     max_retries: int = 3
     reasoning_effort: str = "medium"
     reasoning_mode: str | None = None
-    compact_threshold: int = 200000
+    compact_threshold: int | None = None
     compact_tail_turns: int = 2
     compact_preserve_recent_tokens: int = 8000
     compact_tool_output_max_chars: int = 2000
@@ -260,7 +261,7 @@ class Settings:
                 model=self.model,
                 sub_agent_model=self.sub_agent_model,
             )
-        if self.compact_threshold < 0:
+        if self.compact_threshold is not None and self.compact_threshold < 0:
             raise ConfigError("--compact-threshold must be >= 0.")
         if self.compact_tail_turns < 0:
             raise ConfigError("--compact-tail-turns must be >= 0.")
@@ -1640,11 +1641,10 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         if selected_profile is not None and provider_kind == "openai"
         else None
     )
-    compact_threshold = _resolve_int_setting(
+    compact_threshold = _resolve_optional_int_setting(
         cli_value=getattr(args, "compact_threshold", None),
         env_name="PBI_AGENT_COMPACT_THRESHOLD",
         profile_value=selected_profile.compact_threshold if selected_profile else None,
-        default=200000,
     )
     compact_tail_turns = _resolve_int_setting(
         cli_value=getattr(args, "compact_tail_turns", None),
@@ -1760,6 +1760,22 @@ def resolve_settings(args: argparse.Namespace) -> Settings:
     return resolve_runtime(args).settings
 
 
+AUTO_COMPACT_CONTEXT_RATIO = 0.9
+
+
+def effective_compact_threshold(settings: Settings, model: str | None = None) -> int:
+    """Return the auto-compaction token threshold for *settings*.
+
+    An explicit ``compact_threshold`` wins (``0`` disables compaction). When it
+    is unset, the threshold is 90% of the context window of *model* (default:
+    ``settings.model``) from the model catalog.
+    """
+    if settings.compact_threshold is not None:
+        return max(settings.compact_threshold, 0)
+    window = context_window_for_model(model or settings.model)
+    return int(window * AUTO_COMPACT_CONTEXT_RATIO)
+
+
 def _coalesce[T](value: T | None, default: T) -> T:
     return default if value is None else value
 
@@ -1790,6 +1806,22 @@ def _resolve_int_setting(
     if profile_value is not None:
         return int(profile_value)
     return default
+
+
+def _resolve_optional_int_setting(
+    *,
+    cli_value: int | None,
+    env_name: str,
+    profile_value: int | None,
+) -> int | None:
+    if cli_value is not None:
+        return int(cli_value)
+    env_value = os.getenv(env_name)
+    if env_value is not None:
+        return int(env_value)
+    if profile_value is not None:
+        return int(profile_value)
+    return None
 
 
 def _resolve_allowed_tools(
@@ -1909,10 +1941,7 @@ def _settings_from_runtime_parts(
             _default_reasoning_effort(provider.kind),
         ),
         reasoning_mode=profile.reasoning_mode if profile else None,
-        compact_threshold=_coalesce(
-            profile.compact_threshold if profile else None,
-            200000,
-        ),
+        compact_threshold=profile.compact_threshold if profile else None,
         compact_tail_turns=_coalesce(
             profile.compact_tail_turns if profile else None, 2
         ),
@@ -2023,7 +2052,7 @@ def _concrete_profile_for_saved_profile(
         allowed_tools=profile.allowed_tools,
         max_tool_workers=_coalesce(profile.max_tool_workers, 4),
         max_retries=_coalesce(profile.max_retries, 3),
-        compact_threshold=_coalesce(profile.compact_threshold, 200000),
+        compact_threshold=profile.compact_threshold,
         compact_tail_turns=_coalesce(profile.compact_tail_turns, 2),
         compact_preserve_recent_tokens=_coalesce(
             profile.compact_preserve_recent_tokens,

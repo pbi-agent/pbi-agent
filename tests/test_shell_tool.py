@@ -17,6 +17,10 @@ from pbi_agent.tools import shell as shell_tool
 from pbi_agent.tools.types import ToolContext
 
 
+def _without_duration(result: dict) -> dict:
+    return {key: value for key, value in result.items() if key != "duration_ms"}
+
+
 def test_shell_handle_runs_command_with_workspace_defaults(
     tmp_path: Path,
     monkeypatch,
@@ -31,6 +35,7 @@ def test_shell_handle_runs_command_with_workspace_defaults(
         *,
         cwd: str,
         check: bool,
+        stdin: object = None,
         capture_output: bool,
         text: bool,
         shell: bool,
@@ -43,6 +48,7 @@ def test_shell_handle_runs_command_with_workspace_defaults(
                 "command": command,
                 "cwd": cwd,
                 "check": check,
+                "stdin": stdin,
                 "capture_output": capture_output,
                 "text": text,
                 "shell": shell,
@@ -63,7 +69,7 @@ def test_shell_handle_runs_command_with_workspace_defaults(
         {"intent": "Run test command", "command": "echo hi"}, ToolContext()
     )
 
-    assert result == {
+    assert _without_duration(result) == {
         "stdout": "stdout text",
         "stderr": "stderr text",
         "exit_code": 0,
@@ -74,16 +80,17 @@ def test_shell_handle_runs_command_with_workspace_defaults(
             "command": "echo hi",
             "cwd": str(tmp_path.resolve()),
             "check": False,
+            "stdin": subprocess.DEVNULL,
             "capture_output": True,
             "text": False,
             "shell": True,
             "executable": None,
-            "timeout": shell_tool.DEFAULT_TIMEOUT_MS / 1000.0,
+            "timeout": shell_tool.DEFAULT_YIELD_TIME_MS / 1000.0,
         }
     ]
 
 
-def test_shell_handle_uses_requested_directory_and_clamps_timeout(
+def test_shell_handle_uses_requested_directory_and_clamps_yield_time(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -99,13 +106,14 @@ def test_shell_handle_uses_requested_directory_and_clamps_timeout(
         *,
         cwd: str,
         check: bool,
+        stdin: object = None,
         capture_output: bool,
         text: bool,
         shell: bool,
         executable: str | None,
         timeout: float,
     ) -> subprocess.CompletedProcess[bytes]:
-        del check, capture_output, text, shell
+        del check, stdin, capture_output, text, shell
         seen["command"] = command
         seen["cwd"] = cwd
         seen["executable"] = executable
@@ -124,7 +132,7 @@ def test_shell_handle_uses_requested_directory_and_clamps_timeout(
             "intent": "Run test command",
             "command": "pwd",
             "working_directory": "nested",
-            "timeout_ms": shell_tool.MAX_TIMEOUT_MS * 2,
+            "yield_time_ms": shell_tool.MAX_YIELD_TIME_MS * 2,
         },
         ToolContext(),
     )
@@ -133,11 +141,11 @@ def test_shell_handle_uses_requested_directory_and_clamps_timeout(
         "command": "pwd",
         "cwd": str(workdir.resolve()),
         "executable": None,
-        "timeout": shell_tool.MAX_TIMEOUT_MS / 1000.0,
+        "timeout": shell_tool.MAX_YIELD_TIME_MS / 1000.0,
     }
 
 
-def test_shell_handle_honors_requested_timeout(
+def test_shell_handle_honors_requested_yield_time(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -149,13 +157,14 @@ def test_shell_handle_honors_requested_timeout(
         *,
         cwd: str,
         check: bool,
+        stdin: object = None,
         capture_output: bool,
         text: bool,
         shell: bool,
         executable: str | None,
         timeout: float,
     ) -> subprocess.CompletedProcess[bytes]:
-        del cwd, check, capture_output, text, shell, executable
+        del cwd, check, stdin, capture_output, text, shell, executable
         seen["timeout"] = timeout
         return subprocess.CompletedProcess(
             args=command,
@@ -167,7 +176,7 @@ def test_shell_handle_honors_requested_timeout(
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
 
     result = shell_tool.handle(
-        {"intent": "Run test command", "command": "echo hi", "timeout_ms": 12_345},
+        {"intent": "Run test command", "command": "echo hi", "yield_time_ms": 12_345},
         ToolContext(),
     )
 
@@ -198,7 +207,7 @@ def test_shell_handle_interrupts_running_process_from_display(
                 "intent": "Run test command",
                 "command": command,
                 "compression": False,
-                "timeout_ms": 10_000,
+                "yield_time_ms": 10_000,
             },
             ToolContext(display=cast(Any, display)),
         )
@@ -206,7 +215,7 @@ def test_shell_handle_interrupts_running_process_from_display(
         timer.cancel()
 
     assert time.monotonic() - started_at < 5
-    assert result == {
+    assert _without_duration(result) == {
         "stdout": "",
         "stderr": "",
         "exit_code": 130,
@@ -241,7 +250,7 @@ def test_shell_handle_interrupts_only_targeted_tool_call(
                 "intent": "Run test command",
                 "command": command,
                 "compression": False,
-                "timeout_ms": 10_000,
+                "yield_time_ms": 10_000,
             },
             ToolContext(
                 display=cast(Any, display),
@@ -274,7 +283,7 @@ def test_shell_handle_interrupts_descendant_after_shell_leader_exits(
                 "intent": "Run test command",
                 "command": "sleep 30 &",
                 "compression": False,
-                "timeout_ms": 10_000,
+                "yield_time_ms": 10_000,
             },
             ToolContext(display=cast(Any, display)),
         )
@@ -293,29 +302,20 @@ def test_shell_handle_stops_process_before_propagating_keyboard_interrupt(
     monkeypatch.chdir(tmp_path)
     display = SimpleNamespace(interrupt_requested=lambda: False)
 
-    def interrupt_communication(**_kwargs: object) -> tuple[bytes, bytes]:
-        raise KeyboardInterrupt
+    class FakeProcess:
+        def poll(self) -> None:
+            return None
 
-    class FakePopen:
-        pid = 123
-        returncode = None
+        def wait(self, timeout: float | None = None) -> int:
+            del timeout
+            raise KeyboardInterrupt
 
-        @classmethod
-        def __class_getitem__(cls, _item: object) -> type[FakePopen]:
-            return cls
-
-        def __init__(self, *_args: object, **_kwargs: object) -> None:
-            pass
-
-        communicate = staticmethod(interrupt_communication)
-
+    attached = SimpleNamespace(process=FakeProcess())
     stopped: list[object] = []
-    monkeypatch.setattr(shell_tool.subprocess, "Popen", FakePopen)
     monkeypatch.setattr(
-        shell_tool,
-        "_stop_process",
-        lambda active_process: stopped.append(active_process) or (b"", b""),
+        shell_tool, "spawn_attached_process", lambda *args, **kwargs: attached
     )
+    monkeypatch.setattr(shell_tool, "_stop_attached", stopped.append)
 
     with pytest.raises(KeyboardInterrupt):
         shell_tool.handle(
@@ -323,8 +323,7 @@ def test_shell_handle_stops_process_before_propagating_keyboard_interrupt(
             ToolContext(display=cast(Any, display)),
         )
 
-    assert len(stopped) == 1
-    assert isinstance(stopped[0], FakePopen)
+    assert stopped == [attached]
 
 
 def test_shell_handle_compresses_non_empty_streams_by_default(
@@ -355,7 +354,7 @@ def test_shell_handle_compresses_non_empty_streams_by_default(
         {"intent": "Run test command", "command": "cmd"}, ToolContext()
     )
 
-    assert result == {
+    assert _without_duration(result) == {
         "stdout": "stdout text   \n\n\n",
         "stderr": "stderr text   \n\n\n",
         "exit_code": 0,
@@ -390,7 +389,7 @@ def test_shell_handle_skips_compression_when_disabled(
         ToolContext(),
     )
 
-    assert result == {
+    assert _without_duration(result) == {
         "stdout": "stdout text",
         "stderr": "stderr text",
         "exit_code": 0,
@@ -398,13 +397,13 @@ def test_shell_handle_skips_compression_when_disabled(
 
 
 @pytest.mark.parametrize(
-    "timeout_ms",
+    "yield_time_ms",
     ["1000", 1.5, True, False, 0, -1],
 )
-def test_shell_handle_rejects_invalid_timeout_without_running_subprocess(
+def test_shell_handle_rejects_invalid_yield_time_without_running_subprocess(
     tmp_path: Path,
     monkeypatch,
-    timeout_ms: object,
+    yield_time_ms: object,
 ) -> None:
     monkeypatch.chdir(tmp_path)
 
@@ -415,11 +414,37 @@ def test_shell_handle_rejects_invalid_timeout_without_running_subprocess(
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
 
     result = shell_tool.handle(
-        {"intent": "Run test command", "command": "echo hi", "timeout_ms": timeout_ms},
+        {
+            "intent": "Run test command",
+            "command": "echo hi",
+            "yield_time_ms": yield_time_ms,
+        },
         ToolContext(),
     )
 
-    assert result == {"error": "'timeout_ms' must be a positive integer."}
+    assert result == {"error": "'yield_time_ms' must be a positive integer."}
+
+
+def test_shell_handle_rejects_removed_timeout_ms(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        del args, kwargs
+        raise AssertionError("subprocess.run should not be called")
+
+    monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
+
+    result = shell_tool.handle(
+        {"intent": "Run test command", "command": "echo hi", "timeout_ms": 1000},
+        ToolContext(),
+    )
+
+    assert result == {
+        "error": (
+            "'timeout_ms' is not supported; use 'yield_time_ms' (commands still "
+            "running after it move to the background instead of being killed)."
+        )
+    }
 
 
 @pytest.mark.parametrize("compression", ["true", 1, 0, None, [], {}])
@@ -445,7 +470,7 @@ def test_shell_handle_rejects_invalid_compression_without_running_subprocess(
         ToolContext(),
     )
 
-    assert result == {"error": "'compression' must be a boolean."}
+    assert _without_duration(result) == {"error": "'compression' must be a boolean."}
 
 
 def test_shell_handle_returns_timeout_payload(tmp_path: Path, monkeypatch) -> None:
@@ -463,16 +488,18 @@ def test_shell_handle_returns_timeout_payload(tmp_path: Path, monkeypatch) -> No
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
 
     result = shell_tool.handle(
-        {"intent": "Run test command", "command": "sleep 10", "timeout_ms": 500},
+        {"intent": "Run test command", "command": "sleep 10", "yield_time_ms": 500},
         ToolContext(),
     )
 
-    assert result == {
+    assert _without_duration(result) == {
         "stdout": "partial stdout",
         "stderr": "partial stderr",
         "exit_code": None,
         "timed_out": True,
-        "error": "Command timed out after 500ms.",
+        "error": (
+            "Command killed after 500ms; background tasks are not available here."
+        ),
     }
 
 
@@ -501,16 +528,18 @@ def test_shell_handle_compresses_timeout_partial_streams(
     monkeypatch.setattr(shell_tool, "compress_text", fake_compress_text)
 
     result = shell_tool.handle(
-        {"intent": "Run test command", "command": "sleep 10", "timeout_ms": 500},
+        {"intent": "Run test command", "command": "sleep 10", "yield_time_ms": 500},
         ToolContext(),
     )
 
-    assert result == {
+    assert _without_duration(result) == {
         "stdout": "partial stdout\n",
         "stderr": "partial stderr\n",
         "exit_code": None,
         "timed_out": True,
-        "error": "Command timed out after 500ms.",
+        "error": (
+            "Command killed after 500ms; background tasks are not available here."
+        ),
     }
     assert calls == ["partial stdout", "partial stderr"]
 
@@ -563,7 +592,7 @@ def test_shell_handle_falls_back_to_decoded_output_when_compression_fails(
         {"intent": "Run test command", "command": "cmd"}, ToolContext()
     )
 
-    assert result == {
+    assert _without_duration(result) == {
         "stdout": "stdout text",
         "stderr": "stderr text",
         "exit_code": 0,
@@ -652,13 +681,16 @@ def test_shell_handle_bounds_output_after_compression(
     assert "chars omitted" in result["stderr"]
 
 
-def test_shell_tool_schema_keeps_timeout_bounds_in_description_only() -> None:
-    timeout_schema = shell_tool.SPEC.parameters_schema["properties"]["timeout_ms"]
+def test_shell_tool_schema_describes_yield_time_and_drops_timeout() -> None:
+    properties = shell_tool.SPEC.parameters_schema["properties"]
 
-    assert timeout_schema == {
+    assert "timeout_ms" not in properties
+    assert properties["yield_time_ms"] == {
         "type": "integer",
         "description": (
-            "Timeout in milliseconds. Defaults to 30 000 (30 seconds), "
+            "How long to wait for the command, in milliseconds. If it is still "
+            "running then, it moves to the background and keeps running; its "
+            "result is delivered automatically. Defaults to 30 000 (30 seconds), "
             "maximum 300 000 (5 minutes)."
         ),
     }
@@ -939,3 +971,19 @@ def test_test_runner_summary_with_real_backend_saves_raw_file(
     assert "stdout_truncated" not in result
     assert result["notice"].startswith("Output compressed")
     assert raw_stdout in Path(result["raw_output_path"]).read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        ("python3 -q -i", "exec python3 -q -i"),
+        ("node", "exec node"),
+        ("echo a; python3", "echo a; python3"),
+        ("FOO=1 python3", "FOO=1 python3"),
+        ("cat $HOME/x", "cat $HOME/x"),
+    ],
+)
+def test_tty_command_execs_simple_commands_only(command: str, expected: str) -> None:
+    if os.name == "nt":
+        expected = command
+    assert shell_tool._tty_command(command) == expected

@@ -6396,3 +6396,108 @@ def test_run_session_loop_interrupted_openai_tool_call_does_not_poison_next_turn
         ("user", "summarize memory"),
         ("assistant", "ok"),
     ]
+
+
+class _BackgroundProviderStub(_ProviderStub):
+    """Starts a background shell task, ends its turn, then answers the wake-up."""
+
+    def request_turn(
+        self,
+        *,
+        user_message: str | None = None,
+        user_input: UserTurnInput | None = None,
+        tool_result_items: list[dict[str, object]] | None = None,
+        instructions: str | None = None,
+        session_id: str | None = None,
+        display,
+        session_usage: TokenUsage,
+        turn_usage: TokenUsage,
+        tracer=None,
+    ) -> CompletedResponse:
+        del instructions, session_id, display, session_usage, turn_usage, tracer
+        if user_input is not None and user_message is None:
+            user_message = user_input.text
+        self.request_calls.append(
+            {"user_message": user_message, "tool_result_items": tool_result_items}
+        )
+        if len(self.request_calls) == 1:
+            return CompletedResponse(
+                response_id="resp_start",
+                text="",
+                function_calls=[
+                    ToolCall(call_id="call_bg", name="shell", arguments={})
+                ],
+            )
+        if tool_result_items is not None:
+            return CompletedResponse(response_id="resp_wait", text="Started.")
+        return CompletedResponse(response_id="resp_done", text="Build finished.")
+
+    def execute_tool_calls(
+        self,
+        response: CompletedResponse,
+        *,
+        max_workers: int,
+        display,
+        session_usage: TokenUsage,
+        turn_usage: TokenUsage,
+        sub_agent_depth: int = 0,
+        parent_context=None,
+        tracer=None,
+        hook_runtime=None,
+    ) -> tuple[list[dict[str, object]], bool]:
+        del response, max_workers, session_usage, turn_usage, sub_agent_depth
+        del parent_context, tracer, hook_runtime
+        manager = display.background_task_manager
+        task = manager.start(
+            "sleep 0.2; echo build-ok",
+            display_command="make build",
+            intent="Build",
+            working_directory=".",
+            shell_executable=None,
+            timeout_ms=10_000,
+            compression=False,
+            tool_call_id="call_bg",
+        )
+        self.started_task_ids.append(task.task_id)
+        return (
+            [
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_bg",
+                    "output": f"background {task.task_id}",
+                }
+            ],
+            False,
+        )
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX shell")
+def test_run_single_turn_wakes_model_with_background_result(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(tmp_path / "sessions.db"))
+    provider = _BackgroundProviderStub()
+    provider.started_task_ids = []
+    display = _DisplaySpy()
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    outcome = run_single_turn(
+        "Build the project",
+        Settings(api_key="test-key", provider="openai"),
+        display,
+    )
+
+    assert outcome.text == "Build finished."
+    assert len(provider.request_calls) == 3
+    wake = provider.request_calls[2]["user_message"]
+    assert isinstance(wake, str)
+    task_id = provider.started_task_ids[0]
+    assert wake.startswith(f'<background_task_result task_id="{task_id}">')
+    assert f"{task_id} exit 0 — Build" in wake
+    assert "build-ok" in wake
+    assert display.user_message_calls[-1] == wake
+    assert not hasattr(display, "background_task_manager")

@@ -354,9 +354,9 @@ function readToolCallMetadata(value: unknown): ToolCallMetadata | undefined {
     status: readToolCallStatus(record.status),
     command: readOptionalString(record.command),
     working_directory: readOptionalString(record.working_directory),
-    timeout_ms:
-      typeof record.timeout_ms === "number" || typeof record.timeout_ms === "string"
-        ? record.timeout_ms
+    yield_time_ms:
+      typeof record.yield_time_ms === "number" || typeof record.yield_time_ms === "string"
+        ? record.yield_time_ms
         : undefined,
     exit_code:
       typeof record.exit_code === "number" || record.exit_code === null

@@ -937,7 +937,8 @@ export function ModelProfileModal({
                   placeholder="Default"
                 />
                 <FieldDescription>
-                  Token count at which context is compacted.
+                  Token count at which context is compacted. Leave empty for
+                  90% of the model context window.
                 </FieldDescription>
               </Field>
             </FieldGroup>

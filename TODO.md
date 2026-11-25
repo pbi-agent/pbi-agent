@@ -1,5 +1,14 @@
-- [x] Release: inspect history and pick next version (v0.66.0, 10 PRs since v0.65.0)
-- [x] Release: create branch, bump version, uv lock, changelog
-- [x] Release: run full validation
-- [x] Release: commit, push, open PR (#458)
-- [x] Release: merge PR, verify Release workflow, tag, GitHub Release, PyPI
+- [x] Phase 1: auto-compaction trigger at 90% of model context window (`compact_threshold` None = auto)
+- [x] Phase 2: plain-text, token-efficient tool output for all providers (`ToolResult.output` + `payload`, hooks `tool_response` text + `tool_result`)
+- [x] Phase 3a: shell `yield_time_ms` replaces `timeout_ms`; fg stdin DEVNULL; auto-yield to background; head+tail buffers
+- [x] Phase 3b: `background_task action=input`, `tty`, delta read cursors, web UI/API
+- [x] Phase 3c: background tasks in `run`/board/telegram/sub-agents with end-of-turn wait + wake cap
+- [x] Full validation (ruff, format, basedpyright, pytest, web checks, docs build)
+- [x] Memory: topic pages + daily log
+- [-] 3b web UI rows for sent input and web API `input` action: dropped (PTY echo already shows input in the output)
+- [ ] Windows `tty` (ConPTY) for background tasks: currently returns an error
+- [x] Live check with a real provider: auto-yield, tty REPL, `pbi-agent run` background wake, web follow-up wake
+- [ ] User: add `context_window` to the 46 catalog entries missing it
+- [x] Fix: web user `!` commands no longer hand off to background (`background_handoff=False`)
+- [x] Fix: display/API/UI shell metadata `timeout_ms` → `yield_time_ms`
+- [x] `exec` simple `tty` commands so the command owns the PTY

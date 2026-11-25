@@ -192,9 +192,9 @@ class ChatCompletionsProtocol(ResponseProtocol):
             display.render_markdown(response.text)
 
     def serialize_tool_result(self, result: ToolResult) -> dict[str, object]:
-        content: str | list[dict[str, Any]] = result.output_json
+        content: str | list[dict[str, Any]] = result.output
         if result.attachments:
-            content = [{"type": "text", "text": result.output_json}]
+            content = [{"type": "text", "text": result.output}]
             for attachment in result.attachments:
                 content.append(
                     {

@@ -908,7 +908,7 @@ def test_google_gcp_gemini_function_call_and_tool_result_shape() -> None:
     assert protocol.serialize_tool_result(
         ToolResult(
             call_id=call.call_id,
-            output_json='{"temperature":"20C"}',
+            output='{"temperature":"20C"}',
         ),
         call,
     ) == {
@@ -919,7 +919,7 @@ def test_google_gcp_gemini_function_call_and_tool_result_shape() -> None:
                     "name": "get_weather",
                     "response": {
                         "call_id": "gemini_call_0_0",
-                        "output": {"temperature": "20C"},
+                        "output": '{"temperature":"20C"}',
                     },
                 }
             }
@@ -960,7 +960,7 @@ def test_google_gcp_gemini_execute_tool_calls_serializes_function_response(
         results=[
             ToolResult(
                 call_id="gemini_call_0_0",
-                output_json='{"temperature":"20C"}',
+                output='{"temperature":"20C"}',
             )
         ],
         had_errors=False,
@@ -1008,7 +1008,7 @@ def test_google_gcp_gemini_execute_tool_calls_serializes_function_response(
                         "name": "get_weather",
                         "response": {
                             "call_id": "gemini_call_0_0",
-                            "output": {"temperature": "20C"},
+                            "output": '{"temperature":"20C"}',
                         },
                     }
                 }
@@ -1309,10 +1309,7 @@ def test_google_gcp_openai_chat_tool_calls_execute_and_serialize_messages(
     tool_result = tool_result_items[0]
     assert tool_result["role"] == "tool"
     assert tool_result["tool_call_id"] == "call_weather"
-    assert json.loads(str(tool_result["content"])) == {
-        "ok": True,
-        "result": {"temperature": "20C"},
-    }
+    assert tool_result["content"] == "temperature: 20C"
     assert display_spy.function_counts == [1]
     assert display_spy.function_results == [
         {
@@ -1882,10 +1879,7 @@ def test_google_gcp_openai_responses_function_calls_execute_and_serialize(
     assert len(tool_result_items) == 1
     assert tool_result_items[0]["type"] == "function_call_output"
     assert tool_result_items[0]["call_id"] == "call_weather"
-    assert json.loads(str(tool_result_items[0]["output"])) == {
-        "ok": True,
-        "result": {"temperature": "20C"},
-    }
+    assert tool_result_items[0]["output"] == "temperature: 20C"
 
     provider.request_turn(
         tool_result_items=tool_result_items,
@@ -2231,10 +2225,7 @@ def test_google_gcp_anthropic_tool_calls_execute_and_replay_tool_results(
     tool_result = tool_result_items[0]
     assert tool_result["type"] == "tool_result"
     assert tool_result["tool_use_id"] == "toolu_weather"
-    assert json.loads(str(tool_result["content"])) == {
-        "ok": True,
-        "result": {"temperature": "20C"},
-    }
+    assert tool_result["content"] == "temperature: 20C"
     assert bodies[0]["tools"] == [
         {
             "name": "get_weather",

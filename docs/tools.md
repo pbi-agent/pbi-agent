@@ -81,6 +81,7 @@ to the same tool visibility rules and the nested depth cap.
 | Tool | Destructive | Purpose |
 | --- | --- | --- |
 | `shell` | yes | Run a shell command in the workspace and return stdout, stderr, and exit code. |
+| `background_task` | yes | List, inspect, read new output of, send input to, or kill background tasks. |
 | `apply_patch` | yes | Create, update, or delete files through a V4A diff-style file operation. |
 | `sub_agent` | no | Delegate a scoped task to a child agent, optionally selecting a discovered project sub-agent type and inheriting parent context. |
 | `read_image` | no | Attach a supported image file to the model context. |
@@ -104,21 +105,47 @@ Execute shell commands within the workspace root by default.
 
 | Parameter | Type | Required | Notes |
 | --- | --- | --- | --- |
+| `intent` | `string` | yes | Short 3-8 word summary shown in the UI. |
 | `command` | `string` | yes | Shell command to run. |
 | `working_directory` | `string` | no | Relative directory inside the workspace. Absolute paths are only allowed if they stay within the workspace root. |
-| `timeout_ms` | `integer` | no | Timeout in milliseconds. Defaults to `30000`; values above `300000` are capped. |
+| `yield_time_ms` | `integer` | no | How long to wait for the command. Defaults to `30000`; values above `300000` are capped. A command still running then moves to the background instead of being killed. |
+| `run_in_background` | `boolean` | no | Start the command in the background right away. |
+| `background_timeout_ms` | `integer` | no | Lifetime cap for background commands. Defaults to `1800000` (30 minutes), maximum `7200000` (2 hours). |
+| `tty` | `boolean` | no | Run under a pseudo-terminal (POSIX only) so the task can take input through `background_task` `input`. Stdout and stderr are merged. |
+| `compression` | `boolean` | no | Compress output before returning it. Defaults to `true`. |
 
 ```json
 {
+  "intent": "Run CLI tests",
   "command": "uv run pytest -q tests/test_cli.py",
   "working_directory": ".",
-  "timeout_ms": 60000
+  "yield_time_ms": 60000
 }
 ```
 
-Stdout and stderr are compressed by default (`compression: false` opts out) and each stream is bounded to 12,000 characters. Compression by `codetool-shell` can be lossy: besides whitespace cleanup it summarizes test-runner output, collapses repeated diagnostics, and omits opaque payloads. When either stream is truncated, or compression summarized or omitted content (ignoring whitespace and ANSI-only changes), the full raw stdout and stderr are written to a unique `shell-output-<id>.log` file under `~/.pbi-agent/shell-output/`. The result then includes `stdout_compressed`/`stderr_compressed` and `stdout_truncated`/`stderr_truncated` flags as applicable, `raw_output_path`, and a `notice` pointing to the file, so the model can read it instead of re-running the command. No file is written when output is returned intact. Files are private to the user (mode `0600`). Files older than 24 hours are deleted by the daily startup maintenance, alongside session-data retention and upload cleanup; shell calls never scan the directory.
+`timeout_ms` was removed: passing it returns an error naming `yield_time_ms`. Foreground commands get no stdin, so a command that prompts fails fast instead of hanging. When a command outlives `yield_time_ms` and background tasks are available, it is handed over to a background task with its output so far; its result is delivered automatically when it finishes. Where background tasks are not available, the command is killed at `yield_time_ms`.
 
-Background shell tasks retain only the last 64,000 characters per stream; `stdout_tail_dropped`/`stderr_tail_dropped` mark that earlier output was lost. Their raw file is written once, after the task finishes, and reused for later reads; while a task is still running, reads return a notice instead of a file.
+The model sees plain text, not JSON: a status line (`exit 0`, `exit 1 · 2.4s`, `timeout 30.0s`, `interrupted`, or `background bg-…`), then stdout, then a `[stderr]` block only when stderr is non-empty, then one `[...]` notice line when output was compressed, truncated, or partly shown already. The structured result is kept for the UI, traces and hooks.
+
+Stdout and stderr are compressed by default (`compression: false` opts out) and each stream is bounded to 12,000 characters. Compression by `codetool-shell` can be lossy: besides whitespace cleanup it summarizes test-runner output, collapses repeated diagnostics, and omits opaque payloads. When either stream is truncated, or compression summarized or omitted content (ignoring whitespace and ANSI-only changes), the full raw stdout and stderr are written to a unique `shell-output-<id>.log` file under `~/.pbi-agent/shell-output/`. The model-facing notice then names that file, so the model can read it instead of re-running the command. No file is written when output is returned intact. Files are private to the user (mode `0600`). Files older than 24 hours are deleted by the daily startup maintenance, alongside session-data retention and upload cleanup; shell calls never scan the directory.
+
+Background and handed-over tasks retain the first and last 128,000 characters per stream; `stdout_middle_dropped`/`stderr_middle_dropped` mark that the middle was lost. Their raw file is written once, after the task finishes, and reused for later reads; while a task is still running, reads return a notice instead of a file.
+
+## `background_task`
+
+Manage background tasks started by `shell` or `sub_agent`.
+
+| Parameter | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `action` | `string` | yes | `list`, `status`, `output`, `input`, or `kill`. |
+| `task_id` | `string` | except `list` | Task id returned by `shell`/`sub_agent`. |
+| `chars` | `string` | no | For `input`: text typed into a `tty` task (`\n` presses Enter, `\u0003` is Ctrl-C, `\u0004` is Ctrl-D). Empty waits for new output. |
+| `wait_ms` | `integer` | no | For `input`: max wait for output (default `1000`, max `30000`); returns early once output settles or the task exits. |
+| `from_start` | `boolean` | no | For `output`: re-read all retained output. |
+
+`output`, `input` and the automatic finish message return only output the model has not seen yet, with a `[N earlier chars already shown]` note.
+
+Background tasks work in web chat sessions, `pbi-agent run`, board and channel tasks, and sub-agents. In web chat, a finished task's result is delivered as a follow-up (or wakes an idle session). In the other runs, results are injected at the next tool step; if the model ends its turn while tasks are still running, the run waits for the next result and wakes the model with it, up to 5 times. Sub-agents keep their own tasks, bounded by their time budget. Running tasks are killed when the run or sub-agent ends.
 
 ::: danger
 `shell` is marked destructive because it can run write-capable commands. The implementation confines `working_directory` to the workspace tree, but it does not try to sanitize the command itself.
