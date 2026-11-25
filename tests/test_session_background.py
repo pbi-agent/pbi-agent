@@ -100,3 +100,22 @@ def test_run_background_tasks_defers_to_existing_manager_unless_owned() -> None:
         assert owned is not None
         assert display.background_task_manager is owned.manager
     assert display.background_task_manager is existing
+
+
+def test_wake_raises_when_interrupted_during_the_wait() -> None:
+    from pbi_agent.agent.session import runtime as runtime_module
+    from pbi_agent.agent.session.shared import SessionTurnInterrupted
+
+    background = SimpleNamespace(next_wake_input=lambda **_kwargs: None)
+    display = SimpleNamespace(interrupt_requested=lambda: True)
+
+    with pytest.raises(SessionTurnInterrupted):
+        runtime_module._wake_on_background_results(
+            background=background,  # pyright: ignore[reportArgumentType]
+            provider=SimpleNamespace(),
+            response=SimpleNamespace(),  # pyright: ignore[reportArgumentType]
+            display=display,  # pyright: ignore[reportArgumentType]
+            session_usage=SimpleNamespace(),  # pyright: ignore[reportArgumentType]
+            turn_usage=SimpleNamespace(),  # pyright: ignore[reportArgumentType]
+            tracer=None,
+        )

@@ -237,26 +237,37 @@ function timelineItemChangeKey(item: TimelineItem): string {
 }
 
 const BACKGROUND_RESULT_RE =
-  /^<background_task_result task_id="([^"]+)" status="([^"]+)" exit_code="([^"]+)"[^>]*>\n?([\s\S]*?)(?:<\/background_task_result>[\s\S]*)?$/;
+  /^<background_task_result task_id="([^"]+)">\n?([\s\S]*?)(?:<\/background_task_result>[\s\S]*)?$/;
 
 export type BackgroundResultInfo = {
   taskId: string;
   intent: string | null;
+  /** Status part of the header line, e.g. `exit 0 · 3.2s`, `killed`, `timeout`. */
   status: string;
-  exitCode: string | null;
   body: string;
 };
 
+/**
+ * Parses the synthetic user message of a finished background task. The first
+ * line is a header, `<task_id> <status>[ · <duration>][ — <intent>]`, followed
+ * by the output (see `render_background_result` in the backend).
+ */
 export function parseBackgroundResult(item: TimelineItem): BackgroundResultInfo | null {
   if (item.kind !== "message" || item.role !== "user") return null;
   const match = BACKGROUND_RESULT_RE.exec(item.content);
   if (!match) return null;
-  const [, taskId, status, exitCode, body] = match;
+  const [, taskId, content] = match;
+  const newline = content.indexOf("\n");
+  let header = newline === -1 ? content : content.slice(0, newline);
+  const body = newline === -1 ? "" : content.slice(newline + 1);
+  if (header.startsWith(`${taskId} `)) header = header.slice(taskId.length + 1);
+  const separator = header.indexOf(" — ");
+  const status = (separator === -1 ? header : header.slice(0, separator)).trim();
+  const intent = separator === -1 ? "" : header.slice(separator + 3).trim();
   return {
     taskId,
-    intent: /^intent: (.+)$/m.exec(body)?.[1]?.trim() || null,
-    status: status.replace("_", " "),
-    exitCode: exitCode === "none" ? null : exitCode,
+    intent: intent || null,
+    status: status || "finished",
     body: body.trim(),
   };
 }
@@ -1421,7 +1432,7 @@ function WorkingItemsPanel({
                       <ChevronRightIcon data-icon="inline-start" className={CHEVRON_CLASSES} />
                       <span className={TOOL_TITLE_CLASSES}>Background task</span>
                       <span className={TOOL_SUBTITLE_CLASSES}>
-                        {`${info.intent ?? info.taskId} · ${info.status}${info.exitCode !== null ? ` · exit ${info.exitCode}` : ""}`}
+                        {`${info.intent ?? info.taskId} · ${info.status}`}
                       </span>
                     </Button>
                   </AccordionPrimitive.Trigger>

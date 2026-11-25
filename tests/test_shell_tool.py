@@ -976,8 +976,12 @@ def test_test_runner_summary_with_real_backend_saves_raw_file(
 @pytest.mark.parametrize(
     ("command", "expected"),
     [
-        ("python3 -q -i", "exec python3 -q -i"),
-        ("node", "exec node"),
+        (
+            "python3 -q -i",
+            'case "$(command -v python3)" in '
+            "/*) exec python3 -q -i;; *) python3 -q -i;; esac",
+        ),
+        ("'my tool' --repl", "'my tool' --repl"),
         ("echo a; python3", "echo a; python3"),
         ("FOO=1 python3", "FOO=1 python3"),
         ("cat $HOME/x", "cat $HOME/x"),
@@ -987,3 +991,21 @@ def test_tty_command_execs_simple_commands_only(command: str, expected: str) -> 
     if os.name == "nt":
         expected = command
     assert shell_tool._tty_command(command) == expected
+
+
+@pytest.mark.skipif(os.name == "nt", reason="tty is POSIX-only")
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [("cd .", ""), ("printf hi", "hi"), ("greet", "hello")],
+)
+def test_tty_command_runs_builtins_functions_and_executables(
+    command: str, expected: str
+) -> None:
+    script = f"greet() {{ echo hello; }}; {shell_tool._tty_command(command)}"
+
+    completed = subprocess.run(
+        ["sh", "-c", script], capture_output=True, text=True, check=False
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == expected

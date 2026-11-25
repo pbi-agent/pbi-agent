@@ -22,6 +22,7 @@ from codetool_shell import compress_text
 from pbi_agent.tools.background_tasks import (
     DEFAULT_BACKGROUND_TIMEOUT_MS,
     AttachedProcess,
+    clean_tty_text,
     spawn_attached_process,
 )
 from pbi_agent.tools.model_output import render_shell_output
@@ -244,16 +245,34 @@ def _timed_out_payload(
     stderr: str,
     compression: bool,
     yield_time_ms: int,
+    handoff_error: str | None = None,
 ) -> dict[str, Any]:
+    """Payload for a command killed at its yield time.
+
+    ``handoff_error`` says why a background manager refused the command (e.g.
+    task cap reached); the model sees it, unlike the generic ``error``.
+    """
+    reason = (
+        f"could not move it to the background: {handoff_error}"
+        if handoff_error
+        else "background tasks are not available here."
+    )
     return {
         **_build_output_payload(stdout=stdout, stderr=stderr, compression=compression),
         "exit_code": None,
         "timed_out": True,
-        "error": (
-            f"Command killed after {yield_time_ms}ms; background tasks are not "
-            "available here."
-        ),
+        "error": f"Command killed after {yield_time_ms}ms; {reason}",
+        **({"handoff_error": handoff_error} if handoff_error else {}),
     }
+
+
+def _attached_text(attached: AttachedProcess) -> tuple[str, str]:
+    """Return the retained (stdout, stderr), cleaned of terminal noise for PTYs."""
+    stdout = attached.stdout.text()
+    stderr = attached.stderr.text()
+    if attached.tty:
+        stdout = clean_tty_text(stdout)
+    return stdout, stderr
 
 
 def _background_manager(context: ToolContext) -> Any:
@@ -361,10 +380,9 @@ def _run_interruptible(
         while True:
             if _interrupt_requested(context):
                 _stop_attached(attached)
+                stdout, stderr = _attached_text(attached)
                 return _interrupted_payload(
-                    stdout=attached.stdout.text(),
-                    stderr=attached.stderr.text(),
-                    compression=compression,
+                    stdout=stdout, stderr=stderr, compression=compression
                 )
 
             remaining = deadline - time.monotonic()
@@ -390,11 +408,10 @@ def _run_interruptible(
             if alive:
                 alive[0].join(timeout=poll)
                 continue
+            stdout, stderr = _attached_text(attached)
             return {
                 **_build_output_payload(
-                    stdout=attached.stdout.text(),
-                    stderr=attached.stderr.text(),
-                    compression=compression,
+                    stdout=stdout, stderr=stderr, compression=compression
                 ),
                 "exit_code": process.returncode,
             }
@@ -416,7 +433,11 @@ def _yield_or_kill(
 ) -> dict[str, Any]:
     """Hand a still-running command to the background manager, else kill it."""
     manager = _background_manager(context) if context.background_handoff else None
+    reason: str | None = None
     if manager is not None:
+        # Read first: the cursors must be on the task before it can finish.
+        stdout_read = attached.stdout.read_since(0)
+        stderr_read = attached.stderr.read_since(0)
         try:
             task = manager.adopt(
                 attached,
@@ -426,18 +447,20 @@ def _yield_or_kill(
                 timeout_ms=DEFAULT_BACKGROUND_TIMEOUT_MS,
                 compression=compression,
                 tool_call_id=context.tool_call_id,
+                stdout_cursor=stdout_read.cursor,
+                stderr_cursor=stderr_read.cursor,
             )
-        except Exception:
+        except Exception as exc:
             task = None
+            reason = str(exc)
         if task is not None:
-            stdout = attached.stdout.read_since(0)
-            stderr = attached.stderr.read_since(0)
-            task.stdout_cursor = stdout.cursor
-            task.stderr_cursor = stderr.cursor
+            shown_stdout = stdout_read.text
+            if attached.tty:
+                shown_stdout = clean_tty_text(shown_stdout)
             return {
                 **_build_output_payload(
-                    stdout=stdout.text,
-                    stderr=stderr.text,
+                    stdout=shown_stdout,
+                    stderr=stderr_read.text,
                     compression=compression,
                     save_raw=False,
                 ),
@@ -446,11 +469,13 @@ def _yield_or_kill(
                 "status": "running",
             }
     _stop_attached(attached)
+    stdout, stderr = _attached_text(attached)
     return _timed_out_payload(
-        stdout=attached.stdout.text(),
-        stderr=attached.stderr.text(),
+        stdout=stdout,
+        stderr=stderr,
         compression=compression,
         yield_time_ms=yield_time_ms,
+        handoff_error=reason,
     )
 
 
@@ -542,11 +567,18 @@ def _tty_command(command: str) -> str:
     """``exec`` a simple command so it, not the wrapping shell, owns the PTY.
 
     Ctrl-C then reaches only the command (the shell would otherwise die and
-    report its own signal exit code).
+    report its own signal exit code). ``exec`` only runs executables, so the
+    shell checks at run time (after any bootstrap) that the first word is one
+    and runs builtins, functions and aliases unchanged.
     """
     if os.name == "nt" or any(char in _SHELL_SYNTAX_CHARS for char in command):
         return command
-    return f"exec {command}"
+    words = command.split()
+    if not words or "'" in words[0] or '"' in words[0]:
+        return command
+    return (
+        f'case "$(command -v {words[0]})" in /*) exec {command};; *) {command};; esac'
+    )
 
 
 def _bootstrap_command(command: str) -> str:

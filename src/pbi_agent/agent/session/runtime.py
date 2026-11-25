@@ -2202,9 +2202,9 @@ def _wake_on_background_results(
             deadline=deadline,
             interrupted=lambda: _interrupt_requested(display),
         )
+        _raise_if_interrupted(display)
         if results is None:
             break
-        _raise_if_interrupted(display)
         display.render_user_message(results)
         response = provider.request_turn(
             user_message=results,

@@ -113,12 +113,13 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             wait_ms = _normalize_wait_ms(arguments.get("wait_ms"))
         except ValueError as exc:
             return {"error": str(exc)}
+        seen = task.stdout.total + task.stderr.total
         if chars:
             try:
                 manager.send_input(task_id, chars)
             except ValueError as exc:
                 return {"error": str(exc)}
-        manager.wait_for_output(task, wait_ms=wait_ms)
+        manager.wait_for_output(task, wait_ms=wait_ms, seen=seen)
         return read_task_output(task)
     from_start = arguments.get("from_start", False)
     if not isinstance(from_start, bool):

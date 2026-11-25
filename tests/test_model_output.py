@@ -45,6 +45,21 @@ from pbi_agent.tools.types import ToolSpec
             {
                 "stdout": "",
                 "stderr": "",
+                "exit_code": None,
+                "timed_out": True,
+                "duration_ms": 1000,
+                "error": "Command killed after 1000ms; could not move it ...",
+                "handoff_error": "Too many background tasks running (4/4).",
+            },
+            "timeout 1.0s\n"
+            "killed, not moved to background: "
+            "Too many background tasks running (4/4).\n"
+            "(no output)",
+        ),
+        (
+            {
+                "stdout": "",
+                "stderr": "",
                 "exit_code": 130,
                 "interrupted": True,
                 "error": "Command interrupted by user.",
@@ -92,6 +107,8 @@ def test_render_shell_output(payload: dict[str, Any], expected: str) -> None:
         ("plain text", "plain text"),
         (None, "ok"),
         ({}, "ok"),
+        ({"exists": False}, '{"exists":false}'),
+        ({"matches": [], "note": ""}, '{"matches":[],"note":""}'),
         (
             {"status": "completed", "path": "a.py", "skipped": None, "flag": False},
             "status: completed\npath: a.py",
@@ -188,3 +205,13 @@ def test_render_background_task_output_list_and_output() -> None:
         )
         == "bg-1 exit 2 · 3.5s\nbuilt"
     )
+
+
+def test_render_background_task_kill_request() -> None:
+    from pbi_agent.tools.model_output import render_background_task_output
+
+    running = {"task_id": "bg-1", "status": "running", "kill_requested": True}
+    killed = {**running, "status": "killed"}
+
+    assert render_background_task_output(running) == "kill requested bg-1"
+    assert render_background_task_output(killed) == "bg-1 killed"

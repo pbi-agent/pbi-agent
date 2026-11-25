@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -15,6 +16,7 @@ from pbi_agent.tools.background_tasks import (
     BackgroundTask,
     BackgroundTaskManager,
     render_background_result,
+    spawn_attached_process,
 )
 from pbi_agent.tools.types import ToolContext
 
@@ -509,6 +511,70 @@ def test_foreground_shell_kills_at_yield_when_background_is_full(
         manager.close()
 
     assert result["timed_out"] is True
+    assert "could not move it to the background" in result["error"]
+    assert "Too many background tasks running (1/1)" in result["error"]
+
+
+def test_adopt_marks_shown_output_before_the_task_can_finish(tmp_path: Path) -> None:
+    manager, finished, done = _collecting_manager()
+    attached = spawn_attached_process(
+        "printf shown", working_directory=str(tmp_path), shell_executable=None
+    )
+    attached.process.wait(timeout=5)
+    attached.join_readers()
+    shown = attached.stdout.read_since(0)
+
+    manager.adopt(
+        attached,
+        display_command="printf shown",
+        working_directory=str(tmp_path),
+        timeout_ms=5_000,
+        compression=False,
+        tool_call_id=None,
+        stdout_cursor=shown.cursor,
+    )
+
+    assert done.wait(timeout=5)
+    rendered = render_background_result(finished[0])
+    assert "(no output)" in rendered
+    assert "[5 earlier chars already shown]" in rendered
+
+
+def test_foreground_tty_output_is_cleaned(tmp_path: Path) -> None:
+    manager, _finished, _done = _collecting_manager()
+
+    result = shell_tool.handle(
+        {
+            "intent": "Print lines",
+            "command": "printf 'a\\nb\\n'",
+            "tty": True,
+            "compression": False,
+        },
+        _context(tmp_path, manager),
+    )
+
+    assert result["exit_code"] == 0
+    assert result["stdout"] == "a\nb\n"
+
+
+def test_wait_for_output_counts_output_that_arrived_before_the_wait(
+    tmp_path: Path,
+) -> None:
+    manager, _finished, _done = _collecting_manager()
+    task = _start(manager, "echo ready; sleep 30")
+    try:
+        for _ in range(100):
+            if task.stdout.total:
+                break
+            threading.Event().wait(0.02)
+        started = time.monotonic()
+        manager.wait_for_output(task, wait_ms=10_000, seen=0)
+        elapsed = time.monotonic() - started
+    finally:
+        manager.close()
+
+    assert task.stdout.total > 0
+    assert elapsed < 5
 
 
 def test_background_task_output_returns_only_new_output(tmp_path: Path) -> None:

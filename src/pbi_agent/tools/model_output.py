@@ -80,7 +80,10 @@ def _render_mapping(payload: dict[str, Any]) -> str:
             lines.extend(compact_json(item) for item in value)
         else:
             lines.append(f"{key}: {compact_json(value)}")
-    return "\n".join(lines) if lines else "ok"
+    if lines:
+        return "\n".join(lines)
+    # Only empty/false values: keep them visible instead of claiming success.
+    return compact_json(payload) if payload else "ok"
 
 
 def _is_empty(value: Any) -> bool:
@@ -176,6 +179,9 @@ def render_shell_output(payload: Any) -> str:
         and not payload.get("interrupted")
     ):
         lines.append(f"error: {error}")
+    handoff_error = payload.get("handoff_error")
+    if isinstance(handoff_error, str) and handoff_error:
+        lines.append(f"killed, not moved to background: {handoff_error}")
     stdout = str(payload.get("stdout") or "")
     stderr = str(payload.get("stderr") or "")
     if stdout:
@@ -220,6 +226,8 @@ def render_background_task_output(payload: Any) -> str:
             return "(no background tasks)"
         return "\n".join(_background_task_line(task) for task in tasks)
     if "task_id" in payload and "status" in payload:
+        if payload.get("kill_requested") and payload["status"] == "running":
+            return f"kill requested {payload['task_id']}"
         if payload.get("kind") == "sub_agent" and "stdout" not in payload:
             return _background_task_line(payload)
         return render_shell_output(payload)

@@ -341,11 +341,14 @@ class BackgroundTaskManager:
         timeout_ms: int,
         compression: bool,
         tool_call_id: str | None,
+        stdout_cursor: int = 0,
+        stderr_cursor: int = 0,
     ) -> BackgroundTask:
         """Take over a running foreground process instead of killing it.
 
         The process keeps its stream buffers and reader threads, so no output
-        is lost. ``timeout_ms`` counts from the original process start.
+        is lost. ``timeout_ms`` counts from the original process start. The
+        cursors mark output the caller already shows the model.
         """
         elapsed = time.monotonic() - attached.started_monotonic
         with self._lock:
@@ -360,6 +363,9 @@ class BackgroundTaskManager:
                 tool_call_id=tool_call_id,
                 started_at=time.time() - elapsed,
             )
+            # Set before the watch thread can render the finished task.
+            task.stdout_cursor = stdout_cursor
+            task.stderr_cursor = stderr_cursor
         self._start_watch(task)
         return task
 
@@ -473,14 +479,23 @@ class BackgroundTaskManager:
             raise ValueError(f"Could not write to task {task_id}: {exc}") from exc
         return task
 
-    def wait_for_output(self, task: BackgroundTask, *, wait_ms: int) -> None:
+    def wait_for_output(
+        self,
+        task: BackgroundTask,
+        *,
+        wait_ms: int,
+        seen: int | None = None,
+    ) -> None:
         """Wait up to ``wait_ms`` for ``task`` to exit or its output to settle.
 
         Returns early once new output has arrived and then stayed quiet for
         ``OUTPUT_SETTLE_MS`` (e.g. a REPL answered and shows its prompt).
+        ``seen`` is the output total (stdout + stderr) taken before input was
+        sent, so a reply that lands before this call still counts as new.
         """
         deadline = time.monotonic() + wait_ms / 1000.0
-        seen = task.stdout.total + task.stderr.total
+        if seen is None:
+            seen = task.stdout.total + task.stderr.total
         settled_at: float | None = None
         while time.monotonic() < deadline and task.status == "running":
             time.sleep(0.05)
