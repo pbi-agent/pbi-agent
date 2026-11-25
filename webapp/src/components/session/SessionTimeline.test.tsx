@@ -4862,7 +4862,7 @@ describe("SessionTimeline background task results", () => {
             kind: "message",
             itemId: "bg1",
             role: "user",
-            content: '<background_task_result task_id="bg-1">\nbg-1 timeout · 3.0s — Sleep a while\nstart\n</background_task_result>',
+            content: '<background_task_result task_id="bg-1">\ntimeout · 3.0s — Sleep a while\nstart\n</background_task_result>',
             markdown: false,
           },
           {
@@ -4892,9 +4892,9 @@ describe("SessionTimeline background task results", () => {
     expect(screen.getByText("Sleep a while · timeout · 3.0s")).toBeInTheDocument();
   });
   it.each([
-    ["bg-2 exit 0", { intent: null, status: "exit 0", body: "" }],
-    ["bg-2 exit 1 · 4.2s — Run tests\nFAILED a — b", { intent: "Run tests", status: "exit 1 · 4.2s", body: "FAILED a — b" }],
-    ["bg-2 completed sub_agent · 9.0s — Review diff\nLooks good", { intent: "Review diff", status: "completed sub_agent · 9.0s", body: "Looks good" }],
+    ["exit 0", { intent: null, status: "exit 0", body: "" }],
+    ["exit 1 · 4.2s — Run tests\nFAILED a — b", { intent: "Run tests", status: "exit 1 · 4.2s", body: "FAILED a — b" }],
+    ["completed sub_agent · 9.0s — Review diff\nLooks good", { intent: "Review diff", status: "completed sub_agent · 9.0s", body: "Looks good" }],
   ])("parses the background result header %j", (content, expected) => {
     expect(
       parseBackgroundResult({
