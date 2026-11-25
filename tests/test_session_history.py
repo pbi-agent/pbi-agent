@@ -433,6 +433,13 @@ def test_response_history_replays_http_retry_inputs_once(
     assert json.dumps(items).count("Done after retry") == int(retry_succeeds)
 
 
+def _without_developer_prefix(items: list[dict]) -> list[dict]:
+    # The ChatGPT Codex backend sends the system prompt as a leading developer item.
+    if items and items[0].get("role") == "developer":
+        return items[1:]
+    return items
+
+
 @pytest.mark.parametrize("restore", ["resume", "refresh"])
 @pytest.mark.parametrize("include_tool_history", [False, True])
 @pytest.mark.parametrize("prior_history", [False, True])
@@ -606,7 +613,7 @@ def test_failed_stateless_responses_followup_restores_one_exchange(
         tracer.finish(status="failed", usage=TokenUsage())
         expected_history = [*previous_items, prompt, *replay_output, result]
         assert "previous_response_id" not in requests[1]
-        assert requests[1]["input"] == expected_history
+        assert _without_developer_prefix(requests[1]["input"]) == expected_history
         if restore == "resume":
             provider = provider_type(settings)
         _restore_history(
@@ -621,7 +628,7 @@ def test_failed_stateless_responses_followup_restores_one_exchange(
     )
     assert len(requests) == 3
     assert "previous_response_id" not in requests[-1]
-    assert requests[-1]["input"] == [
+    assert _without_developer_prefix(requests[-1]["input"]) == [
         *expected_history,
         {"role": "user", "content": "continue"},
     ]

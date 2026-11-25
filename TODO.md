@@ -1,3 +1,7 @@
-- [x] Diagnose why GPT models emit every tool parameter (omitted `strict` on Responses function tools; Codex sends `strict: false`)
-- [x] Send `strict: false` on OpenAI/ChatGPT function tools; update `tests/test_openai_provider.py`
-- [x] Live-check with a ChatGPT model: shell call sent only `command` + `intent`
+- [x] Inspect last 3 sessions in `~/.pbi-agent/sessions.db` for OpenAI cache reuse (per-item usage attribution)
+- [x] Compare ChatGPT/Codex request cache params with upstream Codex (`cec14d2`)
+- [x] Send base instructions as first `developer` input item instead of top-level `instructions` on the ChatGPT Codex backend
+- [x] Rename `session_id` header to `session-id` and add `thread-id`
+- [x] Update `tests/test_openai_provider.py` and `tests/test_session_history.py`; ruff, basedpyright, pytest pass
+- [x] Verify with a live session: instruction tokens cached from call 2
+- [ ] Unexplained: occasional single call with 0 cached tokens mid-session (seen before and after the fix)

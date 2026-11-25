@@ -314,8 +314,11 @@ def test_openai_build_request_body_uses_chatgpt_backend_contract() -> None:
     assert body["include"] == ["reasoning.encrypted_content"]
     assert body["prompt_cache_key"] == "session-123"
     assert body["reasoning"] == {"effort": "xhigh", "summary": "auto"}
-    assert body["input"] == [{"role": "user", "content": "hello"}]
-    assert body["instructions"] == "be concise"
+    assert body["input"] == [
+        {"role": "developer", "content": "be concise"},
+        {"role": "user", "content": "hello"},
+    ]
+    assert "instructions" not in body
     function_tools = [tool for tool in body["tools"] if tool.get("type") == "function"]
     assert function_tools
     assert all(tool["strict"] is False for tool in function_tools)
@@ -389,8 +392,15 @@ def test_openai_build_request_body_omits_tool_fields_without_tools(
     assert "tool_choice" not in body
     assert "parallel_tool_calls" not in body
     assert body["model"] == DEFAULT_MODEL
-    assert body["input"] == [{"role": "user", "content": "hello"}]
-    assert body["instructions"] == "rewrite only"
+    if provider_name == "chatgpt":
+        assert body["input"] == [
+            {"role": "developer", "content": "rewrite only"},
+            {"role": "user", "content": "hello"},
+        ]
+        assert "instructions" not in body
+    else:
+        assert body["input"] == [{"role": "user", "content": "hello"}]
+        assert body["instructions"] == "rewrite only"
     assert body["include"] == ["reasoning.encrypted_content"]
     assert "stream" in body
     assert "store" in body
@@ -432,6 +442,26 @@ def test_openai_build_request_body_omits_chatgpt_prompt_cache_key_without_sessio
     assert body["tool_choice"] == "auto"
     assert body["include"] == ["reasoning.encrypted_content"]
     assert "prompt_cache_key" not in body
+
+
+def test_openai_chatgpt_chained_request_does_not_resend_instructions() -> None:
+    provider = OpenAIProvider(
+        _make_settings(responses_url=OPENAI_CHATGPT_RESPONSES_URL)
+    )
+    provider.set_previous_response_id("resp_parent")
+    tool_output = {"type": "function_call_output", "call_id": "c1", "output": "ok"}
+
+    body = provider._build_request_body(
+        input_items=[tool_output],
+        instructions="be concise",
+        session_id="session-123",
+    )
+
+    # The developer item sent on the first request of the chain is carried by
+    # previous_response_id; resending it would break the cached prefix.
+    assert body["previous_response_id"] == "resp_parent"
+    assert body["input"] == [tool_output]
+    assert "instructions" not in body
 
 
 def test_openai_build_request_body_keeps_instructions_with_previous_response_id() -> (
@@ -585,9 +615,11 @@ def test_openai_chatgpt_build_request_body_replays_restored_response_items() -> 
     )
 
     assert body["input"] == [
+        {"role": "developer", "content": "be concise"},
         *expected_items,
         {"role": "user", "content": "continue"},
     ]
+    assert "instructions" not in body
 
 
 def test_openai_build_request_body_replays_restored_user_images_without_previous_response_id(
@@ -750,6 +782,7 @@ def test_openai_chatgpt_replays_restored_user_images_without_previous_id(
     )
 
     assert requests[0]["input"] == [
+        {"role": "developer", "content": provider._instructions},
         {
             "role": "user",
             "content": [
@@ -886,6 +919,7 @@ def test_openai_chatgpt_codex_persists_and_replays_only_final_message(
         "Next answer.",
     ]
     assert requests[1]["input"] == [
+        {"role": "developer", "content": provider._instructions},
         {"role": "user", "content": "First prompt"},
         {"role": "assistant", "content": "Final answer."},
         {"role": "user", "content": "Next prompt"},
@@ -1431,7 +1465,8 @@ def test_chatgpt_codex_backend_headers_match_codex_signature() -> None:
         "OpenAI-Beta": CHATGPT_WEBSOCKET_BETA_HEADER,
         "originator": CHATGPT_ORIGINATOR,
         "User-Agent": chatgpt_user_agent(),
-        "session_id": "session-123",
+        "session-id": "session-123",
+        "thread-id": "session-123",
         CHATGPT_TURN_STATE_HEADER: "turn-state-1",
     }
 
@@ -1826,7 +1861,8 @@ def test_openai_request_turn_uses_chatgpt_account_auth_headers(monkeypatch) -> N
     assert request_details["headers"]["ChatGPT-Account-Id"] == "acct_123"
     assert request_details["headers"]["Accept"] == "application/json"
     assert request_details["headers"]["originator"] == CHATGPT_ORIGINATOR
-    assert request_details["headers"]["session_id"] == "session-123"
+    assert request_details["headers"]["session-id"] == "session-123"
+    assert request_details["headers"]["thread-id"] == "session-123"
     assert request_details["headers"]["User-Agent"] == chatgpt_user_agent()
 
 
@@ -3274,6 +3310,7 @@ def test_openai_chatgpt_replay_collapses_completed_tool_turns(
 
     assert third.text == "Next."
     assert requests[2]["input"] == [
+        {"role": "developer", "content": provider._instructions},
         {"role": "user", "content": "Find instructions"},
         {"role": "assistant", "content": "Done."},
         {"role": "user", "content": "Next question"},
@@ -3739,6 +3776,7 @@ def test_openai_chatgpt_previous_response_not_found_replays_active_turn(
     assert requests[1]["previous_response_id"] == "resp_1"
     assert "previous_response_id" not in requests[2]
     assert requests[2]["input"] == [
+        {"role": "developer", "content": provider._instructions},
         {"role": "user", "content": "Find instructions"},
         {
             "type": "function_call",
@@ -3933,8 +3971,9 @@ def test_openai_chatgpt_full_history_replay_resumes_continuation(
         *replay_outputs[1],
         *tool_outputs[1],
     ]
-    assert replay_request["instructions"] == "Keep the workspace context."
-    assert replay_request["input"][:2] == [
+    assert "instructions" not in replay_request
+    assert replay_request["input"][:3] == [
+        {"role": "developer", "content": "Keep the workspace context."},
         {"role": "user", "content": "Earlier context"},
         {"role": "user", "content": "Inspect the workspace"},
     ]

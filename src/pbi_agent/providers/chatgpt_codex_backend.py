@@ -34,6 +34,10 @@ class ResponsesRequestOptions:
     tool_choice: str | None = None
     include: list[str] | None = None
     use_session_prompt_cache_key: bool = False
+    # Send the system prompt as the first ``developer`` input item instead of the
+    # top-level ``instructions`` field. The ChatGPT Codex backend never serves
+    # ``instructions`` from the prompt cache; upstream Codex sends it as input.
+    instructions_as_developer_input: bool = False
 
 
 def chatgpt_user_agent() -> str:
@@ -270,7 +274,9 @@ class _EnabledChatGPTCodexBackend:
         headers["originator"] = CHATGPT_ORIGINATOR
         headers["User-Agent"] = chatgpt_user_agent()
         if session_id:
-            headers["session_id"] = session_id
+            # ChatGPT derives prompt-cache affinity from the session-id header.
+            headers["session-id"] = session_id
+            headers["thread-id"] = session_id
         if self._turn_state:
             headers[CHATGPT_TURN_STATE_HEADER] = self._turn_state
 
@@ -284,6 +290,7 @@ class _EnabledChatGPTCodexBackend:
             tool_choice="auto",
             include=["reasoning.encrypted_content"],
             use_session_prompt_cache_key=True,
+            instructions_as_developer_input=True,
         )
 
     def build_input_payload(
