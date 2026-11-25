@@ -60,7 +60,7 @@ def test_completed_task_reports_output_and_exit_code() -> None:
     rendered = render_background_result(task)
     assert rendered == (
         f'<background_task_result task_id="{task.task_id}">\n'
-        f"{task.task_id} exit 3 — echo out; echo err >&2; exit 3\n"
+        "exit 3 — echo out; echo err >&2; exit 3\n"
         "out\n"
         "[stderr]\n"
         "err\n"
@@ -128,7 +128,7 @@ def test_shell_run_in_background_returns_task_id(tmp_path: Path) -> None:
     task = manager.get(result["task_id"])
     assert task is not None
     assert task.summary()["intent"] == "Run test command"
-    assert f"{task.task_id} exit 0 — Run test command" in render_background_result(task)
+    assert "\nexit 0 — Run test command\n" in render_background_result(task)
 
 
 def test_shell_background_allowed_for_sub_agents_and_rejected_when_unsupported(
@@ -468,7 +468,8 @@ def test_foreground_shell_moves_running_command_to_background(tmp_path: Path) ->
     assert task.status == "completed"
     assert task.intent == "Slow command"
     rendered = render_background_result(task)
-    assert f"{task.task_id} exit 0" in rendered
+    assert "\nexit 0" in rendered
+    assert rendered.count(task.task_id) == 1
     assert "\nend\n[6 earlier chars already shown]\n" in rendered
     assert "start" not in rendered
 

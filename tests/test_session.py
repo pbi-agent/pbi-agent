@@ -6497,7 +6497,8 @@ def test_run_single_turn_wakes_model_with_background_result(
     assert isinstance(wake, str)
     task_id = provider.started_task_ids[0]
     assert wake.startswith(f'<background_task_result task_id="{task_id}">')
-    assert f"{task_id} exit 0 — Build" in wake
+    assert "\nexit 0 — Build" in wake
+    assert wake.count(task_id) == 1
     assert "build-ok" in wake
     assert display.user_message_calls[-1] == wake
     assert not hasattr(display, "background_task_manager")
