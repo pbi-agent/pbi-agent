@@ -1,7 +1,6 @@
-- [x] Inspect last 3 sessions in `~/.pbi-agent/sessions.db` for OpenAI cache reuse (per-item usage attribution)
-- [x] Compare ChatGPT/Codex request cache params with upstream Codex (`cec14d2`)
-- [x] Send base instructions as first `developer` input item instead of top-level `instructions` on the ChatGPT Codex backend
-- [x] Rename `session_id` header to `session-id` and add `thread-id`
-- [x] Update `tests/test_openai_provider.py` and `tests/test_session_history.py`; ruff, basedpyright, pytest pass
-- [x] Verify with a live session: instruction tokens cached from call 2
-- [ ] Unexplained: occasional single call with 0 cached tokens mid-session (seen before and after the fix)
+- [x] Load release-writing skill, read MEMORY.md, fetch tags (last release v0.66.0)
+- [x] Collect unreleased PRs #461-#464 and choose v0.67.0
+- [x] Create `chore/release-v0.67.0`, bump version, `uv lock`, changelog + sidebar
+- [x] Run release validation
+- [x] Commit, push, open release PR
+- [x] Merge PR, verify Release workflow, tag, GitHub Release, PyPI
